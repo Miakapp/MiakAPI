@@ -1,0 +1,28 @@
+{
+  "name": "miakapi",
+  "version": "3.0.0-DEV",
+  "description": "Miakapi for Miakapp V3",
+  "main": "main.js",
+  "scripts": {
+    "test": "node test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Miakapp/MiakAPI"
+  },
+  "keywords": [
+    "Miakapp",
+    "MiakAPI",
+    "Smart-Home"
+  ],
+  "author": "Mathieu Colmon",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^7.29.0",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-plugin-import": "^2.23.4"
+  },
+  "dependencies": {
+    "websocket": "^1.0.34"
+  }
+}
