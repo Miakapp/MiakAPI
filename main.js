@@ -5,7 +5,7 @@ const miakode = require('./miakode');
 function getHome(homeID) {
   return new Promise((cb, err) => {
     https.get(`https://firestore.googleapis.com/v1/projects
-/miakapp-v2/databases/(default)/documents/homes/${homeID}`, (res) => {
+/miakapp-3/databases/(default)/documents/homes/${homeID}`, (res) => {
       let data = '';
       res.on('data', (c) => { data += c; });
       res.on('close', () => {
@@ -72,7 +72,7 @@ const connect = async (credentials, {
             displayName,
             isAdmin: (id[0] === '1'),
             notifications: (id[1] === '1'),
-            groups: groups.split('\x02'),
+            groups: groups.split('\x02').filter((g) => g),
           };
         });
 
@@ -96,7 +96,7 @@ const connect = async (credentials, {
         const [user, type, id, name, value] = miakode.array.decode(msg.data);
         onUserAction({
           user,
-          type,
+          type: (type === '1') ? 'input' : 'click',
           input: { id, name, value },
         });
         return;
@@ -125,7 +125,7 @@ const connect = async (credentials, {
 
   client.on('connectFailed', () => {
     console.log('Coordinator failed connect');
-    setTimeout(newSocket, 200);
+    setTimeout(newSocket, 1000);
   });
 
   newSocket();
