@@ -1,6 +1,6 @@
 {
   "name": "miakapi",
-  "version": "3.0.1-DEV",
+  "version": "3.0.2-DEV",
   "description": "Miakapi for Miakapp V3",
   "main": "main.js",
   "scripts": {

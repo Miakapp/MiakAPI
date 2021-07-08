@@ -11,6 +11,21 @@ console.log('Connecting...');
 
 home.onReady(() => {
   console.log('Ready !', home);
+  home.users.forEach((user) => {
+    console.log('Sending notification to', user.displayName);
+
+    user.sendPush({
+      title: 'Notification test 1',
+      body: 'Test user.sendPush',
+      tag: 'test1',
+    });
+
+    home.sendNotif(user.id, {
+      title: 'Notification test 2',
+      body: 'Test home.sendNotif',
+      tag: 'test2',
+    });
+  });
 });
 
 home.onUpdate((users) => {

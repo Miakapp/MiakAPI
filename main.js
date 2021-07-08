@@ -134,8 +134,10 @@ const connect = async (credentials, {
     emitCallback(data) {
       sendPacket('\x41', miakode.object.encode(data));
     },
-    emitNotif(userID, title, body, tag, image) {
-      sendPacket('\x41', miakode.array.encode([
+    emitNotif(userID, {
+      title, body, tag, image,
+    }) {
+      sendPacket('\x42', miakode.array.encode([
         userID, title, body, tag, image,
       ]));
     },
@@ -146,16 +148,6 @@ const connect = async (credentials, {
     },
   };
 };
-
-/**
- * User instance
- * @typedef {Object} User
- * @property {string} id ID of the user
- * @property {string} displayName Display name of the user
- * @property {boolean} isAdmin True if the user is admin of the home
- * @property {boolean} notifications True if the user has enabled notifications
- * @property {string[]} groups List of group names of the user
- */
 
 /**
  * User login event data
@@ -182,11 +174,33 @@ const connect = async (credentials, {
  */
 
 /**
+ * Represents a push notification
+ * @typedef {Object} Notification
+ * @property {string} title Notification title
+ * @property {string} body Notification body
+ * @property {string=} tag Notification tag
+ * @property {string=} image Notification image
+ */
+
+/**
+ * User instance
+ * @typedef {Object} User
+ * @property {string} id ID of the user
+ * @property {string} displayName Display name of the user
+ * @property {boolean} isAdmin True if the user is admin of the home
+ * @property {boolean} notifications True if the user has enabled notifications
+ * @property {string[]} groups List of group names of the user
+ * @property {(notification: Notification) => void} sendPush Send push notification
+ */
+
+/**
  * Instance of miakapp home
  * @typedef {Object} Home
  * @property {User[]} users List of users who have access to the home
  * @property {Object<string, string>} variables Dynamic variables to inject in your pages
  * @property {(modifs: {}) => void} commit Send data modifications to users
+ * @property {(userID: string, notification: Notification) => void
+ * } sendNotif Send push notification to user
  * @property {(callback: () => void) => void} onReady Event that handles when API is ready
  * @property {(callback: (users: User[]) => void) => void
  * } onUpdate Event that handles when an update of home settings happens
@@ -230,8 +244,8 @@ module.exports = function Miakapi(home, id, secret) {
       client.emitCallback(this.variables);
     },
 
-    sendNotif(notification = {}) {
-      client.emitNotif(notification);
+    sendNotif(userID, notification = {}) {
+      client.emitNotif(userID, notification);
     },
 
     onReady(callback) {
@@ -257,7 +271,13 @@ module.exports = function Miakapi(home, id, secret) {
       readyCallbacks.forEach((h) => h());
     },
     onHomeUpdate(data) {
-      thisHome.users = data;
+      thisHome.users = data.map((u) => ({
+        ...u,
+        sendPush(notification) {
+          client.emitNotif(u.id, notification);
+        },
+      }));
+
       userlistUpdateCallbacks.forEach((h) => h(thisHome.users));
     },
     onUserLogin(data) {
