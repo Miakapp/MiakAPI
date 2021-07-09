@@ -205,9 +205,9 @@ const connect = async (credentials, {
  * @property {(callback: (users: User[]) => void) => void
  * } onUpdate Event that handles when an update of home settings happens
  * @property {(callback: (event: UserLoginEvent) => void) => void
- * } onUserLogin Event that handles when an user connects or disconnects
+ * } onUserLogin Event that handles when a user connects or disconnects
  * @property {(callback: (action: UserActionEvent) => void) => void
- * } onUserAction Event that handles when an user interact with a page
+ * } onUserAction Event that handles when a user interact with a page
  * @property {() => void} reconnect Restart connection to the server
  */
 
