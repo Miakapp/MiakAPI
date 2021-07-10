@@ -48,7 +48,6 @@ const connect = async (credentials, {
 
   function sendPacket(type, data) {
     socket.sendBytes(Buffer.from(`${type}${data}`));
-    console.log('sendPacket =>', type, data.length);
   }
 
   client.on('connect', (s) => {
@@ -118,8 +117,8 @@ const connect = async (credentials, {
 
     s.on('close', (code, desc) => {
       console.log('CLOSE', code, desc);
-      if (code === 4005) return;
-      setTimeout(newSocket, 200);
+      if ([4001, 4005].includes(code)) return;
+      setTimeout(newSocket, 1000);
     });
   });
 
