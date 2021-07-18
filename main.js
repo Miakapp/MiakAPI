@@ -47,7 +47,7 @@ const connect = async (credentials, {
   let socket = null;
 
   function sendPacket(type, data) {
-    socket.sendBytes(Buffer.from(`${type}${data}`));
+    if (socket) socket.sendBytes(Buffer.from(`${type}${data}`));
   }
 
   client.on('connect', (s) => {
