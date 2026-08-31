@@ -10,6 +10,7 @@ import type {
 
 const MAX_QUEUED_BYTES = 1_048_576;
 const HANDSHAKE_TIMEOUT_MS = 10_000;
+const WEBSOCKET_SUBPROTOCOL = 'miakapp';
 
 interface BoundedClientOptions extends ClientOptions {
   maxBufferedChunks: number;
@@ -159,7 +160,11 @@ export class WsSocketFactory implements SocketFactory {
       maxPayload: LIMITS.frameBytes,
       perMessageDeflate: false,
     };
-    const managed = new WsManagedSocket(new WebSocket(url, options), handlers, signal);
+    const managed = new WsManagedSocket(
+      new WebSocket(url, WEBSOCKET_SUBPROTOCOL, options),
+      handlers,
+      signal,
+    );
     await managed.ready();
     return managed;
   }

@@ -62,8 +62,10 @@ describe('production WebSocket adapter', () => {
   test('carries binary frames in both directions', async () => {
     const server = new WebSocketServer({ host: '127.0.0.1', port: 0, perMessageDeflate: false });
     const port = await listeningPort(server);
+    let negotiatedProtocol: string | undefined;
     const receivedByServer = new Promise<Uint8Array>((resolve, reject) => {
       server.once('connection', (socket) => {
+        negotiatedProtocol = socket.protocol;
         socket.once('message', (data, isBinary) => {
           if (!isBinary) reject(new Error('Client sent a text frame'));
           else resolve(bytes(data));
@@ -91,6 +93,7 @@ describe('production WebSocket adapter', () => {
     expect([...await inbound]).toEqual([4, 5, 6]);
     await socket.write(new Uint8Array([1, 2, 3]));
     expect([...await receivedByServer]).toEqual([1, 2, 3]);
+    expect(negotiatedProtocol).toBe('miakapp');
     expect(failures).toEqual([]);
 
     socket.terminate();
