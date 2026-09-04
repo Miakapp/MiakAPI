@@ -72,6 +72,63 @@ describe('browser lifecycle', () => {
     await harness.client.stop();
   });
 
+  test('waits for a failed WELCOME transport to close before reconnecting', async () => {
+    const harness = createBrowserTestHarness();
+    harness.runtime.queueRandom(0);
+    const started = harness.client.start();
+    void started.catch(() => undefined);
+    const connection = await harness.relay.connectionAt(0);
+    await connection.nextClientFrame(Opcode.Hello);
+    const oldTransport = connection.deferClientTermination();
+    connection.send({
+      opcode: Opcode.Welcome,
+      payload: [2, 0, 41, connection.epoch, true, [], [262_144, 128, 256, 1_048_576], 2_000_000],
+    });
+    await flushMicrotasks();
+    expect(harness.client.status).toBe('reconnecting');
+    expect(harness.relay.connectCount).toBe(1);
+    expect(harness.relay.openConnectionCount).toBe(1);
+
+    oldTransport.release();
+    await flushMicrotasks();
+    await harness.runtime.advanceBy(0);
+    const replacement = await harness.relay.connectionAt(1);
+    await replacement.nextClientFrame(Opcode.Hello);
+    expect(harness.relay.socketHighWater).toBe(1);
+    await harness.client.stop();
+  });
+
+  test('fails closed when a missing WELCOME transport remains closing', async () => {
+    const harness = createBrowserTestHarness();
+    const failures: string[] = [];
+    harness.client.errors.subscribe(({ kind }) => failures.push(kind));
+    const started = harness.client.start();
+    void started.catch(() => undefined);
+    const connection = await harness.relay.connectionAt(0);
+    await connection.nextClientFrame(Opcode.Hello);
+    const oldTransport = connection.deferClientTermination();
+
+    await harness.runtime.advanceBy(10_000);
+    expect(harness.client.status).toBe('reconnecting');
+    expect(harness.relay.connectCount).toBe(1);
+    expect(harness.relay.openConnectionCount).toBe(1);
+    expect(failures).toEqual(['unavailable']);
+
+    await harness.runtime.advanceBy(9_999);
+    expect(harness.client.status).toBe('reconnecting');
+    expect(harness.relay.connectCount).toBe(1);
+    expect(failures).toEqual(['unavailable']);
+
+    await harness.runtime.advanceBy(1);
+    expect(harness.client.status).toBe('stopped');
+    expect(harness.relay.connectCount).toBe(1);
+    expect(failures).toEqual(['unavailable', 'unavailable']);
+
+    oldTransport.release();
+    await flushMicrotasks();
+    expect(harness.relay.openConnectionCount).toBe(0);
+  });
+
   test('reauthenticates on the same socket from the verified lease', async () => {
     const harness = createBrowserTestHarness({ expiresAtMs: 1_010_000 });
     const { connection } = await startBrowserReady(harness);
@@ -117,7 +174,15 @@ describe('browser lifecycle', () => {
     sendUserBootstrap(oldConnection);
     await started;
 
+    const oldTransport = oldConnection.deferClientTermination();
     await runtime.advanceBy(5_000);
+    expect(relay.connectCount).toBe(1);
+    expect(relay.openConnectionCount).toBe(1);
+    expect(client.status).toBe('reconnecting');
+    expect(client.state.snapshot()?.stale).toBe(true);
+
+    oldTransport.release();
+    await flushMicrotasks();
     const replacement = await relay.connectionAt(1);
     const replacementHello = await replacement.nextClientFrame(Opcode.Hello);
     expect(replacementHello.payload[4]).toBe('user.handoff.signature');
@@ -135,6 +200,150 @@ describe('browser lifecycle', () => {
     expect(client.status).toBe('ready');
     expect(client.state.snapshot()?.values['home.temperature']).toBe(24);
     await client.stop();
+  });
+
+  test('fails closed when a previous relay transport cannot close during handoff', async () => {
+    const relay = new FakeRelay({ autoWelcome: false, expiresAtMs: 1_010_000 });
+    const runtime = new FakeRuntime(relay);
+    const failures: string[] = [];
+    const client = createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      credentialProvider: {
+        async getCredential({ reason }) {
+          return {
+            relayUrl: reason === 'initial'
+              ? 'wss://old-relay.test/miakapp/ws'
+              : 'wss://new-relay.test/miakapp/ws',
+            accessToken: `user.${reason}.signature`,
+            expiresAtMs: 1_100_000,
+          };
+        },
+      },
+    }, runtime);
+    client.errors.subscribe(({ kind }) => failures.push(kind));
+
+    const started = client.start();
+    const oldConnection = await relay.connectionAt(0);
+    await oldConnection.nextClientFrame(Opcode.Hello);
+    sendUserBootstrap(oldConnection);
+    await started;
+
+    const oldTransport = oldConnection.deferClientTermination();
+    await runtime.advanceBy(5_000);
+    expect(client.status).toBe('reconnecting');
+    expect(failures).toEqual([]);
+    await runtime.advanceBy(9_999);
+    expect(relay.connectCount).toBe(1);
+    expect(relay.openConnectionCount).toBe(1);
+    expect(client.status).toBe('reconnecting');
+    expect(failures).toEqual([]);
+
+    await runtime.advanceBy(1);
+    expect(relay.connectCount).toBe(1);
+    expect(client.status).toBe('stopped');
+    expect(failures).toEqual(['unavailable']);
+
+    oldTransport.release();
+    await flushMicrotasks();
+    expect(relay.openConnectionCount).toBe(0);
+  });
+
+  test('waits for a failed relay transport before reconnecting to a changed URL', async () => {
+    const relay = new FakeRelay({ autoWelcome: false });
+    const runtime = new FakeRuntime(relay);
+    runtime.queueRandom(0);
+    const client = createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      credentialProvider: {
+        async getCredential({ reason }) {
+          return {
+            relayUrl: reason === 'initial'
+              ? 'wss://old-relay.test/miakapp/ws'
+              : 'wss://new-relay.test/miakapp/ws',
+            accessToken: `user.${reason}.signature`,
+            expiresAtMs: 2_000_000,
+          };
+        },
+      },
+    }, runtime);
+
+    const started = client.start();
+    const oldConnection = await relay.connectionAt(0);
+    await oldConnection.nextClientFrame(Opcode.Hello);
+    sendUserBootstrap(oldConnection);
+    await started;
+
+    const oldTransport = oldConnection.deferClientTermination();
+    oldConnection.send({ opcode: Opcode.ReauthOk, payload: [999, 2_000_000] });
+    await flushMicrotasks();
+    expect(client.status).toBe('reconnecting');
+    expect(client.state.snapshot()?.stale).toBe(true);
+    expect(relay.connectCount).toBe(1);
+    expect(relay.openConnectionCount).toBe(1);
+
+    oldTransport.release();
+    await flushMicrotasks();
+    await runtime.advanceBy(0);
+    const replacement = await relay.connectionAt(1);
+    const replacementHello = await replacement.nextClientFrame(Opcode.Hello);
+    expect(replacementHello.payload[4]).toBe('user.reconnect.signature');
+    expect(relay.connectUrls).toEqual([
+      'wss://old-relay.test/miakapp/ws',
+      'wss://new-relay.test/miakapp/ws',
+    ]);
+    expect(relay.socketHighWater).toBe(1);
+
+    sendUserBootstrap(replacement, { revision: 2 });
+    await flushMicrotasks();
+    await client.stop();
+  });
+
+  test('fails closed when a failed relay transport cannot close before reconnect', async () => {
+    const relay = new FakeRelay({ autoWelcome: false });
+    const runtime = new FakeRuntime(relay);
+    const failures: string[] = [];
+    const client = createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      credentialProvider: {
+        async getCredential({ reason }) {
+          return {
+            relayUrl: reason === 'initial'
+              ? 'wss://old-relay.test/miakapp/ws'
+              : 'wss://new-relay.test/miakapp/ws',
+            accessToken: `user.${reason}.signature`,
+            expiresAtMs: 2_000_000,
+          };
+        },
+      },
+    }, runtime);
+    client.errors.subscribe(({ kind }) => failures.push(kind));
+
+    const started = client.start();
+    const oldConnection = await relay.connectionAt(0);
+    await oldConnection.nextClientFrame(Opcode.Hello);
+    sendUserBootstrap(oldConnection);
+    await started;
+
+    const oldTransport = oldConnection.deferClientTermination();
+    oldConnection.send({ opcode: Opcode.ReauthOk, payload: [999, 2_000_000] });
+    await flushMicrotasks();
+    expect(client.status).toBe('reconnecting');
+    expect(failures).toEqual(['protocol']);
+
+    await runtime.advanceBy(9_999);
+    expect(relay.connectCount).toBe(1);
+    expect(relay.openConnectionCount).toBe(1);
+    expect(client.status).toBe('reconnecting');
+    expect(failures).toEqual(['protocol']);
+
+    await runtime.advanceBy(1);
+    expect(relay.connectCount).toBe(1);
+    expect(client.status).toBe('stopped');
+    expect(failures).toEqual(['protocol', 'unavailable']);
+
+    oldTransport.release();
+    await flushMicrotasks();
+    expect(relay.openConnectionCount).toBe(0);
   });
 
   test('rejects a credential that expires while the relay handshake is pending', async () => {
