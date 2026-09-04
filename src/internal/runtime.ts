@@ -15,7 +15,13 @@ export interface ManagedSocket {
 }
 
 export interface SocketFactory {
-  connect(url: string, handlers: SocketHandlers, signal: AbortSignal): Promise<ManagedSocket>;
+  /** Transfers a created transport to its owner before asynchronous readiness work begins. */
+  connect(
+    url: string,
+    handlers: SocketHandlers,
+    signal: AbortSignal,
+    onSocket?: (socket: ManagedSocket) => void,
+  ): Promise<ManagedSocket>;
 }
 
 export interface RuntimeTimer {

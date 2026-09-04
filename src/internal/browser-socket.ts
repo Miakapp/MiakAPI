@@ -213,6 +213,7 @@ export class BrowserSocketFactory implements SocketFactory {
     url: string,
     handlers: SocketHandlers,
     signal: AbortSignal,
+    onSocket?: (socket: ManagedSocket) => void,
   ): Promise<ManagedSocket> {
     if (signal.aborted) throw signal.reason;
     const ManagedWebSocket = nativeConstructor();
@@ -222,12 +223,13 @@ export class BrowserSocketFactory implements SocketFactory {
       signal,
       this.#now,
     );
+    onSocket?.(socket);
     try {
       await socket.ready();
       return socket;
     } catch (error) {
-      socket.detach();
       socket.terminate();
+      if (onSocket === undefined) socket.detach();
       throw error;
     }
   }

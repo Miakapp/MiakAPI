@@ -217,12 +217,15 @@ browser storage, log, error, `HELLO`, or `REAUTH` frame.
 
 The control plane returns an up-to-five-minute Miakapp access token atomically
 with its authoritative relay URL. MiakAPI sends only that audience-bound token
-to the returned relay. If a renewal selects a different relay, the client closes
-the old session and opens the replacement with the already-issued credential; it
-does not expose the new token to the old relay or repeat the exchange. Stop and
-discard the client immediately when the Firebase user signs out or the selected
-home changes. Relay routing changes arrive through credentials and do not require
-mutating the client options.
+to the returned relay. If a renewal selects a different relay, the client marks
+the old session stale and closes it. Before any automatic replacement connection,
+including recovery from a transport or protocol failure, the client waits for the
+native transport close event. If closure is not confirmed within ten seconds, the
+client stops fail-closed instead of opening overlapping relay sockets. A routing
+handoff uses the already-issued credential; it does not expose the new token to
+the old relay or repeat the exchange. Stop and discard the client immediately
+when the Firebase user signs out or the selected home changes. Relay routing
+changes arrive through credentials and do not require mutating the client options.
 
 Audience binding limits credential replay; it does not encrypt home traffic from
 the selected relay. Users should still choose an operator they trust with the

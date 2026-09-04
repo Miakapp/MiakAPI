@@ -150,6 +150,7 @@ export class WsSocketFactory implements SocketFactory {
     url: string,
     handlers: SocketHandlers,
     signal: AbortSignal,
+    onSocket?: (socket: ManagedSocket) => void,
   ): Promise<ManagedSocket> {
     if (signal.aborted) throw signal.reason;
     const options: BoundedClientOptions = {
@@ -165,8 +166,15 @@ export class WsSocketFactory implements SocketFactory {
       handlers,
       signal,
     );
-    await managed.ready();
-    return managed;
+    onSocket?.(managed);
+    try {
+      await managed.ready();
+      return managed;
+    } catch (error) {
+      managed.terminate();
+      if (onSocket === undefined) managed.detach();
+      throw error;
+    }
   }
 }
 
