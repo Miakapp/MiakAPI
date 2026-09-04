@@ -10,7 +10,7 @@ client. It is currently an alpha while the Miakapp 3.5 relay is being deployed.
 ## Requirements
 
 - Node.js 22.9 or newer
-- An application backend able to issue short-lived coordinator access tokens
+- A Miakapp Home Key or another approved short-lived access-token provider
 - A Miakapp relay implementing wire protocol 1.0
 
 MiakAPI is server-side software. Do not ship coordinator credentials, Home Keys,
@@ -31,22 +31,18 @@ import {
   ApplicationCallError,
   EventDirection,
   createCoordinator,
+  createHomeKeyAccessTokenProvider,
 } from 'miakapi';
+
+const homeKey = process.env.MIAKAPP_HOME_KEY;
+if (homeKey === undefined) throw new Error('MIAKAPP_HOME_KEY is required');
 
 const coordinator = createCoordinator({
   name: 'home-assistant',
-  accessTokenProvider: {
-    async getAccessToken({ coordinatorName, reason, signal }) {
-      const response = await fetch('https://example.test/miakapp/token', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ coordinatorName, reason }),
-        signal,
-      });
-      if (!response.ok) throw new Error('Access token request failed');
-      return response.json();
-    },
-  },
+  accessTokenProvider: createHomeKeyAccessTokenProvider({
+    exchangeEndpoint: 'https://control.miakapp.com/v1/access-tokens:exchange',
+    homeKey,
+  }),
 });
 
 coordinator.configure({
@@ -86,6 +82,18 @@ coordinator.subscribe(({ current, reason }) => {
 const session = await coordinator.start();
 console.log('Ready in generation', session.generation);
 ```
+
+The Home Key provider makes exactly one exchange request for each initial,
+reauthentication, or reconnect demand from the SDK. It sends the Home Key only
+to the configured HTTPS control-plane endpoint, rejects redirects and open or
+overlong responses, and returns only the relay URL, compact access token, and
+expiry to the coordinator core. It performs no independent retry; the
+coordinator's single bounded reconnect schedule remains authoritative.
+
+Keep the Home Key in the trusted coordinator backend. Do not place it in a web
+bundle, browser storage, logs, URLs, or relay configuration. Applications with a
+different approved credential store may continue to implement
+`AccessTokenProvider` directly.
 
 `configure` supplies all five declaration slices as one desired snapshot. The
 coordinator becomes `ready` only after the relay acknowledges them in order. A
