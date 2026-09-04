@@ -17,6 +17,7 @@ import { configuration, createTestHarness, isCoordinatorFailure } from './helper
 describe('public API', () => {
   test('exports the canonical surface and the coordinator factory', () => {
     expect(typeof entrypoint.createCoordinator).toBe('function');
+    expect(typeof entrypoint.createHomeKeyAccessTokenProvider).toBe('function');
     expect(entrypoint.ApplicationCallError).toBe(ApplicationCallError);
     expect(entrypoint.EventDirection).toBe(EventDirection);
   });
