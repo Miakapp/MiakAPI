@@ -5,6 +5,7 @@ import {
   createCoordinator,
   createHomeKeyAccessTokenProvider,
 } from '../dist/index.js';
+import { createBrowserClient } from '../dist/browser.js';
 
 assert.equal(typeof createCoordinator, 'function');
 assert.equal(typeof createHomeKeyAccessTokenProvider, 'function');
@@ -38,5 +39,18 @@ await offlineCall.result.catch(() => undefined);
 await new Promise((resolve) => setImmediate(resolve));
 await coordinator.stop();
 assert.equal(coordinator.status, 'stopped');
+
+const browser = createBrowserClient({
+  homeId: 'node-smoke-home',
+  relayUrl: 'wss://relay.example.test/miakapp/ws',
+  idTokenProvider: {
+    async getIdToken() {
+      throw new Error('The inert smoke test must not request a Firebase token');
+    },
+  },
+});
+assert.equal(browser.status, 'idle');
+await browser.stop();
+assert.equal(browser.status, 'stopped');
 
 console.log(JSON.stringify({ package: 'miakapi', status: 'ok' }));
