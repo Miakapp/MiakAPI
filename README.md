@@ -1,20 +1,23 @@
 # MiakAPI
 
-MiakAPI is the typed Node.js SDK for running a trusted Miakapp coordinator. A
-coordinator owns complete state, access, event, and function declarations for one
-integration and exchanges canonical MessagePack frames with the Miakapp relay.
+MiakAPI is the typed SDK for running a trusted Node.js coordinator and connecting
+a first-party browser application to a Miakapp home. A coordinator owns complete
+state, access, event, and function declarations for one integration. The isolated
+browser entry point exposes the authenticated user role without bundling Node.js
+or coordinator-only dependencies.
 
 Version 4 is a complete replacement for the legacy callback-based MiakAPI 3
 client. It is currently an alpha while the Miakapp 3.5 relay is being deployed.
 
-## Requirements
+## Coordinator requirements
 
 - Node.js 22.9 or newer
 - A Miakapp Home Key or another approved short-lived access-token provider
 - A Miakapp relay implementing wire protocol 1.0
 
-MiakAPI is server-side software. Do not ship coordinator credentials, Home Keys,
-or access-token providers to a browser or an untrusted plugin runtime.
+The default `miakapi` entry point is server-side software. Do not ship
+coordinator credentials, Home Keys, or coordinator access-token providers to a
+browser or an untrusted plugin runtime.
 
 ## Installation
 
@@ -147,6 +150,84 @@ const result = await call.result;
 MiakAPI never retries state mutations, events, or calls. An idempotency key is
 passed to the callee but does not enable hidden retries.
 
+## Trusted browser client
+
+Use the isolated `miakapi/browser` entry point in the first-party Miakapp web
+application. It relies on the browser's native WebSocket implementation and does
+not expose coordinator declarations, Home Keys, or the Node.js `ws` transport.
+
+```ts
+import { createBrowserClient } from 'miakapi/browser';
+
+const client = createBrowserClient({
+  homeId: 'my-home',
+  relayUrl: 'wss://relay.example.com/miakapp/ws',
+  idTokenProvider: {
+    async getIdToken({ signal }) {
+      if (signal.aborted) throw signal.reason;
+      const user = firebaseAuth.currentUser;
+      if (user === null) throw new Error('The user is signed out');
+      return user.getIdToken();
+    },
+  },
+});
+
+await client.start();
+
+const removeStateListener = client.state.subscribe((snapshot) => {
+  if (!snapshot.stale) renderHome(snapshot.values);
+});
+
+const removeHomeListener = client.home.subscribe((home) => {
+  renderAvailability(home.enrolled, home.coordinators, home.stale);
+});
+
+const call = client.calls.start({
+  function: 'lighting.scene.activate',
+  arguments: { scene: 'evening' },
+  timeoutMs: 10_000,
+  idempotencyKey: 'intent-018f',
+});
+await call.accepted;
+const result = await call.result;
+
+removeStateListener();
+removeHomeListener();
+await client.stop();
+```
+
+`idTokenProvider` is invoked for the initial connection, same-socket
+reauthentication, and reconnects. Return a fresh Firebase ID token from trusted
+in-memory application state. Never place the token in the relay URL, a WebSocket
+subprotocol, persistent browser storage, logs, or error messages. MiakAPI sends
+it only inside the authenticated binary protocol handshake or `REAUTH` frame.
+Stop and discard the client immediately when the Firebase user signs out or the
+selected home or relay changes; create a new client for the new identity tuple.
+
+The configured relay receives that Firebase ID token as a bearer credential and
+can observe the home data flowing through it. Until the control plane issues a
+short-lived credential scoped to one relay, home, and user role, use this client
+only with an official relay or one the user explicitly trusts as completely as
+the Miakapp backend. An arbitrary community relay catalogue is not a safe
+production use of this authentication profile. The first browser integration
+fixture uses synthetic credentials only; Miakapp application wiring remains
+blocked on this trust decision.
+
+Browser state snapshots are defensive copies and become `stale` immediately
+when continuity is lost. Revision or dictionary mismatches trigger one
+fail-closed resynchronization request. Browser calls target the home's default
+coordinator by function name, have no progress stream, and are never replayed by
+the SDK. Incoming calls are rejected with an application error because this
+first user profile deliberately exposes no browser call handlers. An
+`outcome_unknown` failure means an effect may already have happened.
+
+Token acquisition, protocol welcome, bootstrap, and reauthentication each have
+bounded deadlines. The browser transport also caps individual frames, its
+outbound queue, and rolling inbound bytes and frame counts. A native WebSocket
+still materializes a complete message before JavaScript can reject it, so these
+limits are defense in depth rather than isolation from a malicious relay; a
+Worker boundary remains an option for a later hardened browser profile.
+
 ## Failure outcomes
 
 Every `CoordinatorFailure` includes an `outcome`:
@@ -203,8 +284,9 @@ bun install --frozen-lockfile
 bun run check
 ```
 
-The check includes strict type checking, unit and adversarial tests, a Node.js
-package smoke test, canonical external conformance, and an npm package dry run.
+The check includes strict type checking, unit and adversarial tests, Node.js and
+browser-bundle smoke tests, canonical external conformance, and an npm package
+dry run.
 
 ## License
 

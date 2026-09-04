@@ -1,7 +1,7 @@
 {
   "name": "miakapi",
   "version": "4.0.0-alpha.0",
-  "description": "Typed coordinator SDK for Miakapp",
+  "description": "Typed coordinator and trusted-browser SDK for Miakapp",
   "type": "module",
   "packageManager": "bun@1.2.23",
   "engines": {
@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js"
     }
   },
   "files": [
@@ -25,11 +29,12 @@
     "build:contract": "tsc -p tsconfig.contract.json",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "bun run check",
+    "smoke:browser": "node scripts/check-browser-bundle.mjs",
     "smoke:node": "node test/node-smoke.mjs",
     "test": "bun test",
     "test:contract": "bun run build:contract && node scripts/check-contract.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run test && bun run build && bun run smoke:node && bun run test:contract && bun run pack:check"
+    "check": "bun run typecheck && bun run test && bun run build && bun run smoke:node && bun run smoke:browser && bun run test:contract && bun run pack:check"
   },
   "repository": {
     "type": "git",
@@ -44,6 +49,7 @@
     "MiakAPI",
     "smart-home",
     "coordinator",
+    "browser",
     "websocket"
   ],
   "author": "Mathieu Colmon",
@@ -52,6 +58,7 @@
     "@types/bun": "1.2.23",
     "@types/node": "22.20.1",
     "@types/ws": "8.18.1",
+    "playwright": "1.62.1",
     "typescript": "7.0.2"
   },
   "dependencies": {
