@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import type { BrowserClientLogRecord, FirebaseIdTokenRequest } from '../src/browser-api.js';
+import type {
+  BrowserClientLogRecord,
+  BrowserRelayCredentialRequest,
+} from '../src/browser-api.js';
 import { createBrowserClientWithRuntime } from '../src/browser-client.js';
 import { Opcode } from '../src/protocol/codec.js';
 import { FakeRelay } from './fakes/relay.js';
@@ -18,7 +21,7 @@ describe('browser lifecycle', () => {
     const started = harness.client.start();
     const connection = await harness.relay.connectionAt(0);
     const hello = await connection.nextClientFrame(Opcode.Hello);
-    expect(hello.payload).toEqual([1, 0, 0, 1, 'firebase-initial', ['test-home']]);
+    expect(hello.payload).toEqual([1, 0, 0, 1, 'user.initial.signature', ['test-home']]);
     expect(harness.client.status).toBe('authenticating');
     sendUserBootstrap(connection);
     const ready = await started;
@@ -74,13 +77,124 @@ describe('browser lifecycle', () => {
     const { connection } = await startBrowserReady(harness);
     await harness.runtime.advanceBy(5_000);
     const reauth = await connection.nextClientFrame(Opcode.Reauth);
-    expect(reauth.payload).toEqual([1, 'firebase-reauth']);
+    expect(reauth.payload).toEqual([1, 'user.reauth.signature']);
     connection.send({ opcode: Opcode.ReauthOk, payload: [1, 2_000_000] });
     await flushMicrotasks();
-    expect(harness.tokenRequests.map(({ reason }) => reason)).toEqual(['initial', 'reauth']);
+    expect(harness.credentialRequests.map(({ reason }) => reason)).toEqual(['initial', 'reauth']);
     expect(harness.relay.connectCount).toBe(1);
     expect(harness.client.status).toBe('ready');
     await harness.client.stop();
+  });
+
+  test('hands an issued credential to a changed relay without reexchange or old-socket exposure', async () => {
+    const relay = new FakeRelay({ autoWelcome: false, expiresAtMs: 1_010_000 });
+    const runtime = new FakeRuntime(relay);
+    const requests: BrowserRelayCredentialRequest[] = [];
+    const client = createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      credentialProvider: {
+        async getCredential(request) {
+          requests.push(request);
+          return request.reason === 'initial'
+            ? {
+              relayUrl: 'wss://old-relay.test/miakapp/ws',
+              accessToken: 'user.initial.signature',
+              expiresAtMs: 1_010_000,
+            }
+            : {
+              relayUrl: 'wss://new-relay.test/miakapp/ws',
+              accessToken: 'user.handoff.signature',
+              expiresAtMs: 1_100_000,
+            };
+        },
+      },
+    }, runtime);
+
+    const started = client.start();
+    const oldConnection = await relay.connectionAt(0);
+    const oldHello = await oldConnection.nextClientFrame(Opcode.Hello);
+    expect(oldHello.payload[4]).toBe('user.initial.signature');
+    sendUserBootstrap(oldConnection);
+    await started;
+
+    await runtime.advanceBy(5_000);
+    const replacement = await relay.connectionAt(1);
+    const replacementHello = await replacement.nextClientFrame(Opcode.Hello);
+    expect(replacementHello.payload[4]).toBe('user.handoff.signature');
+    expect(oldConnection.queuedClientFrameCount).toBe(0);
+    expect(requests.map(({ reason }) => reason)).toEqual(['initial', 'reauth']);
+    expect(relay.connectUrls).toEqual([
+      'wss://old-relay.test/miakapp/ws',
+      'wss://new-relay.test/miakapp/ws',
+    ]);
+    expect(relay.socketHighWater).toBe(1);
+    expect(client.state.snapshot()?.stale).toBe(true);
+
+    sendUserBootstrap(replacement, { revision: 2, state: { 'home.temperature': 24 } });
+    await flushMicrotasks();
+    expect(client.status).toBe('ready');
+    expect(client.state.snapshot()?.values['home.temperature']).toBe(24);
+    await client.stop();
+  });
+
+  test('rejects a credential that expires while the relay handshake is pending', async () => {
+    const relay = new FakeRelay({ autoWelcome: false });
+    const runtime = new FakeRuntime(relay);
+    const client = createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      credentialProvider: {
+        async getCredential() {
+          return {
+            relayUrl: 'wss://relay.test/miakapp/ws',
+            accessToken: 'user.expiring.signature',
+            expiresAtMs: 1_000_001,
+          };
+        },
+      },
+    }, runtime);
+    const started = client.start();
+    void started.catch(() => undefined);
+    const connection = await relay.connectionAt(0);
+    await connection.nextClientFrame(Opcode.Hello);
+    await runtime.advanceBy(1);
+    connection.sendWelcome();
+    await flushMicrotasks();
+    expect(client.status).toBe('reconnecting');
+    expect(relay.openConnectionCount).toBe(0);
+    await client.stop();
+  });
+
+  test('rejects a REAUTH lease that exceeds the credential returned by the provider', async () => {
+    const relay = new FakeRelay({ autoWelcome: false, expiresAtMs: 1_010_000 });
+    const runtime = new FakeRuntime(relay);
+    runtime.queueRandom(0);
+    const client = createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      credentialProvider: {
+        async getCredential({ reason }) {
+          return {
+            relayUrl: 'wss://relay.test/miakapp/ws',
+            accessToken: `user.${reason}.signature`,
+            expiresAtMs: reason === 'initial' ? 1_010_000 : 1_020_000,
+          };
+        },
+      },
+    }, runtime);
+    const failures: string[] = [];
+    client.errors.subscribe(({ kind }) => failures.push(kind));
+    const started = client.start();
+    const connection = await relay.connectionAt(0);
+    await connection.nextClientFrame(Opcode.Hello);
+    sendUserBootstrap(connection);
+    await started;
+
+    await runtime.advanceBy(5_000);
+    const reauth = await connection.nextClientFrame(Opcode.Reauth);
+    connection.send({ opcode: Opcode.ReauthOk, payload: [reauth.payload[0] ?? 1, 1_020_001] });
+    await flushMicrotasks();
+    expect(failures).toContain('protocol');
+    expect(client.status).toBe('reconnecting');
+    await client.stop();
   });
 
   test('bounds a missing REAUTH response and reconnects', async () => {
@@ -106,12 +220,12 @@ describe('browser lifecycle', () => {
     await harness.runtime.advanceBy(0);
     const next = await harness.relay.connectionAt(1);
     const hello = await next.nextClientFrame(Opcode.Hello);
-    expect(hello.payload[4]).toBe('firebase-reconnect');
+    expect(hello.payload[4]).toBe('user.reconnect.signature');
     sendUserBootstrap(next, { revision: 1, state: { 'home.temperature': 22 } });
     await flushMicrotasks();
     expect(harness.client.status).toBe('ready');
     expect(harness.client.state.snapshot()?.values['home.temperature']).toBe(22);
-    expect(harness.tokenRequests.map(({ reason }) => reason)).toEqual(['initial', 'reconnect']);
+    expect(harness.credentialRequests.map(({ reason }) => reason)).toEqual(['initial', 'reconnect']);
     await harness.client.stop();
   });
 
@@ -139,17 +253,16 @@ describe('browser lifecycle', () => {
     await harness.client.stop();
   });
 
-  test('bounds token acquisition and WELCOME phases', async () => {
+  test('bounds credential acquisition and WELCOME phases', async () => {
     const relay = new FakeRelay({ autoWelcome: false });
     const runtime = new FakeRuntime(relay);
-    let tokenRequests = 0;
+    let credentialRequests = 0;
     const client = createBrowserClientWithRuntime({
       homeId: 'test-home',
-      relayUrl: 'wss://relay.test/ws',
-      idTokenProvider: {
-        async getIdToken() {
-          tokenRequests += 1;
-          return new Promise<string>(() => undefined);
+      credentialProvider: {
+        async getCredential() {
+          credentialRequests += 1;
+          return new Promise<never>(() => undefined);
         },
       },
     }, runtime);
@@ -157,7 +270,7 @@ describe('browser lifecycle', () => {
     void started.catch(() => undefined);
     await flushMicrotasks();
     await runtime.advanceBy(10_000);
-    expect(tokenRequests).toBe(2);
+    expect(credentialRequests).toBe(2);
     expect(relay.connectCount).toBe(0);
     await client.stop();
 
@@ -173,17 +286,16 @@ describe('browser lifecycle', () => {
   });
 
   test('sanitizes provider failures and log records', async () => {
-    const secret = 'firebase-secret-from-provider';
+    const secret = 'source-secret-from-provider';
     const records: BrowserClientLogRecord[] = [];
     const relay = new FakeRelay();
     const runtime = new FakeRuntime(relay);
-    const tokenRequests: FirebaseIdTokenRequest[] = [];
+    const credentialRequests: BrowserRelayCredentialRequest[] = [];
     const client = createBrowserClientWithRuntime({
       homeId: 'test-home',
-      relayUrl: 'wss://relay.test/ws',
-      idTokenProvider: {
-        async getIdToken(request) {
-          tokenRequests.push(request);
+      credentialProvider: {
+        async getCredential(request) {
+          credentialRequests.push(request);
           throw new Error(secret);
         },
       },
@@ -196,23 +308,56 @@ describe('browser lifecycle', () => {
     expect(client.status).toBe('reconnecting');
     expect(JSON.stringify({ records, failures: failures.map((failure) => failure.message) }))
       .not.toContain(secret);
-    expect(tokenRequests).toHaveLength(1);
+    expect(credentialRequests).toHaveLength(1);
     await client.stop();
     await expect(started).rejects.toMatchObject({ kind: 'cancelled' });
   });
 
-  test('does not invoke the token provider after a connecting listener stops reentrantly', async () => {
+  test('rejects malformed provider credentials before opening a socket without echoing them', async () => {
+    const secret = 'source credential that must not escape';
+    const records: BrowserClientLogRecord[] = [];
     const relay = new FakeRelay();
     const runtime = new FakeRuntime(relay);
-    let tokenRequests = 0;
+    const client = createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      credentialProvider: {
+        async getCredential() {
+          return {
+            relayUrl: 'ws://relay.test/ws',
+            accessToken: secret,
+            expiresAtMs: 2_000_000,
+          };
+        },
+      },
+      logger: { write: (record) => records.push(record) },
+    }, runtime);
+    const failures: Error[] = [];
+    client.errors.subscribe((failure) => failures.push(failure));
+    const started = client.start();
+    void started.catch(() => undefined);
+    await flushMicrotasks();
+    expect(client.status).toBe('reconnecting');
+    expect(relay.connectCount).toBe(0);
+    expect(JSON.stringify({ records, failures: failures.map(({ message }) => message) }))
+      .not.toContain(secret);
+    await client.stop();
+  });
+
+  test('does not invoke the credential provider after a connecting listener stops reentrantly', async () => {
+    const relay = new FakeRelay();
+    const runtime = new FakeRuntime(relay);
+    let credentialRequests = 0;
     const statuses: string[] = [];
     const client = createBrowserClientWithRuntime({
       homeId: 'test-home',
-      relayUrl: 'wss://relay.test/ws',
-      idTokenProvider: {
-        async getIdToken() {
-          tokenRequests += 1;
-          return 'firebase-token';
+      credentialProvider: {
+        async getCredential() {
+          credentialRequests += 1;
+          return {
+            relayUrl: 'wss://relay.test/ws',
+            accessToken: 'user.initial.signature',
+            expiresAtMs: 2_000_000,
+          };
         },
       },
     }, runtime);
@@ -225,7 +370,7 @@ describe('browser lifecycle', () => {
     await expect(started).rejects.toMatchObject({ kind: 'cancelled' });
     await client.stop();
 
-    expect(tokenRequests).toBe(0);
+    expect(credentialRequests).toBe(0);
     expect(relay.connectCount).toBe(0);
     expect(statuses).toEqual(['connecting', 'stopping', 'stopped']);
   });

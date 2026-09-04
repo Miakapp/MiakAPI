@@ -13,8 +13,9 @@ import type {
   BrowserHomeStatus,
   BrowserLifecycleEvent,
   BrowserReadySession,
-  FirebaseIdTokenReason,
-  FirebaseIdTokenRequest,
+  BrowserRelayCredential,
+  BrowserRelayCredentialReason,
+  BrowserRelayCredentialRequest,
 } from './browser-api.js';
 import { createBrowserRuntime } from './internal/browser-socket.js';
 import {
@@ -40,7 +41,7 @@ import { parseUserHomeStatus, UserRelaySession } from './internal/user-session.j
 import { UserStateManager, type UserStateHost } from './internal/user-state.js';
 import {
   validateBrowserClientOptions,
-  validateFirebaseIdToken,
+  validateBrowserRelayCredential,
   validateStartOptions,
   validateStopOptions,
 } from './internal/validation.js';
@@ -49,16 +50,18 @@ import { Opcode, type Frame, type ProtocolValue } from './protocol/codec.js';
 interface SessionEnd {
   readonly failure?: BrowserClientFailure;
   readonly retryAfterMs?: number;
+  readonly handoffCredential?: BrowserRelayCredential;
 }
 
-interface TokenRequest {
+interface CredentialRequest {
   readonly controller: AbortController;
   readonly dispose: Unsubscribe;
-  readonly promise: Promise<string>;
+  readonly promise: Promise<BrowserRelayCredential>;
 }
 
 interface PendingReauthentication {
   readonly requestId: number;
+  readonly maximumExpiresAtMs: number;
   readonly deferred: Deferred<number>;
   readonly timer: RuntimeTimer;
 }
@@ -110,9 +113,10 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
   #loopTask: Promise<void> | undefined;
   #startSignal: AbortSignal | undefined;
   #startAbort: (() => void) | undefined;
-  #tokenRequest: TokenRequest | undefined;
+  #credentialRequest: CredentialRequest | undefined;
   #reauthentication: PendingReauthentication | undefined;
   #reauthTimer: RuntimeTimer | undefined;
+  #sessionRelayUrl: string | undefined;
   #requestIds = new IdSequence();
   #callIds = new IdSequence();
   readonly #localCallIds = new IdSequence();
@@ -183,7 +187,7 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     this.state.stop();
     this.#markHomeStale();
     this.#clearReauthentication();
-    this.#abortTokenRequest();
+    this.#abortCredentialRequest();
     this.#loopController.abort(stopping);
     this.#sessionReady?.reject(stopping);
     this.#sessionEnd?.resolve({ failure: stopping });
@@ -255,15 +259,20 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
   }
 
   async #runConnectionLoop(): Promise<void> {
-    let reason: FirebaseIdTokenReason = 'initial';
+    let reason: BrowserRelayCredentialReason = 'initial';
+    let pendingCredential: BrowserRelayCredential | undefined;
     while (!this.#loopController.signal.aborted) {
       let end: SessionEnd = {};
       let connectionEnd: Deferred<SessionEnd> | undefined;
       try {
         this.#transition('connecting');
         if (this.#loopController.signal.aborted) break;
-        const token = await this.#getIdToken(reason);
+        const credential = pendingCredential ?? await this.#getCredential(reason);
+        pendingCredential = undefined;
         if (this.#loopController.signal.aborted) break;
+        if (credential.expiresAtMs <= this.#runtime.now()) {
+          throw browserUnavailable('Browser relay credential expired before connection');
+        }
         this.#transition('authenticating');
         if (this.#loopController.signal.aborted) break;
         this.#requestIds = new IdSequence();
@@ -277,8 +286,8 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         const session = await UserRelaySession.connect(
           this.#runtime,
           this.#options.homeId,
-          this.#options.relayUrl,
-          token,
+          credential.relayUrl,
+          credential.accessToken,
           this.#loopController.signal,
           {
             frame: (frame) => this.#handleFrame(frame),
@@ -298,13 +307,19 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
             },
           },
         );
-        this.#reconnectAttempt = 0;
         if (this.#loopController.signal.aborted) {
           session.terminate();
           session.detach();
           break;
         }
+        if (credential.expiresAtMs <= this.#runtime.now()) {
+          session.terminate();
+          session.detach();
+          throw browserUnavailable('Browser relay credential expired during authentication');
+        }
+        this.#reconnectAttempt = 0;
         this.#session = session;
+        this.#sessionRelayUrl = credential.relayUrl;
         this.#setHomeStatus(Object.freeze({
           enrolled: session.welcome.readySession.enrolled,
           coordinators: session.welcome.readySession.coordinators,
@@ -318,7 +333,10 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         this.calls.beginSession(session.welcome.epoch);
         this.#transition('synchronizing');
         if (this.#loopController.signal.aborted) break;
-        this.#scheduleReauthentication(session.welcome.expiresAtMs);
+        this.#scheduleReauthentication(Math.min(
+          session.welcome.expiresAtMs,
+          credential.expiresAtMs,
+        ));
         const bootstrapTimeout = this.#runtime.setTimer(() => {
           const failure = browserUnavailable('Browser relay bootstrap timed out');
           sessionReady.reject(failure);
@@ -354,6 +372,11 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
       if (this.#loopController.signal.aborted) break;
       this.#transition('reconnecting', undefined, end.failure);
       if (this.#loopController.signal.aborted) break;
+      if (end.handoffCredential !== undefined) {
+        pendingCredential = end.handoffCredential;
+        reason = 'reconnect';
+        continue;
+      }
       const ceiling = Math.min(
         FIRST_RECONNECT_CEILING_MS * (2 ** this.#reconnectAttempt),
         MAX_RECONNECT_CEILING_MS,
@@ -373,19 +396,19 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     }
   }
 
-  async #getIdToken(
-    reason: FirebaseIdTokenReason,
+  async #getCredential(
+    reason: BrowserRelayCredentialReason,
     timeoutMs = SESSION_PHASE_TIMEOUT_MS,
-  ): Promise<string> {
-    if (this.#tokenRequest !== undefined) return this.#tokenRequest.promise;
+  ): Promise<BrowserRelayCredential> {
+    if (this.#credentialRequest !== undefined) return this.#credentialRequest.promise;
     const child = childAbortController(this.#loopController.signal);
-    const request: FirebaseIdTokenRequest = Object.freeze({
+    const request: BrowserRelayCredentialRequest = Object.freeze({
       homeId: this.#options.homeId,
       reason,
       signal: child.controller.signal,
     });
     let abort: (() => void) | undefined;
-    const interrupted = new Promise<string>((_resolve, reject) => {
+    const interrupted = new Promise<BrowserRelayCredential>((_resolve, reject) => {
       abort = () => reject(child.controller.signal.reason ?? browserCancelled('not_dispatched'));
       if (child.controller.signal.aborted) abort();
       else child.controller.signal.addEventListener('abort', abort, { once: true });
@@ -395,12 +418,12 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         if (child.controller.signal.aborted) {
           throw child.controller.signal.reason ?? browserCancelled('not_dispatched');
         }
-        return this.#options.idTokenProvider.getIdToken(request);
+        return this.#options.credentialProvider.getCredential(request);
       })
-      .then((value) => validateFirebaseIdToken(value))
-      .catch(() => { throw browserUnavailable('Firebase ID token provider failed'); });
+      .then((value) => validateBrowserRelayCredential(value, this.#runtime.now()))
+      .catch(() => { throw browserUnavailable('Browser relay credential provider failed'); });
     const timeout = this.#runtime.setTimer(() => {
-      child.controller.abort(browserUnavailable('Firebase ID token request timed out'));
+      child.controller.abort(browserUnavailable('Browser relay credential request timed out'));
     }, Math.max(1, Math.min(timeoutMs, SESSION_PHASE_TIMEOUT_MS)));
     const promise = Promise.race([provider, interrupted]);
     let disposed = false;
@@ -411,21 +434,21 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
       if (abort !== undefined) child.controller.signal.removeEventListener('abort', abort);
       child.dispose();
     };
-    const tokenRequest = { controller: child.controller, dispose, promise };
-    this.#tokenRequest = tokenRequest;
+    const credentialRequest = { controller: child.controller, dispose, promise };
+    this.#credentialRequest = credentialRequest;
     void promise.finally(() => {
       dispose();
-      if (this.#tokenRequest === tokenRequest) this.#tokenRequest = undefined;
+      if (this.#credentialRequest === credentialRequest) this.#credentialRequest = undefined;
     }).catch(() => undefined);
     return promise;
   }
 
-  #abortTokenRequest(): void {
-    const request = this.#tokenRequest;
+  #abortCredentialRequest(): void {
+    const request = this.#credentialRequest;
     if (request === undefined) return;
     request.controller.abort(browserCancelled('not_dispatched'));
     request.dispose();
-    this.#tokenRequest = undefined;
+    this.#credentialRequest = undefined;
   }
 
   #scheduleReauthentication(expiresAtMs: number): void {
@@ -443,12 +466,24 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     const session = this.#session;
     if (session === undefined || this.#loopController.signal.aborted) return;
     try {
-      const token = await this.#getIdToken(
+      const credential = await this.#getCredential(
         'reauth',
         Math.max(1, currentExpiresAtMs - this.#runtime.now()),
       );
       if (!this.#mayReauthenticate(session)) return;
-      const remaining = currentExpiresAtMs - this.#runtime.now();
+      if (this.#sessionRelayUrl === undefined) {
+        throw browserUnavailable('Browser relay routing state is unavailable');
+      }
+      if (credential.relayUrl !== this.#sessionRelayUrl) {
+        if (this.#sessionEnd === undefined || this.#sessionEnd.settled) {
+          throw browserUnavailable('Browser relay handoff state is unavailable');
+        }
+        this.#sessionEnd.resolve({ handoffCredential: credential });
+        session.terminate();
+        return;
+      }
+      const remaining = Math.min(currentExpiresAtMs, credential.expiresAtMs)
+        - this.#runtime.now();
       if (remaining <= 0) throw browserUnavailable('Browser authentication lease expired');
       const requestId = this.nextRequestId();
       const deferred = createDeferred<number>();
@@ -456,8 +491,13 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
       const timer = this.#runtime.setTimer(() => {
         deferred.reject(browserUnavailable('Browser reauthentication timed out'));
       }, Math.max(1, Math.min(remaining, SESSION_PHASE_TIMEOUT_MS)));
-      this.#reauthentication = { requestId, deferred, timer };
-      await session.send({ opcode: Opcode.Reauth, payload: [requestId, token] });
+      this.#reauthentication = {
+        requestId,
+        maximumExpiresAtMs: credential.expiresAtMs,
+        deferred,
+        timer,
+      };
+      await session.send({ opcode: Opcode.Reauth, payload: [requestId, credential.accessToken] });
       const expiresAtMs = await deferred.promise;
       if (this.#mayReauthenticate(session)) this.#scheduleReauthentication(expiresAtMs);
     } catch {
@@ -506,8 +546,9 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
           throw browserProtocolFailure('REAUTH_OK is not correlated');
         }
         const expiresAtMs = relayInteger(frame, 1, 'REAUTH_OK.expiresAtMs', 1);
-        if (expiresAtMs <= this.#runtime.now()) {
-          throw browserProtocolFailure('REAUTH_OK expiry is not in the future');
+        if (expiresAtMs <= this.#runtime.now()
+          || expiresAtMs > this.#reauthentication.maximumExpiresAtMs) {
+          throw browserProtocolFailure('REAUTH_OK expiry is outside the credential lease');
         }
         this.#reauthentication.timer.cancel();
         this.#reauthentication.deferred.resolve(expiresAtMs);
@@ -518,7 +559,7 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         this.#transition('draining');
         this.#reauthTimer?.cancel();
         this.#reauthTimer = undefined;
-        this.#abortTokenRequest();
+        this.#abortCredentialRequest();
         this.#goawayRetryAfterMs = relayInteger(frame, 0, 'GOAWAY.retryAfterMs');
         return;
       }
@@ -587,12 +628,13 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     this.#bootstrapTimer?.cancel();
     this.#bootstrapTimer = undefined;
     this.#clearReauthentication();
-    this.#abortTokenRequest();
+    this.#abortCredentialRequest();
     this.state.disconnected();
     this.calls.disconnected();
     this.#markHomeStale();
     this.#session?.detach();
     this.#session = undefined;
+    this.#sessionRelayUrl = undefined;
     this.#sessionEnd = undefined;
     this.#sessionReady = undefined;
     this.#goawayRetryAfterMs = undefined;

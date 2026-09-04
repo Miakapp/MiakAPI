@@ -28,10 +28,13 @@ const options: CoordinatorOptions = {
 const moduleSurface: CoordinatorModule = { createCoordinator };
 const browserOptions: BrowserClientOptions = {
   homeId: 'type-contract-home',
-  relayUrl: 'wss://relay.example.test/miakapp/ws',
-  idTokenProvider: {
-    async getIdToken() {
-      return 'firebase-id-token';
+  credentialProvider: {
+    async getCredential() {
+      return {
+        relayUrl: 'wss://relay.example.test/miakapp/ws',
+        accessToken: 'type.contract.signature',
+        expiresAtMs: Date.now() + 60_000,
+      };
     },
   },
 };
