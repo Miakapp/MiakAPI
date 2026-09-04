@@ -1,7 +1,7 @@
 import type {
   BrowserClientFailure,
   BrowserClientStatus,
-  FirebaseIdTokenReason,
+  BrowserRelayCredentialReason,
 } from '../../src/browser.js';
 import { createBrowserClient } from '../../src/browser.js';
 
@@ -21,7 +21,7 @@ interface BrowserIntegration {
   start(): Promise<{ enrolled: boolean; coordinatorCount: number }>;
   state(): BrowserIntegrationState | undefined;
   call(target: number): Promise<unknown>;
-  tokenReasons(): readonly FirebaseIdTokenReason[];
+  credentialReasons(): readonly BrowserRelayCredentialReason[];
   statuses(): readonly BrowserClientStatus[];
   failures(): readonly BrowserIntegrationFailure[];
   stop(): Promise<void>;
@@ -33,19 +33,22 @@ interface BrowserGlobal {
 }
 
 const browserGlobal = globalThis as unknown as BrowserGlobal;
-const tokenReasons: FirebaseIdTokenReason[] = [];
+const credentialReasons: BrowserRelayCredentialReason[] = [];
 const statuses: BrowserClientStatus[] = [];
 const failures: BrowserIntegrationFailure[] = [];
 const client = createBrowserClient({
   homeId: 'integration-home',
-  relayUrl: `wss://${browserGlobal.location.host}/ws`,
-  idTokenProvider: {
-    async getIdToken({ reason, signal }) {
+  credentialProvider: {
+    async getCredential({ reason, signal }) {
       if (signal.aborted) throw signal.reason;
-      tokenReasons.push(reason);
-      return reason === 'initial'
-        ? 'integration-user-token'
-        : 'integration-user-token-new';
+      credentialReasons.push(reason);
+      return {
+        relayUrl: `wss://${browserGlobal.location.host}/ws`,
+        accessToken: reason === 'initial'
+          ? 'integration.user.initial'
+          : 'integration.user.renewed',
+        expiresAtMs: Date.now() + 60_000,
+      };
     },
   },
 });
@@ -84,7 +87,7 @@ browserGlobal.miakappIntegration = Object.freeze({
     await call.accepted;
     return call.result;
   },
-  tokenReasons: () => Object.freeze([...tokenReasons]),
+  credentialReasons: () => Object.freeze([...credentialReasons]),
   statuses: () => Object.freeze([...statuses]),
   failures: () => Object.freeze([...failures]),
   stop: () => client.stop({ deadlineMs: 2_000 }),

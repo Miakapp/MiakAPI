@@ -2,7 +2,7 @@ import type {
   BrowserClient,
   BrowserClientLogger,
   BrowserReadySession,
-  FirebaseIdTokenRequest,
+  BrowserRelayCredentialRequest,
 } from '../../src/browser-api.js';
 import { createBrowserClientWithRuntime } from '../../src/browser-client.js';
 import { Opcode, type ProtocolValue } from '../../src/protocol/codec.js';
@@ -19,7 +19,7 @@ export interface BrowserTestHarness {
   readonly client: BrowserClient;
   readonly relay: FakeRelay;
   readonly runtime: FakeRuntime;
-  readonly tokenRequests: FirebaseIdTokenRequest[];
+  readonly credentialRequests: BrowserRelayCredentialRequest[];
 }
 
 function dictionary(names: readonly string[], firstId: number): ProtocolValue[] {
@@ -59,14 +59,17 @@ export function createBrowserTestHarness(
 ): BrowserTestHarness {
   const relay = new FakeRelay({ ...relayOptions, autoWelcome: false });
   const runtime = new FakeRuntime(relay);
-  const tokenRequests: FirebaseIdTokenRequest[] = [];
+  const credentialRequests: BrowserRelayCredentialRequest[] = [];
   const baseOptions = {
     homeId: 'test-home',
-    relayUrl: 'wss://relay.test/miakapp/ws',
-    idTokenProvider: {
-      async getIdToken(request: FirebaseIdTokenRequest): Promise<string> {
-        tokenRequests.push(request);
-        return `firebase-${request.reason}`;
+    credentialProvider: {
+      async getCredential(request: BrowserRelayCredentialRequest) {
+        credentialRequests.push(request);
+        return {
+          relayUrl: 'wss://relay.test/miakapp/ws',
+          accessToken: `user.${request.reason}.signature`,
+          expiresAtMs: 2_000_000,
+        };
       },
     },
   };
@@ -74,7 +77,7 @@ export function createBrowserTestHarness(
     logger === undefined ? baseOptions : { ...baseOptions, logger },
     runtime,
   );
-  return { client, relay, runtime, tokenRequests };
+  return { client, relay, runtime, credentialRequests };
 }
 
 export async function startBrowserReady(

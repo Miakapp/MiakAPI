@@ -157,19 +157,28 @@ application. It relies on the browser's native WebSocket implementation and does
 not expose coordinator declarations, Home Keys, or the Node.js `ws` transport.
 
 ```ts
-import { createBrowserClient } from 'miakapi/browser';
+import {
+  createBrowserClient,
+  createControlPlaneBrowserRelayCredentialProvider,
+} from 'miakapi/browser';
+
+const credentialProvider = createControlPlaneBrowserRelayCredentialProvider({
+  exchangeEndpoint: 'https://control.example.com/v1/user-relay-tokens:exchange',
+  async getFirebaseIdToken({ signal }) {
+    if (signal.aborted) throw signal.reason;
+    const user = firebaseAuth.currentUser;
+    if (user === null) throw new Error('The user is signed out');
+    return user.getIdToken();
+  },
+  async getAppCheckToken({ signal }) {
+    if (signal.aborted) throw signal.reason;
+    return (await getToken(firebaseAppCheck)).token;
+  },
+});
 
 const client = createBrowserClient({
   homeId: 'my-home',
-  relayUrl: 'wss://relay.example.com/miakapp/ws',
-  idTokenProvider: {
-    async getIdToken({ signal }) {
-      if (signal.aborted) throw signal.reason;
-      const user = firebaseAuth.currentUser;
-      if (user === null) throw new Error('The user is signed out');
-      return user.getIdToken();
-    },
-  },
+  credentialProvider,
 });
 
 await client.start();
@@ -196,22 +205,28 @@ removeHomeListener();
 await client.stop();
 ```
 
-`idTokenProvider` is invoked for the initial connection, same-socket
-reauthentication, and reconnects. Return a fresh Firebase ID token from trusted
-in-memory application state. Never place the token in the relay URL, a WebSocket
-subprotocol, persistent browser storage, logs, or error messages. MiakAPI sends
-it only inside the authenticated binary protocol handshake or `REAUTH` frame.
-Stop and discard the client immediately when the Firebase user signs out or the
-selected home or relay changes; create a new client for the new identity tuple.
+This replaces the earlier alpha browser options `relayUrl` and
+`idTokenProvider`. They are intentionally rejected: callers must not pair an
+independently selected relay with a source or access token.
 
-The configured relay receives that Firebase ID token as a bearer credential and
-can observe the home data flowing through it. Until the control plane issues a
-short-lived credential scoped to one relay, home, and user role, use this client
-only with an official relay or one the user explicitly trusts as completely as
-the Miakapp backend. An arbitrary community relay catalogue is not a safe
-production use of this authentication profile. The first browser integration
-fixture uses synthetic credentials only; Miakapp application wiring remains
-blocked on this trust decision.
+The credential provider is invoked for the initial connection, reauthentication,
+and reconnects. Its Firebase ID and App Check callbacks run only inside the
+trusted host and send those source tokens solely to the HTTPS control plane.
+MiakAPI never places them in a relay URL, WebSocket subprotocol, persistent
+browser storage, log, error, `HELLO`, or `REAUTH` frame.
+
+The control plane returns an up-to-five-minute Miakapp access token atomically
+with its authoritative relay URL. MiakAPI sends only that audience-bound token
+to the returned relay. If a renewal selects a different relay, the client closes
+the old session and opens the replacement with the already-issued credential; it
+does not expose the new token to the old relay or repeat the exchange. Stop and
+discard the client immediately when the Firebase user signs out or the selected
+home changes. Relay routing changes arrive through credentials and do not require
+mutating the client options.
+
+Audience binding limits credential replay; it does not encrypt home traffic from
+the selected relay. Users should still choose an operator they trust with the
+plaintext state and calls that transit through it.
 
 Browser state snapshots are defensive copies and become `stale` immediately
 when continuity is lost. Revision or dictionary mismatches trigger one
