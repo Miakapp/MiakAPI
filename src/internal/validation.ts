@@ -19,7 +19,8 @@ import type {
   BrowserCallOptions,
   BrowserClientLogger,
   BrowserClientOptions,
-  FirebaseIdTokenProvider,
+  BrowserRelayCredential,
+  BrowserRelayCredentialProvider,
 } from '../browser-api.js';
 import { LIMITS } from '../protocol/codec.js';
 
@@ -28,6 +29,7 @@ const CONTROL_CHARACTER = /\p{Cc}/u;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const COORDINATOR_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const HOME_ID = /^[a-z][a-z0-9-]{1,61}[a-z0-9]$/;
+const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 interface ValueBudget {
   values: number;
@@ -404,11 +406,11 @@ function isCoordinatorLogger(value: unknown): value is CoordinatorLogger {
     && typeof value.write === 'function';
 }
 
-function isFirebaseIdTokenProvider(value: unknown): value is FirebaseIdTokenProvider {
+function isBrowserRelayCredentialProvider(value: unknown): value is BrowserRelayCredentialProvider {
   return value !== null
     && typeof value === 'object'
-    && 'getIdToken' in value
-    && typeof value.getIdToken === 'function';
+    && 'getCredential' in value
+    && typeof value.getCredential === 'function';
 }
 
 function isBrowserClientLogger(value: unknown): value is BrowserClientLogger {
@@ -486,29 +488,57 @@ export function validateRelayUrl(value: unknown, label = 'relay URL'): string {
   return url.href;
 }
 
-export function validateFirebaseIdToken(value: unknown): string {
-  return boundedString(value, 1, 16_384, 'Firebase ID token', true);
+export function validateBrowserRelayCredential(
+  value: unknown,
+  now: number,
+): BrowserRelayCredential {
+  const credential = exactObject(
+    value,
+    ['relayUrl', 'accessToken', 'expiresAtMs'],
+    [],
+    'browser relay credential',
+  );
+  const relayUrl = validateRelayUrl(credential.relayUrl, 'browser relay credential relayUrl');
+  if (relayUrl !== credential.relayUrl) {
+    throw new TypeError('browser relay credential relayUrl must be canonical');
+  }
+  const accessToken = boundedString(
+    credential.accessToken,
+    1,
+    8_192,
+    'browser relay credential accessToken',
+  );
+  const segments = accessToken.split('.');
+  if (segments.length !== 3 || segments.some((segment) => !BASE64URL.test(segment))) {
+    throw new TypeError('browser relay credential accessToken must be compact');
+  }
+  const expiresAtMs = credential.expiresAtMs;
+  if (typeof expiresAtMs !== 'number'
+    || !Number.isSafeInteger(expiresAtMs)
+    || expiresAtMs <= now) {
+    throw new RangeError('browser relay credential expiry must be a future safe integer');
+  }
+  return Object.freeze({ relayUrl, accessToken, expiresAtMs });
 }
 
 export function validateBrowserClientOptions(value: unknown): BrowserClientOptions {
   const options = exactObject(
     value,
-    ['homeId', 'relayUrl', 'idTokenProvider'],
+    ['homeId', 'credentialProvider'],
     ['logger'],
     'options',
   );
   const homeId = boundedString(options.homeId, 3, 63, 'options.homeId');
   if (!HOME_ID.test(homeId)) throw new TypeError('options.homeId is invalid');
-  if (!isFirebaseIdTokenProvider(options.idTokenProvider)) {
-    throw new TypeError('options.idTokenProvider must implement getIdToken');
+  if (!isBrowserRelayCredentialProvider(options.credentialProvider)) {
+    throw new TypeError('options.credentialProvider must implement getCredential');
   }
   if (options.logger !== undefined && !isBrowserClientLogger(options.logger)) {
     throw new TypeError('options.logger must implement write');
   }
   const base = Object.freeze({
     homeId,
-    relayUrl: validateRelayUrl(options.relayUrl, 'options.relayUrl'),
-    idTokenProvider: options.idTokenProvider,
+    credentialProvider: options.credentialProvider,
   });
   return options.logger === undefined
     ? base

@@ -42,10 +42,9 @@ assert.equal(coordinator.status, 'stopped');
 
 const browser = createBrowserClient({
   homeId: 'node-smoke-home',
-  relayUrl: 'wss://relay.example.test/miakapp/ws',
-  idTokenProvider: {
-    async getIdToken() {
-      throw new Error('The inert smoke test must not request a Firebase token');
+  credentialProvider: {
+    async getCredential() {
+      throw new Error('The inert smoke test must not request a browser relay credential');
     },
   },
 });

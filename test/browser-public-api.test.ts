@@ -8,6 +8,7 @@ import { createBrowserTestHarness, startBrowserReady } from './fakes/user-relay.
 describe('browser public API', () => {
   test('exports an isolated browser surface and constructs inertly', () => {
     expect(typeof browserEntrypoint.createBrowserClient).toBe('function');
+    expect(typeof browserEntrypoint.createControlPlaneBrowserRelayCredentialProvider).toBe('function');
     expect('createCoordinator' in browserEntrypoint).toBe(false);
     expect('createHomeKeyAccessTokenProvider' in browserEntrypoint).toBe(false);
 
@@ -23,28 +24,45 @@ describe('browser public API', () => {
     const runtime = new FakeRuntime(relay);
     const valid = {
       homeId: 'test-home',
-      relayUrl: 'wss://relay.test/ws',
-      idTokenProvider: { async getIdToken() { return 'token'; } },
+      credentialProvider: {
+        async getCredential() {
+          return {
+            relayUrl: 'wss://relay.test/ws',
+            accessToken: 'user.initial.signature',
+            expiresAtMs: 2_000_000,
+          };
+        },
+      },
     };
     expect(() => createBrowserClientWithRuntime({ ...valid, secret: 'forbidden' } as never, runtime))
       .toThrow(/invalid shape/);
     expect(() => createBrowserClientWithRuntime({ ...valid, homeId: '../bad' }, runtime))
       .toThrow(/homeId/);
-    expect(() => createBrowserClientWithRuntime({ ...valid, relayUrl: 'ws://relay.test/ws' }, runtime))
-      .toThrow(/secure WebSocket/);
+    expect(() => createBrowserClientWithRuntime({ ...valid, credentialProvider: {} } as never, runtime))
+      .toThrow(/getCredential/);
+    expect(() => createBrowserClientWithRuntime({
+      homeId: 'test-home',
+      relayUrl: 'wss://relay.test/ws',
+      idTokenProvider: { async getIdToken() { return 'firebase.header.signature'; } },
+    } as never, runtime)).toThrow(/invalid shape/);
     expect(relay.connections).toHaveLength(0);
   });
 
   test('supports class providers and idempotent bounded cleanup', async () => {
     class Provider {
-      async getIdToken(): Promise<string> { return 'class-token'; }
+      async getCredential() {
+        return {
+          relayUrl: 'wss://relay.test/ws',
+          accessToken: 'class.token.signature',
+          expiresAtMs: 2_000_000,
+        };
+      }
     }
     const relay = new FakeRelay({ autoWelcome: false });
     const runtime = new FakeRuntime(relay);
     const client = createBrowserClientWithRuntime({
       homeId: 'test-home',
-      relayUrl: 'wss://relay.test/ws',
-      idTokenProvider: new Provider(),
+      credentialProvider: new Provider(),
     }, runtime);
     const first = client.stop({ deadlineMs: 0 });
     const second = client.stop({ deadlineMs: 1 });
