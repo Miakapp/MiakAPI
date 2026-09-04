@@ -306,6 +306,10 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
               connectionEnd?.resolve({ failure });
             },
           },
+          (createdSession) => {
+            this.#session = createdSession;
+            this.#sessionRelayUrl = credential.relayUrl;
+          },
         );
         if (this.#loopController.signal.aborted) {
           session.terminate();
@@ -314,12 +318,9 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         }
         if (credential.expiresAtMs <= this.#runtime.now()) {
           session.terminate();
-          session.detach();
           throw browserUnavailable('Browser relay credential expired during authentication');
         }
         this.#reconnectAttempt = 0;
-        this.#session = session;
-        this.#sessionRelayUrl = credential.relayUrl;
         this.#setHomeStatus(Object.freeze({
           enrolled: session.welcome.readySession.enrolled,
           coordinators: session.welcome.readySession.coordinators,
@@ -366,11 +367,25 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
             ? error
             : browserUnavailable('Browser relay connection attempt failed') };
       }
-      this.#disconnectSession();
+      const endedSession = this.#session;
+      this.#deactivateSession();
       if (this.#loopController.signal.aborted) break;
       if (end.failure !== undefined) this.#emitFailure(end.failure);
       if (this.#loopController.signal.aborted) break;
       this.#transition('reconnecting', undefined, end.failure);
+      if (this.#loopController.signal.aborted) break;
+      if (endedSession !== undefined
+        && !endedSession.transportClosed
+        && !await this.#waitForTransportClose(endedSession)) {
+        if (!this.#loopController.signal.aborted) {
+          const failure = browserUnavailable('Browser relay transport close timed out');
+          this.#emitFailure(failure);
+          this.#startDeferred?.reject(failure);
+          void this.stop();
+        }
+        break;
+      }
+      this.#disconnectSession();
       if (this.#loopController.signal.aborted) break;
       if (end.handoffCredential !== undefined) {
         pendingCredential = end.handoffCredential;
@@ -478,8 +493,8 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         if (this.#sessionEnd === undefined || this.#sessionEnd.settled) {
           throw browserUnavailable('Browser relay handoff state is unavailable');
         }
-        this.#sessionEnd.resolve({ handoffCredential: credential });
         session.terminate();
+        this.#sessionEnd.resolve({ handoffCredential: credential });
         return;
       }
       const remaining = Math.min(currentExpiresAtMs, credential.expiresAtMs)
@@ -511,6 +526,27 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     return this.#session === session
       && !this.#loopController.signal.aborted
       && this.#status !== 'draining';
+  }
+
+  async #waitForTransportClose(session: UserRelaySession): Promise<boolean> {
+    const interrupted = createDeferred<boolean>();
+    const abort = () => interrupted.resolve(false);
+    if (this.#loopController.signal.aborted) return false;
+    this.#loopController.signal.addEventListener('abort', abort, { once: true });
+    if (this.#loopController.signal.aborted) abort();
+    const timeout = this.#runtime.setTimer(
+      () => interrupted.resolve(false),
+      SESSION_PHASE_TIMEOUT_MS,
+    );
+    try {
+      return await Promise.race([
+        session.waitForTransportClose().then(() => true),
+        interrupted.promise,
+      ]);
+    } finally {
+      timeout.cancel();
+      this.#loopController.signal.removeEventListener('abort', abort);
+    }
   }
 
   #clearReauthentication(): void {
@@ -625,13 +661,7 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
   }
 
   #disconnectSession(): void {
-    this.#bootstrapTimer?.cancel();
-    this.#bootstrapTimer = undefined;
-    this.#clearReauthentication();
-    this.#abortCredentialRequest();
-    this.state.disconnected();
-    this.calls.disconnected();
-    this.#markHomeStale();
+    this.#deactivateSession();
     this.#session?.detach();
     this.#session = undefined;
     this.#sessionRelayUrl = undefined;
@@ -641,6 +671,16 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     this.#stateReady = false;
     this.#functionReady = false;
     this.#topicReady = false;
+  }
+
+  #deactivateSession(): void {
+    this.#bootstrapTimer?.cancel();
+    this.#bootstrapTimer = undefined;
+    this.#clearReauthentication();
+    this.#abortCredentialRequest();
+    this.state.disconnected();
+    this.calls.disconnected();
+    this.#markHomeStale();
   }
 
   #emitFailure(failure: BrowserClientFailure): void {

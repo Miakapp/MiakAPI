@@ -130,6 +130,7 @@ export class UserRelaySession {
   readonly #callbacks: UserRelaySessionCallbacks;
   readonly #now: () => number;
   readonly #protocol = new UserProtocolSession();
+  readonly #transportClosed = createDeferred<void>();
   readonly #welcome = createDeferred<UserRelayWelcome>();
   readonly #queuedFrames: Frame[] = [];
   #queuedFrameBytes = 0;
@@ -152,9 +153,13 @@ export class UserRelaySession {
     token: string,
     signal: AbortSignal,
     callbacks: UserRelaySessionCallbacks,
+    onCreated: (session: UserRelaySession) => void,
   ): Promise<UserRelaySession> {
     const session = new UserRelaySession(callbacks, () => runtime.now());
+    onCreated(session);
     const handshake = childAbortController(signal);
+    const abortWelcome = () => session.#welcome.reject(handshake.controller.signal.reason);
+    handshake.controller.signal.addEventListener('abort', abortWelcome, { once: true });
     const timeout = runtime.setTimer(() => {
       handshake.controller.abort(new Error('Browser relay handshake timed out'));
     }, HANDSHAKE_TIMEOUT_MS);
@@ -168,6 +173,10 @@ export class UserRelaySession {
         relayUrl,
         handlers,
         handshake.controller.signal,
+        (socket) => {
+          session.#socket = socket;
+          if (session.#closed) socket.terminate();
+        },
       );
       session.#connectedAtMs = runtime.now();
       await session.#socket.write(session.#protocol.encode({
@@ -178,10 +187,10 @@ export class UserRelaySession {
       return session;
     } catch (error) {
       session.terminate();
-      session.detach();
       throw error;
     } finally {
       timeout.cancel();
+      handshake.controller.signal.removeEventListener('abort', abortWelcome);
       handshake.dispose();
     }
   }
@@ -232,6 +241,16 @@ export class UserRelaySession {
     this.#socket?.terminate();
   }
 
+  waitForTransportClose(): Promise<void> {
+    return this.#socket === undefined
+      ? Promise.resolve()
+      : this.#transportClosed.promise;
+  }
+
+  get transportClosed(): boolean {
+    return this.#socket === undefined || this.#transportClosed.settled;
+  }
+
   detach(): void {
     this.#socket?.detach();
   }
@@ -270,6 +289,7 @@ export class UserRelaySession {
     const wasClosed = this.#closed;
     this.#closed = true;
     this.#protocol.close();
+    this.#transportClosed.resolve(undefined);
     this.#welcome.reject(browserProtocolFailure('Relay closed before WELCOME'));
     if (!wasClosed) this.#callbacks.closed(code, reason);
   }
