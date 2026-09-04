@@ -29,6 +29,8 @@ export interface CoordinatorRuntime {
   setTimer(callback: () => void, delayMs: number): RuntimeTimer;
 }
 
+export type BrowserRuntime = CoordinatorRuntime;
+
 export interface SessionTransport {
   readonly generation: number;
   readonly epoch: Uint8Array;
