@@ -69,10 +69,12 @@ function dictionary(names: readonly string[], firstId: number): ProtocolValue[] 
 class FakeManagedSocket implements ManagedSocket {
   readonly #connection: FakeRelayConnection;
   #closed = false;
+  #closing = false;
   #detached = false;
   #bufferedBytes = 0;
   #nextWriteError: Error | undefined;
   #nextWriteCompletion: Promise<void> | undefined;
+  #terminateCompletion: Promise<void> | undefined;
 
   constructor(connection: FakeRelayConnection) {
     this.#connection = connection;
@@ -97,6 +99,13 @@ class FakeManagedSocket implements ManagedSocket {
     this.#nextWriteCompletion = completion;
   }
 
+  deferTermination(completion: Promise<void>): void {
+    if (this.#terminateCompletion !== undefined) {
+      throw new Error('Synthetic termination is already deferred');
+    }
+    this.#terminateCompletion = completion;
+  }
+
   async write(bytes: Uint8Array): Promise<void> {
     if (this.#closed) throw new Error('Synthetic socket is closed');
     const failure = this.#nextWriteError;
@@ -111,11 +120,20 @@ class FakeManagedSocket implements ManagedSocket {
   close(code = 1000, reason = ''): void {
     if (this.#closed) return;
     this.#closed = true;
-    if (!this.#detached) this.#connection.notifyClientClose(code, reason);
+    this.#connection.notifyClientClose(code, reason, !this.#detached);
   }
 
   terminate(): void {
-    this.close(1006, 'terminated');
+    if (this.#closed || this.#closing) return;
+    this.#closing = true;
+    const completion = this.#terminateCompletion;
+    this.#terminateCompletion = undefined;
+    if (completion === undefined) {
+      this.close(1006, 'terminated');
+      return;
+    }
+    const close = () => this.close(1006, 'terminated');
+    void completion.then(close, close);
   }
 
   detach(): void {
@@ -160,6 +178,12 @@ export class FakeRelayConnection {
     };
   }
 
+  deferClientTermination(): { release(): void } {
+    const completion = createDeferred<void>();
+    this.socket.deferTermination(completion.promise);
+    return { release: () => completion.resolve(undefined) };
+  }
+
   receiveClientBytes(bytes: Uint8Array): void {
     const frame = decodeFrame(bytes);
     const waiter = this.#waiters.shift();
@@ -170,8 +194,10 @@ export class FakeRelayConnection {
     }
   }
 
-  notifyClientClose(_code: number, _reason: string): void {
+  notifyClientClose(code: number, reason: string, notifyHandler: boolean): void {
+    if (this.#serverClosed) return;
     this.#markClosed();
+    if (notifyHandler) this.#handlers.close(code, reason);
   }
 
   async nextClientFrame(expectedOpcode?: number): Promise<Frame> {
@@ -316,6 +342,7 @@ export class FakeRelay implements SocketFactory {
     url: string,
     handlers: SocketHandlers,
     signal: AbortSignal,
+    onSocket?: (socket: ManagedSocket) => void,
   ): Promise<ManagedSocket> {
     if (signal.aborted) throw signal.reason;
     this.#connectUrls.push(url);
@@ -335,7 +362,8 @@ export class FakeRelay implements SocketFactory {
     this.#connections.push(connection);
     this.#openConnections += 1;
     this.#socketHighWater = Math.max(this.#socketHighWater, this.#openConnections);
-    signal.addEventListener('abort', () => connection.close(1006, 'aborted'), { once: true });
+    onSocket?.(connection.socket);
+    signal.addEventListener('abort', () => connection.socket.terminate(), { once: true });
     const waiter = this.#connectionWaiters.shift();
     waiter?.(connection);
     return connection.socket;
