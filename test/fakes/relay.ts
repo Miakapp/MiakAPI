@@ -273,6 +273,7 @@ export class FakeRelay implements SocketFactory {
   readonly #connections: FakeRelayConnection[] = [];
   readonly #connectionWaiters: Array<(connection: FakeRelayConnection) => void> = [];
   readonly #connectErrors: Error[] = [];
+  readonly #connectUrls: string[] = [];
   #openConnections = 0;
   #socketHighWater = 0;
 
@@ -303,16 +304,21 @@ export class FakeRelay implements SocketFactory {
     return this.#openConnections;
   }
 
+  get connectUrls(): readonly string[] {
+    return this.#connectUrls;
+  }
+
   queueConnectError(error = new Error('Synthetic connection failure')): void {
     this.#connectErrors.push(error);
   }
 
   async connect(
-    _url: string,
+    url: string,
     handlers: SocketHandlers,
     signal: AbortSignal,
   ): Promise<ManagedSocket> {
     if (signal.aborted) throw signal.reason;
+    this.#connectUrls.push(url);
     const failure = this.#connectErrors.shift();
     if (failure !== undefined) throw failure;
     const connectionIndex = this.#connections.length;

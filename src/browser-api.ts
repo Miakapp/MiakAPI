@@ -17,16 +17,31 @@ export type BrowserClientStatus =
   | 'stopping'
   | 'stopped';
 
-export type FirebaseIdTokenReason = 'initial' | 'reauth' | 'reconnect';
+export type BrowserRelayCredentialReason = 'initial' | 'reauth' | 'reconnect';
 
-export interface FirebaseIdTokenRequest {
+export interface BrowserRelayCredentialRequest {
   readonly homeId: string;
-  readonly reason: FirebaseIdTokenReason;
+  readonly reason: BrowserRelayCredentialReason;
   readonly signal: AbortSignal;
 }
 
-export interface FirebaseIdTokenProvider {
-  getIdToken(request: FirebaseIdTokenRequest): Promise<string>;
+export interface BrowserRelayCredential {
+  readonly relayUrl: string;
+  readonly accessToken: string;
+  readonly expiresAtMs: number;
+}
+
+export interface BrowserRelayCredentialProvider {
+  getCredential(request: BrowserRelayCredentialRequest): Promise<BrowserRelayCredential>;
+}
+
+export interface ControlPlaneBrowserRelayCredentialProviderOptions {
+  readonly exchangeEndpoint: string;
+  readonly getFirebaseIdToken:
+    (request: BrowserRelayCredentialRequest) => Promise<string>;
+  readonly getAppCheckToken:
+    (request: BrowserRelayCredentialRequest) => Promise<string>;
+  readonly fetch?: typeof globalThis.fetch;
 }
 
 export interface BrowserClientLogRecord {
@@ -42,8 +57,7 @@ export interface BrowserClientLogger {
 
 export interface BrowserClientOptions {
   readonly homeId: string;
-  readonly relayUrl: string;
-  readonly idTokenProvider: FirebaseIdTokenProvider;
+  readonly credentialProvider: BrowserRelayCredentialProvider;
   readonly logger?: BrowserClientLogger;
 }
 
