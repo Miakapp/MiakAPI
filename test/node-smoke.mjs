@@ -3,9 +3,11 @@ import {
   ApplicationCallError,
   EventDirection,
   createCoordinator,
+  createHomeKeyAccessTokenProvider,
 } from '../dist/index.js';
 
 assert.equal(typeof createCoordinator, 'function');
+assert.equal(typeof createHomeKeyAccessTokenProvider, 'function');
 assert.equal(EventDirection.publishToUsers, 0x02);
 assert.equal(new ApplicationCallError(2000, 'Expected').code, 2000);
 
