@@ -15,12 +15,19 @@ import type {
   UserEventAccess,
   UserStateAccess,
 } from '../api.js';
+import type {
+  BrowserCallOptions,
+  BrowserClientLogger,
+  BrowserClientOptions,
+  FirebaseIdTokenProvider,
+} from '../browser-api.js';
 import { LIMITS } from '../protocol/codec.js';
 
 const UTF8 = new TextEncoder();
 const CONTROL_CHARACTER = /\p{Cc}/u;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const COORDINATOR_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const HOME_ID = /^[a-z][a-z0-9-]{1,61}[a-z0-9]$/;
 
 interface ValueBudget {
   values: number;
@@ -397,6 +404,20 @@ function isCoordinatorLogger(value: unknown): value is CoordinatorLogger {
     && typeof value.write === 'function';
 }
 
+function isFirebaseIdTokenProvider(value: unknown): value is FirebaseIdTokenProvider {
+  return value !== null
+    && typeof value === 'object'
+    && 'getIdToken' in value
+    && typeof value.getIdToken === 'function';
+}
+
+function isBrowserClientLogger(value: unknown): value is BrowserClientLogger {
+  return value !== null
+    && typeof value === 'object'
+    && 'write' in value
+    && typeof value.write === 'function';
+}
+
 export function validateConfiguration(value: unknown): CoordinatorConfiguration {
   const configuration = exactObject(
     value,
@@ -431,12 +452,27 @@ export function validateCoordinatorOptions(value: unknown): CoordinatorOptions {
 
 export function validateAccessToken(value: unknown, now: number): AccessToken {
   const token = exactObject(value, ['relayUrl', 'token', 'expiresAtMs'], [], 'access token');
-  const relayUrl = boundedString(token.relayUrl, 1, 2_048, 'access token relayUrl');
+  const relayUrl = validateRelayUrl(token.relayUrl, 'access token relayUrl');
+  const expiresAtMs = token.expiresAtMs;
+  if (!Number.isSafeInteger(expiresAtMs)
+    || typeof expiresAtMs !== 'number'
+    || expiresAtMs <= now) {
+    throw new RangeError('access token expiry must be a future safe integer');
+  }
+  return Object.freeze({
+    relayUrl,
+    token: boundedString(token.token, 1, 16_384, 'access token token', true),
+    expiresAtMs,
+  });
+}
+
+export function validateRelayUrl(value: unknown, label = 'relay URL'): string {
+  const relayUrl = boundedString(value, 1, 2_048, label);
   let url: URL;
   try {
     url = new URL(relayUrl);
   } catch {
-    throw new TypeError('access token relayUrl is invalid');
+    throw new TypeError(`${label} is invalid`);
   }
   if (url.protocol !== 'wss:'
     || !url.hostname
@@ -445,18 +481,54 @@ export function validateAccessToken(value: unknown, now: number): AccessToken {
     || url.hash
     || url.search
     || !url.pathname.endsWith('/ws')) {
-    throw new TypeError('access token relayUrl must be a secure WebSocket URL ending in /ws');
+    throw new TypeError(`${label} must be a secure WebSocket URL ending in /ws`);
   }
-  const expiresAtMs = token.expiresAtMs;
-  if (!Number.isSafeInteger(expiresAtMs)
-    || typeof expiresAtMs !== 'number'
-    || expiresAtMs <= now) {
-    throw new RangeError('access token expiry must be a future safe integer');
+  return url.href;
+}
+
+export function validateFirebaseIdToken(value: unknown): string {
+  return boundedString(value, 1, 16_384, 'Firebase ID token', true);
+}
+
+export function validateBrowserClientOptions(value: unknown): BrowserClientOptions {
+  const options = exactObject(
+    value,
+    ['homeId', 'relayUrl', 'idTokenProvider'],
+    ['logger'],
+    'options',
+  );
+  const homeId = boundedString(options.homeId, 3, 63, 'options.homeId');
+  if (!HOME_ID.test(homeId)) throw new TypeError('options.homeId is invalid');
+  if (!isFirebaseIdTokenProvider(options.idTokenProvider)) {
+    throw new TypeError('options.idTokenProvider must implement getIdToken');
   }
+  if (options.logger !== undefined && !isBrowserClientLogger(options.logger)) {
+    throw new TypeError('options.logger must implement write');
+  }
+  const base = Object.freeze({
+    homeId,
+    relayUrl: validateRelayUrl(options.relayUrl, 'options.relayUrl'),
+    idTokenProvider: options.idTokenProvider,
+  });
+  return options.logger === undefined
+    ? base
+    : Object.freeze({ ...base, logger: options.logger });
+}
+
+export function validateBrowserCallOptions(value: unknown): BrowserCallOptions {
+  const options = exactObject(
+    value,
+    ['function', 'arguments', 'timeoutMs'],
+    ['idempotencyKey', 'signal'],
+    'call options',
+  );
+  const validated = validateStartCallOptions(options);
   return Object.freeze({
-    relayUrl: url.href,
-    token: boundedString(token.token, 1, 16_384, 'access token token', true),
-    expiresAtMs,
+    function: validated.function,
+    arguments: validated.arguments,
+    timeoutMs: validated.timeoutMs,
+    ...(validated.idempotencyKey === undefined ? {} : { idempotencyKey: validated.idempotencyKey }),
+    ...(validated.signal === undefined ? {} : { signal: validated.signal }),
   });
 }
 
