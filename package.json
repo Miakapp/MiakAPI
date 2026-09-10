@@ -5,6 +5,7 @@
   "type": "module",
   "packageManager": "bun@1.2.23",
   "engines": {
+    "bun": ">=1.2.23",
     "node": ">=22.9"
   },
   "exports": {

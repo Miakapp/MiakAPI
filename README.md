@@ -1,17 +1,18 @@
 # MiakAPI
 
-MiakAPI is the typed SDK for running a trusted Node.js coordinator and connecting
-a first-party browser application to a Miakapp home. A coordinator owns complete
-state, access, event, and function declarations for one integration. The isolated
-browser entry point exposes the authenticated user role without bundling Node.js
-or coordinator-only dependencies.
+MiakAPI is the typed SDK for running a trusted Bun/TypeScript coordinator and
+connecting a first-party browser application to a Miakapp home. A coordinator
+owns complete state, access, event, and function declarations for one
+integration. The isolated browser entry point exposes the authenticated user role
+without bundling server-runtime or coordinator-only dependencies.
 
 Version 4 is a complete replacement for the legacy callback-based MiakAPI 3
-client. It is currently an alpha while the Miakapp 3.5 relay is being deployed.
+client. It is currently an alpha while the Miakapp 4 stack is being completed.
 
 ## Coordinator requirements
 
-- Node.js 22.9 or newer
+- Bun 1.2.23 or newer (primary coordinator runtime)
+- Node.js 22.9 or newer when running compatibility or migration tooling
 - A Miakapp Home Key or another approved short-lived access-token provider
 - A Miakapp relay implementing wire protocol 1.0
 
@@ -22,10 +23,11 @@ browser or an untrusted plugin runtime.
 ## Installation
 
 ```sh
-npm install miakapi@next
+bun add miakapi@next
 ```
 
-Alpha releases use the `next` npm tag. The package is ESM-only.
+Alpha releases use the `next` npm tag. The package is ESM-only and remains
+Node-compatible so runtime-specific migration adapters can reuse the same SDK.
 
 ## Quick start
 
