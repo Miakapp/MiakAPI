@@ -88,6 +88,20 @@ const session = await coordinator.start();
 console.log('Ready in generation', session.generation);
 ```
 
+A complete minimal Bun coordinator matching the Miakapp V4 staging browser is
+available in [`examples/synthetic-coordinator.ts`](examples/synthetic-coordinator.ts).
+It publishes a small home state and implements one real `lighting.toggle` call.
+Run it only in a trusted backend process:
+
+```sh
+bun run examples/synthetic-coordinator.ts
+```
+
+The process reads `MIAKAPP_HOME_KEY`,
+`MIAKAPP_CONTROL_PLANE_EXCHANGE_ENDPOINT`, and `MIAKAPP_OWNER_USER_ID` from its
+runtime environment. The Home Key is the only secret; the endpoint and Firebase
+user ID are identifiers. Never pass any of them as command-line arguments.
+
 The Home Key provider makes exactly one exchange request for each initial,
 reauthentication, or reconnect demand from the SDK. It sends the Home Key only
 to the configured HTTPS control-plane endpoint, rejects redirects and open or
