@@ -94,8 +94,13 @@ It publishes a small home state and implements one real `lighting.toggle` call.
 Run it only in a trusted backend process:
 
 ```sh
+bun run build
 bun run examples/synthetic-coordinator.ts
 ```
+
+The examples import `miakapi` the way an application does, so they resolve
+through the package's own `exports` and need `dist` to exist. `bun run check`
+builds before it tests for the same reason.
 
 The process reads `MIAKAPP_HOME_KEY`,
 `MIAKAPP_CONTROL_PLANE_EXCHANGE_ENDPOINT`, and `MIAKAPP_OWNER_USER_ID` from its
