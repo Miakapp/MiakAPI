@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm
+    permissions:
+      contents: read
+      # Required for npm trusted publishing and for the provenance attestation.
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.2.23
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.22.0
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing and provenance need a recent npm, not the one
+      # bundled with Node 22.
+      - run: npm install --global npm@11.6.2
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+
+      - name: Verify the tag matches the package version
+        if: github.event_name == 'push'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      - name: Publish to npm
+        if: github.event_name == 'push'
+        # The dist-tag comes from publishConfig in package.json, so alpha
+        # releases land on `next` and never move `latest`.
+        run: npm publish --provenance --access public
+        env:
+          # Ignored when the package uses trusted publishing; kept so the
+          # workflow also works with a classic automation token.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
