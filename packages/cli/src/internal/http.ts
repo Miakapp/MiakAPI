@@ -17,7 +17,16 @@ export interface HttpsEndpoint {
 /**
  * Every control-plane URL is an exact absolute HTTPS identifier with no user
  * information, query or fragment. A value that does not round-trip through
- * `URL` byte-for-byte is rejected rather than normalized.
+ * `URL` is rejected rather than normalized.
+ *
+ * One deviation from byte-for-byte equality is required rather than convenient.
+ * RFC 0004 §3 states that `issuer` has no trailing slash, and its own example
+ * issuer is the bare origin `https://control.example.test`. `URL` serializes
+ * that back with a trailing slash, so demanding exact equality would reject
+ * every origin-only issuer the RFC describes and force an arbitrary path
+ * segment onto every deployment. An empty path is therefore accepted in either
+ * spelling; nothing else is relaxed, so a stray query, a default port or a
+ * non-normalized path is still refused.
  */
 export function canonicalHttpsUrl(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > 2_048) {
@@ -29,13 +38,15 @@ export function canonicalHttpsUrl(value: unknown, label: string): string {
   } catch {
     throw contractError(`${label} is not a URL`);
   }
+  const roundTrips = parsed.href === value
+    || (parsed.pathname === '/' && parsed.href === `${value}/`);
   if (parsed.protocol !== 'https:'
     || parsed.hostname === ''
     || parsed.username !== ''
     || parsed.password !== ''
     || parsed.search !== ''
     || parsed.hash !== ''
-    || parsed.href !== value) {
+    || !roundTrips) {
     throw contractError(`${label} is not a canonical HTTPS identifier`);
   }
   return value;

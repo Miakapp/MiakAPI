@@ -1,0 +1,24 @@
+schema: miakapp.project/1
+home: my-home
+control_plane: https://control.miakapp.app
+
+component:
+  artifact: dist/component.js
+  release: 0.1.0
+  # These lists are the component's request, not a grant. The effective grant is
+  # the intersection with what the coordinator declared in coordinator/home.ts,
+  # so every name here must also be covered there.
+  requires:
+    state_read:
+      - climate.salon.temperature
+      - service.coordinator.health
+      - zone.salon.light.on
+    event_subscribe:
+      - zone.salon.light.changed
+    event_publish: []
+    call:
+      - lighting.set
+    presentation: []
+
+coordinator:
+  entry: coordinator/main.ts
