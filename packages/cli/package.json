@@ -1,0 +1,50 @@
+{
+  "name": "@miakapp/cli",
+  "version": "4.0.0-alpha.0",
+  "description": "Agent-first Miakapp command line: check, build, publish, activate and roll back home components",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "bun": ">=1.2.23",
+    "node": ">=22.9"
+  },
+  "bin": {
+    "miakapp": "./bin/miakapp.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "bun test test/",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun run build && bun run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Miakapp/MiakAPI.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "keywords": [
+    "Miakapp",
+    "MiakAPI",
+    "cli",
+    "smart-home",
+    "components"
+  ],
+  "author": "Mathieu Colmon",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/bun": "1.2.23",
+    "@types/node": "22.20.1",
+    "typescript": "7.0.2"
+  }
+}
