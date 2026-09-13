@@ -32,6 +32,8 @@
     "build": "tsc -p tsconfig.build.json",
     "build:contract": "tsc -p tsconfig.contract.json",
     "check:cli": "bun --filter @miakapp/cli check",
+    "check:component": "bun --filter @miakapp/component check",
+    "check:packages": "bun run check:cli && bun run check:component",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "bun run check",
     "smoke:browser": "node scripts/check-browser-bundle.mjs",
