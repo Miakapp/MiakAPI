@@ -4,6 +4,9 @@
   "description": "Typed coordinator and trusted-browser SDK for Miakapp",
   "type": "module",
   "packageManager": "bun@1.2.23",
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "bun": ">=1.2.23",
     "node": ">=22.9"
@@ -28,6 +31,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "build:contract": "tsc -p tsconfig.contract.json",
+    "check:cli": "bun --filter @miakapp/cli check",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "bun run check",
     "smoke:browser": "node scripts/check-browser-bundle.mjs",
