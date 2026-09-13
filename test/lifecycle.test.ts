@@ -131,6 +131,39 @@ describe('coordinator lifecycle', () => {
     await harness.coordinator.stop();
   });
 
+  test('keeps backing off until a session has stayed up long enough', async () => {
+    const harness = createTestHarness();
+    const { connection } = await startReady(harness);
+
+    // A session that held for the stability window restarts the backoff at the
+    // first ceiling: floor(0.999 * (1000 + 1)) === 999.
+    await harness.runtime.advanceBy(30_000);
+    harness.runtime.queueRandom(0.999);
+    connection.close();
+    await flushMicrotasks();
+    await harness.runtime.advanceBy(998);
+    expect(harness.relay.connections).toHaveLength(1);
+    await harness.runtime.advanceBy(1);
+
+    const second = await harness.relay.connectionAt(1);
+    await second.nextClientFrame(Opcode.Hello);
+    await second.acknowledgeDeclarations();
+    await flushMicrotasks();
+    expect(harness.coordinator.status).toBe('ready');
+
+    // Displaced before it stabilized, the next attempt doubles instead of
+    // racing the relay: floor(0.999 * (2000 + 1)) === 1998.
+    harness.runtime.queueRandom(0.999);
+    second.close();
+    await flushMicrotasks();
+    await harness.runtime.advanceBy(1_997);
+    expect(harness.relay.connections).toHaveLength(2);
+    await harness.runtime.advanceBy(1);
+    expect(harness.relay.connections).toHaveLength(3);
+
+    await harness.coordinator.stop();
+  });
+
   test('does not restore ready when a reconnect synchronization fails permanently', async () => {
     const harness = createTestHarness();
     const failures: CoordinatorFailure[] = [];

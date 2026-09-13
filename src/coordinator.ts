@@ -72,6 +72,13 @@ interface PendingReauthentication {
 
 const FIRST_RECONNECT_CEILING_MS = 1_000;
 const MAX_RECONNECT_CEILING_MS = 30_000;
+/**
+ * A session must hold for this long before it counts as healthy. Sessions that
+ * end sooner keep the backoff growing, so a coordinator that is repeatedly
+ * displaced — two deployments briefly sharing one home, for instance — backs
+ * off instead of racing the relay at full speed.
+ */
+const STABLE_SESSION_MS = 30_000;
 
 function relayInteger(frame: Frame, index: number, label: string): number {
   const value = frame.payload[index];
@@ -127,6 +134,7 @@ class CoordinatorImpl implements
   readonly #localEventIds = new IdSequence();
   readonly #localCallIds = new IdSequence();
   #reconnectAttempt = 0;
+  #sessionEstablishedAtMs: number | undefined;
   #relayHost: string | undefined;
   #goawayRetryAfterMs: number | undefined;
 
@@ -347,7 +355,7 @@ class CoordinatorImpl implements
           break;
         }
         this.#session = session;
-        this.#reconnectAttempt = 0;
+        this.#sessionEstablishedAtMs = this.#runtime.now();
         this.#scheduleReauthentication(Math.min(token.expiresAtMs, session.welcome.expiresAtMs));
         this.#declarations.synchronize(session);
         if (this.#loopController.signal.aborted) {
@@ -366,6 +374,11 @@ class CoordinatorImpl implements
       if (this.#loopController.signal.aborted) break;
       if (end.failure !== undefined) this.#emitFailure(end.failure);
       this.#transition('reconnecting', undefined, end.failure);
+      const establishedAtMs = this.#sessionEstablishedAtMs;
+      this.#sessionEstablishedAtMs = undefined;
+      if (establishedAtMs !== undefined && this.#runtime.now() - establishedAtMs >= STABLE_SESSION_MS) {
+        this.#reconnectAttempt = 0;
+      }
       const ceiling = Math.min(
         FIRST_RECONNECT_CEILING_MS * (2 ** this.#reconnectAttempt),
         MAX_RECONNECT_CEILING_MS,

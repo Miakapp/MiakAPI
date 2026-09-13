@@ -35,7 +35,7 @@
     "test": "bun test",
     "test:contract": "bun run build:contract && node scripts/check-contract.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run test && bun run build && bun run smoke:node && bun run smoke:browser && bun run test:contract && bun run pack:check"
+    "check": "bun run typecheck && bun run build && bun run test && bun run smoke:node && bun run smoke:browser && bun run test:contract && bun run pack:check"
   },
   "repository": {
     "type": "git",

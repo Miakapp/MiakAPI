@@ -94,8 +94,13 @@ It publishes a small home state and implements one real `lighting.toggle` call.
 Run it only in a trusted backend process:
 
 ```sh
+bun run build
 bun run examples/synthetic-coordinator.ts
 ```
+
+The examples import `miakapi` the way an application does, so they resolve
+through the package's own `exports` and need `dist` to exist. `bun run check`
+builds before it tests for the same reason.
 
 The process reads `MIAKAPP_HOME_KEY`,
 `MIAKAPP_CONTROL_PLANE_EXCHANGE_ENDPOINT`, and `MIAKAPP_OWNER_USER_ID` from its
@@ -113,6 +118,20 @@ Keep the Home Key in the trusted coordinator backend. Do not place it in a web
 bundle, browser storage, logs, URLs, or relay configuration. Applications with a
 different approved credential store may continue to implement
 `AccessTokenProvider` directly.
+
+### Running a coordinator as a service
+
+[`examples/synthetic-coordinator-service.ts`](examples/synthetic-coordinator-service.ts)
+wraps the same coordinator in the shape a container platform expects: an HTTP
+listener that answers immediately, a `/healthz` probe that reports the live
+lifecycle status, graceful `SIGTERM` draining, and a non-zero exit when the
+coordinator stops without a shutdown signal so the platform restarts it.
+[`examples/deploy/Dockerfile`](examples/deploy/Dockerfile) builds it from the
+repository root.
+
+Run exactly one coordinator per home. Two coordinators sharing a Home Key take
+turns displacing each other on the relay; the reconnect schedule backs off so
+the fight stays cheap, but only one of them holds the home.
 
 `configure` supplies all five declaration slices as one desired snapshot. The
 coordinator becomes `ready` only after the relay acknowledges them in order. A
@@ -289,6 +308,12 @@ await coordinator.stop({ deadlineMs: 5_000 });
 
 `deadlineMs` bounds cleanup even when an injected dependency ignores its abort
 signal.
+
+Between `start()` and `stop()` the coordinator owns its own reconnect schedule:
+full jitter under a ceiling that doubles from one second up to thirty. The
+ceiling returns to one second only after a session has held for thirty seconds,
+so a session that is torn down as soon as it becomes `ready` keeps backing off
+instead of reconnecting in a tight loop.
 
 ## Migration from MiakAPI 3
 
