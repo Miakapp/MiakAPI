@@ -66,6 +66,7 @@ export function testHost(options: {
   fetch?: FetchLike;
   env?: Record<string, string>;
   cwd?: string;
+  input?: AsyncIterable<Uint8Array>;
 } = {}): TestHost {
   const out: string[] = [];
   const err: string[] = [];
@@ -79,6 +80,7 @@ export function testHost(options: {
     env: (name) => environment[name],
     ...(options.files === undefined ? {} : { files: options.files }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(options.input === undefined ? {} : { input: options.input }),
     stdout: () => out.join(''),
     stderr: () => err.join(''),
     json: () => JSON.parse(out.join('')) as Record<string, unknown>,
