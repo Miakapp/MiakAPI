@@ -4,6 +4,9 @@
   "description": "Typed coordinator and trusted-browser SDK for Miakapp",
   "type": "module",
   "packageManager": "bun@1.2.23",
+  "workspaces": [
+    "packages/*"
+  ],
   "engines": {
     "bun": ">=1.2.23",
     "node": ">=22.9"
@@ -28,14 +31,18 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "build:contract": "tsc -p tsconfig.contract.json",
+    "check": "bun run typecheck && bun run build && bun run test && bun run smoke:node && bun run smoke:browser && bun run test:contract && bun run pack:check",
+    "check:cli": "bun --filter @miakapp/cli check",
+    "check:component": "bun --filter @miakapp/component check",
+    "check:packages": "bun run check:cli && bun run check:component && bun run check:template",
+    "check:template": "bun run build && bun --filter @miakapp/component build && bun --filter @miakapp/cli build && cd templates/home && rm -rf node_modules && bun install --frozen-lockfile && bun run check",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "bun run check",
     "smoke:browser": "node scripts/check-browser-bundle.mjs",
     "smoke:node": "node test/node-smoke.mjs",
-    "test": "bun test",
+    "test": "bun test test/*.test.ts examples/*.test.ts packages/*/test/*.test.ts",
     "test:contract": "bun run build:contract && node scripts/check-contract.mjs",
-    "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run build && bun run test && bun run smoke:node && bun run smoke:browser && bun run test:contract && bun run pack:check"
+    "typecheck": "tsc --noEmit"
   },
   "repository": {
     "type": "git",
