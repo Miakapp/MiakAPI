@@ -9,6 +9,12 @@ without bundling server-runtime or coordinator-only dependencies.
 Version 4 is a complete replacement for the legacy callback-based MiakAPI 3
 client. It is currently an alpha while the Miakapp 4 stack is being completed.
 
+**Building a home with a coding agent?** Read
+[docs/agent-guide.md](docs/agent-guide.md) first. It covers the judgment the
+reference below does not: what the coordinator must authorize, why component
+requirements and coordinator grants intersect silently, and which failures must
+never be retried. Start from [`templates/home`](templates/home).
+
 ## Coordinator requirements
 
 - Bun 1.2.23 or newer (primary coordinator runtime)
