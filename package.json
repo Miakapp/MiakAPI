@@ -40,7 +40,7 @@
     "prepublishOnly": "bun run check",
     "smoke:browser": "node scripts/check-browser-bundle.mjs",
     "smoke:node": "node test/node-smoke.mjs",
-    "test": "bun test",
+    "test": "bun test test/*.test.ts examples/*.test.ts packages/*/test/*.test.ts",
     "test:contract": "bun run build:contract && node scripts/check-contract.mjs",
     "typecheck": "tsc --noEmit"
   },
