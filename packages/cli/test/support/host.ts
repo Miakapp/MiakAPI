@@ -24,11 +24,14 @@ component:
 
 export class MemoryFiles implements FileSystem {
   readonly entries: Map<string, Uint8Array>;
+  /** Directories, tracked separately so `exists` answers for both kinds. */
+  readonly directories: Set<string>;
 
   constructor(entries: Record<string, string> = {}) {
     this.entries = new Map(
       Object.entries(entries).map(([path, text]) => [path, new TextEncoder().encode(text)]),
     );
+    this.directories = new Set();
   }
 
   async read(path: string): Promise<Uint8Array> {
@@ -42,8 +45,16 @@ export class MemoryFiles implements FileSystem {
     this.entries.set(path, bytes);
   }
 
+  async replace(path: string, bytes: Uint8Array): Promise<void> {
+    this.entries.set(path, bytes);
+  }
+
+  async makeDirectory(path: string): Promise<void> {
+    this.directories.add(path);
+  }
+
   async exists(path: string): Promise<boolean> {
-    return this.entries.has(path);
+    return this.entries.has(path) || this.directories.has(path);
   }
 
   text(path: string): string {
