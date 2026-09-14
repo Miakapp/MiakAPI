@@ -16,6 +16,7 @@
  */
 import { prepareArtifact, type Artifact } from './artifact.js';
 import { exchangePublisherToken, fetchDiscovery } from './control-plane.js';
+import { discoverFlows, inventoryJson, type Inventory } from './discovery.js';
 import {
   CliError,
   EXIT_CODE,
@@ -84,6 +85,7 @@ Usage
 
 Commands
   init                    Write ${PROJECT_FILE} in the current directory
+  discover                Inventory an existing Node-RED installation offline
   check                   Validate the project and the artifact offline
   publish                 Upload, finalize and activate the built artifact
   activate                Activate an already finalized digest at a new generation
@@ -107,6 +109,9 @@ activate / rollback options
   --expected-generation <n>   Generation the pointer is expected to hold (required)
   --generation <n>            Generation to publish (default: expected + 1)
 
+discover options
+  --flows <path>              Node-RED flows export to read (required)
+
 init options
   --home <homeId>             Home ID to write into ${PROJECT_FILE} (required)
   --control-plane <https url> Control-plane issuer (required)
@@ -128,6 +133,7 @@ const GLOBAL_OPTIONS = ['project'] as const;
 
 const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   init: ['home', 'control-plane', 'artifact', 'release'],
+  discover: ['flows'],
   check: [],
   publish: ['expected-generation', 'generation', 'release'],
   activate: ['sha256', 'expected-generation', 'generation'],
@@ -390,6 +396,76 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
   };
 }
 
+/**
+ * Reads an existing installation. `discover` never loads the project file: an
+ * agent runs it on a house that has no V4 project yet, which is the whole point
+ * of the command.
+ */
+async function runDiscover(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const path = requiredOption(invocation, 'flows');
+  const filesystem = await files(host);
+  if (!await filesystem.exists(path)) {
+    throw projectError(
+      `No flows export at ${path}`,
+      'Point --flows at the Node-RED flows.json, or at an Export > All flows download.',
+    );
+  }
+  const inventory = discoverFlows(await filesystem.read(path));
+  return {
+    summary: discoverSummary(inventory),
+    fields: discoverFields(inventory),
+    json: inventoryJson(inventory),
+  };
+}
+
+function counted(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function discoverSummary(inventory: Inventory): string {
+  const critical = inventory.findings.filter((item) => item.severity === 'critical').length;
+  const census = [
+    counted(inventory.nodeCount, 'node', 'nodes'),
+    counted(inventory.flows.length, 'flow', 'flows'),
+    counted(inventory.brokers.length, 'broker', 'brokers'),
+    counted(inventory.state.length, 'state path', 'state paths'),
+    counted(inventory.actions.length, 'action', 'actions'),
+  ].join(', ');
+  return critical === 0
+    ? census
+    : `${census} — ${counted(critical, 'finding', 'findings')} to settle before migrating`;
+}
+
+function discoverFields(inventory: Inventory): readonly Field[] {
+  const fields: Field[] = [];
+  for (const home of inventory.homes) {
+    fields.push([`home.${home.homeId}`, `coordinator ${home.coordinatorId}`]);
+  }
+  for (const broker of inventory.brokers) {
+    const address = broker.port === undefined ? broker.host : `${broker.host}:${broker.port}`;
+    fields.push([
+      `broker.${broker.name === '' ? broker.id : broker.name}`,
+      `${address} tls=${broker.tls} in=${broker.subscribes.length} out=${broker.publishes.length}`,
+    ]);
+  }
+  for (const tab of inventory.flows) {
+    fields.push([`flow.${tab.label === '' ? tab.id : tab.label}`, `${tab.nodeCount} nodes`]);
+  }
+  if (inventory.state.length > 0) {
+    fields.push(['state', inventory.state.map((entry) => entry.path)]);
+  }
+  if (inventory.actions.length > 0) {
+    fields.push(['actions', inventory.actions.map((entry) => entry.inputId)]);
+  }
+  if (inventory.unmodelled.length > 0) {
+    fields.push(['unmodelled', inventory.unmodelled.map((entry) => `${entry.type}×${entry.count}`)]);
+  }
+  for (const item of inventory.findings) {
+    fields.push([item.severity, item.detail]);
+  }
+  return fields;
+}
+
 async function runCheck(host: CliHost, invocation: Invocation): Promise<CommandResult> {
   const project = await loadProject(host, invocation);
   const artifact = await loadArtifact(host, project);
@@ -530,6 +606,8 @@ async function dispatch(host: CliHost, invocation: Invocation): Promise<CommandR
   switch (invocation.command) {
     case 'init':
       return await runInit(host, invocation);
+    case 'discover':
+      return await runDiscover(host, invocation);
     case 'check':
       return await runCheck(host, invocation);
     case 'publish':
