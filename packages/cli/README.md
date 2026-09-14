@@ -56,6 +56,7 @@ duplicate keys — is rejected with the offending line rather than guessed at.
 | Command | What it does |
 | --- | --- |
 | `init` | Writes `miakapp.yaml`. Never overwrites an existing one. |
+| `discover` | Offline. Inventories a Node-RED installation from its flows export. |
 | `check` | Offline. Parses the project, verifies the artifact, prints the digest. |
 | `publish` | Capability → delivery → finalization → activation, in one run. |
 | `activate` | Activates an already finalized digest at a new generation. |
@@ -67,6 +68,20 @@ duplicate keys — is rejected with the offending line rather than guessed at.
 nothing, touches no network and catches the four artifact rules the broker's
 pinned parser would reject anyway: module syntax, dynamic `import`, a source-map
 directive and the ABI 1 token ceiling.
+
+`discover` is the command to run *before* `init`, on a house that already exists:
+
+```
+miakapp discover --flows ~/node-red/flows.json --json
+```
+
+It needs no project file and no Home Key. It reads the bytes it was given —
+opening no socket, contacting no broker, writing nothing back — and reports the
+flows, the MQTT brokers with the topics their nodes actually reach, the v3
+MiakAPI surface as V4 state and function candidates, and every node type it does
+not model, so the reader knows what the inventory missed. It reports that a
+coordinator secret is present in the export; it never prints the secret itself.
+`docs/agent-guide.md` §3 explains what to do with each finding.
 
 ## Authorization
 
