@@ -75,6 +75,45 @@ Write down what you found before you write the configuration. The state paths yo
 choose become a disclosure boundary and a public interface at the same time, and
 renaming one after the household has used it is not free.
 
+### Reading a V3 house you inherited
+
+Most houses arriving at V4 already run Node-RED with the v3 MiakAPI nodes. Ask
+the owner for the `flows.json` Node-RED writes, or for an *Export > All flows*
+download, and read it before you read anything else:
+
+```
+miakapp discover --flows ~/node-red/flows.json
+miakapp discover --flows ~/node-red/flows.json --json
+```
+
+The command is offline and read-only: it opens no socket, contacts no broker and
+never writes back into the export. It reports the tabs, the MQTT brokers with the
+topics their nodes actually reach, the `initMiakapi` home bindings, every
+`commitVariables` path as a state candidate, every `onUserAction` id as a
+function candidate with the groups allowed to invoke it, and every node type it
+does not model — so you know what the inventory missed rather than assuming it
+missed nothing.
+
+Four of its findings decide work you would otherwise discover late:
+
+- **`secret_in_export`.** The v3 `initMiakapi` node declares `coordSecret` in its
+  `defaults`, not in its `credentials`, so Node-RED stores that secret in
+  cleartext in `flows.json` rather than in the encrypted `flows_cred.json`. If
+  the export has one, treat it as leaked: rotate it, and keep the file out of
+  Git. §9 is the V4 rule that replaces it.
+- **`unrestricted_action`.** The v3 handler allows an action outright when its
+  node lists no group, so an empty `allowedGroups` is a grant to every signed-in
+  user, not a deny. Each one needs a deliberate V4 rule before you port it.
+- **`name_needs_rename`.** A v3 variable path or action id that is not a legal V4
+  dotted name has to be renamed now, while nobody depends on it.
+- **`wildcard_subscription`.** A topic holding `#` or `+` is a subscription
+  pattern, not one device. Enumerate what it actually matches.
+
+The command deliberately does not tell you which actions are physically
+consequential. It lists every action it found; deciding which of them heats,
+locks, unlocks, opens or closes is a judgement you make with the owner, and no
+keyword list should make it for you.
+
 ## 4. The coordinator
 
 `templates/home/coordinator/home.ts` is the shape to copy: the configuration is a
