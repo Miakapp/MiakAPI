@@ -30,6 +30,25 @@ temperature — with the three files already in the right relationship, and its
 own `README.md` covering the mechanics of copying it out. This guide covers the
 judgment the template cannot.
 
+### Leave the repository readable by the next agent
+
+You are probably not the last agent to open this repository, and the next one
+will not have this conversation. Run the pack once, in the repository root:
+
+```bash
+miakapp agent-pack
+```
+
+It copies this guide to `.miakapp/agent-guide.md`, points `AGENTS.md` and
+`CLAUDE.md` at it, and registers `miakapp mcp` in `.mcp.json` so the tools are
+wired rather than described. It edits instead of replacing: prose outside the
+`<!-- miakapp:begin -->` markers is kept, other MCP servers are kept by name,
+and running it twice changes nothing.
+
+If you are reading this file *as* `.miakapp/agent-guide.md`, someone already
+ran it. Run it again after upgrading the CLI, and commit what changes — a guide
+that contradicts the CLI installed beside it is worse than no guide.
+
 ## 2. The division of responsibility
 
 **The coordinator authorizes everything.** The relay proves *who* is calling and
@@ -286,6 +305,7 @@ writes no history, rewrites no source it did not generate, and invents no
 control-plane endpoint. The repository is the owner's.
 
 ```bash
+miakapp agent-pack                                             # once, per repository
 miakapp init --home <homeId> --control-plane <https url>
 miakapp check
 miakapp publish  --expected-generation <n>
@@ -375,6 +395,8 @@ that is the failure this design exists to prevent.
 
 ## Where to read further
 
+- `packages/cli/README.md` — every command and every tool, including what the
+  pack writes and what it refuses to overwrite.
 - `templates/home/README.md` — the mechanics of the template itself.
 - `docs/rfcs/0001` (Miakapp-V3) — wire protocol: ownership, collisions, `4409`.
 - `docs/rfcs/0002` — component runtime and the staleness rule. **The broker is
