@@ -325,6 +325,27 @@ Branch on the code, not on the prose. On 7, call `miakapp upload <uploadId>` or
 `miakapp release <sha256>` and reconcile before acting again. Never retry a 7
 with a fresh capability.
 
+### If you speak MCP instead of shell
+
+`miakapp mcp` serves the same commands as tools over JSON-RPC on stdio. It is the
+same code: a tool call becomes the argv a person would have typed and runs the
+same dispatch, so everything above still holds — the same defaults, the same
+validation, the same `kind` on every failure.
+
+Three differences are worth knowing before you call anything:
+
+- `miakapp_publish`, `miakapp_activate` and `miakapp_rollback` refuse to run
+  without `confirm: true`. Set it when the owner asked for that publication, and
+  not to get past an error;
+- a failure arrives as a tool result with `isError: true`, carrying the same
+  closed object, not as a JSON-RPC error. A JSON-RPC error means your call never
+  happened; `isError` means it ran and failed, and `kind` says what to do next;
+- a tool argument is the option name with `_` instead of `-`. An argument the
+  tool does not declare is refused, never ignored.
+
+`packages/cli/README.md` lists the tools. The exit codes above are the
+`exit_code` field in every result, so branch on the same table either way.
+
 ## 9. Secrets
 
 `MIAKAPP_HOME_KEY` comes from the environment. It is never a command-line

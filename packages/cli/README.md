@@ -63,6 +63,7 @@ duplicate keys — is rejected with the offending line rather than guessed at.
 | `rollback` | Alias of `activate`, for returning to a known-good digest. |
 | `release <sha256>` | Reads one finalized release record. |
 | `upload <uploadId>` | Reads one upload status, to reconcile a lost request. |
+| `mcp` | Serves every command above over MCP on stdio. |
 
 `check` is the command to run in CI and before every publication. It costs
 nothing, touches no network and catches the four artifact rules the broker's
@@ -82,6 +83,52 @@ MiakAPI surface as V4 state and function candidates, and every node type it does
 not model, so the reader knows what the inventory missed. It reports that a
 coordinator secret is present in the export; it never prints the secret itself.
 `docs/agent-guide.md` §3 explains what to do with each finding.
+
+## MCP
+
+An agent that already runs a shell does not need this. An agent that speaks the
+Model Context Protocol natively does: `miakapp mcp` serves the same commands as
+tools over newline-delimited JSON-RPC on stdio.
+
+```json
+{
+  "mcpServers": {
+    "miakapp": {
+      "command": "bunx",
+      "args": ["@miakapp/cli", "mcp"],
+      "env": { "MIAKAPP_HOME_KEY": "${MIAKAPP_HOME_KEY}" }
+    }
+  }
+}
+```
+
+| Tool | Command | |
+| --- | --- | --- |
+| `miakapp_discover` | `discover` | read-only, offline |
+| `miakapp_check` | `check` | read-only, offline |
+| `miakapp_release` | `release` | read-only |
+| `miakapp_upload` | `upload` | read-only |
+| `miakapp_init` | `init` | writes `miakapp.yaml`, never overwrites |
+| `miakapp_publish` | `publish` | **moves the pointer — needs `confirm: true`** |
+| `miakapp_activate` | `activate` | **moves the pointer — needs `confirm: true`** |
+| `miakapp_rollback` | `rollback` | **moves the pointer — needs `confirm: true`** |
+
+The server is a translation layer: a tool call becomes the exact argv a person
+would have typed and runs the same dispatch, so a tool and a command line cannot
+drift apart. A tool argument is the option name with `_` for `-`
+(`expected_generation` → `--expected-generation`); an argument the tool does not
+declare is refused rather than ignored.
+
+The three pointer-moving tools additionally require `confirm: true`. It is
+checked before anything else and never reaches the command line, so a model that
+hallucinated a publication spends the mistake on an argument check instead of on
+a generation.
+
+A command that fails comes back as a tool result carrying `isError: true` and
+the same closed object the CLI prints — `kind`, `exit_code`, `message` and a
+remedy — not as a JSON-RPC error. That distinction matters: a protocol error
+means the call never happened, while a publication that reached the control
+plane and failed did happen, and only `kind` says whether to reconcile.
 
 ## Authorization
 

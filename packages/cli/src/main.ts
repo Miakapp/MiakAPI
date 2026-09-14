@@ -61,17 +61,19 @@ export interface CliHost {
   files?: FileSystem;
   /** Injected by tests; defaults to the platform `fetch`. */
   fetch?: FetchLike;
+  /** Read only by `mcp`, which serves a request stream instead of one command. */
+  input?: AsyncIterable<Uint8Array>;
 }
 
 type Field = readonly [key: string, value: string | number | readonly string[]];
 
-interface CommandResult {
+export interface CommandResult {
   readonly summary: string;
   readonly fields: readonly Field[];
   readonly json: Record<string, unknown>;
 }
 
-interface Invocation {
+export interface Invocation {
   readonly command: string;
   readonly options: ReadonlyMap<string, string>;
   readonly flags: ReadonlySet<string>;
@@ -92,6 +94,7 @@ Commands
   rollback                Alias of activate, for returning to a known-good digest
   release <sha256>        Read one finalized release record
   upload <uploadId>       Read one upload status, to reconcile a lost request
+  mcp                     Serve these commands over MCP on stdio
   help                    Print this text
   version                 Print the CLI version
 
@@ -112,6 +115,11 @@ activate / rollback options
 discover options
   --flows <path>              Node-RED flows export to read (required)
 
+mcp options
+  (none)                      Reads JSON-RPC on stdin, writes it on stdout. Every
+                              command above becomes one tool; publish, activate
+                              and rollback additionally require confirm: true.
+
 init options
   --home <homeId>             Home ID to write into ${PROJECT_FILE} (required)
   --control-plane <https url> Control-plane issuer (required)
@@ -131,7 +139,8 @@ Exit codes
 const GLOBAL_FLAGS = ['json'] as const;
 const GLOBAL_OPTIONS = ['project'] as const;
 
-const COMMAND_OPTIONS: Record<string, readonly string[]> = {
+/** Exported so the MCP surface can be proved to expose every option, and no other. */
+export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   init: ['home', 'control-plane', 'artifact', 'release'],
   discover: ['flows'],
   check: [],
@@ -140,6 +149,7 @@ const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   rollback: ['sha256', 'expected-generation', 'generation'],
   release: [],
   upload: [],
+  mcp: [],
   help: [],
   version: [],
 };
@@ -602,7 +612,13 @@ async function runUpload(host: CliHost, invocation: Invocation): Promise<Command
   };
 }
 
-async function dispatch(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+/**
+ * Runs one parsed invocation.
+ *
+ * Exported for `mcp`, which reaches the same commands without a process: a
+ * tool call and a command line must not be able to diverge.
+ */
+export async function dispatch(host: CliHost, invocation: Invocation): Promise<CommandResult> {
   switch (invocation.command) {
     case 'init':
       return await runInit(host, invocation);
@@ -665,6 +681,20 @@ export async function run(argv: readonly string[], host: CliHost): Promise<numbe
     if (invocation.command === 'version') {
       host.write(json ? `${JSON.stringify({ ok: true, version: CLI_VERSION })}\n` : `${CLI_VERSION}\n`);
       return EXIT_CODE.success;
+    }
+    if (invocation.command === 'mcp') {
+      if (json) throw usageError('mcp does not take --json; the protocol is already JSON-RPC');
+      const input = host.input;
+      if (input === undefined) {
+        throw usageError(
+          'mcp needs a request stream on stdin',
+          'An MCP client starts this command as a subprocess and speaks JSON-RPC over the pipe.',
+        );
+      }
+      // Imported here, not at the top: mcp.ts is built on this module, and the
+      // other commands must not pay for a protocol they never speak.
+      const { serve } = await import('./mcp.js');
+      return await serve(host, input);
     }
     const result = await dispatch(host, invocation);
     host.write(
