@@ -6,4 +6,5 @@ process.exitCode = await run(process.argv.slice(2), {
   writeError: (text) => void process.stderr.write(text),
   cwd: () => process.cwd(),
   env: (name) => process.env[name],
+  input: process.stdin,
 });
