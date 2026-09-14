@@ -24,7 +24,7 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "bun test test/",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run build && bun run test"
+    "check": "bun run build && bun run typecheck && bun run test"
   },
   "repository": {
     "type": "git",
