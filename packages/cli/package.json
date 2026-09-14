@@ -12,6 +12,7 @@
     "miakapp": "./bin/miakapp.js"
   },
   "files": [
+    "assets",
     "bin",
     "dist",
     "LICENSE",

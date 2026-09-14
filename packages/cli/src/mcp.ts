@@ -134,6 +134,26 @@ export const TOOLS: readonly ToolDefinition[] = [
     guarded: false,
   },
   {
+    name: 'miakapp_agent_pack',
+    title: 'Install the pack into a repository',
+    command: 'agent-pack',
+    description:
+      'Install the Miakapp agent pack into a repository: the full guide as a file under '
+      + '.miakapp/, a pointer to it in AGENTS.md and CLAUDE.md, and this MCP server in .mcp.json. '
+      + 'Run it once in a home repository that does not have it, so the next agent opening that '
+      + 'repository finds the rules and the tools already wired. It edits rather than replaces: '
+      + 'prose outside the miakapp markers is kept, and every other server in .mcp.json is kept '
+      + 'by name. Safe to run twice — a file already current is reported unchanged.',
+    args: [{
+      name: 'dir',
+      type: 'string',
+      required: false,
+      description: 'Repository to install into. Defaults to the working directory.',
+    }],
+    readOnly: false,
+    guarded: false,
+  },
+  {
     name: 'miakapp_init',
     title: 'Write the project file',
     command: 'init',

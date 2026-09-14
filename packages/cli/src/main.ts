@@ -14,6 +14,7 @@
  *   {@link EXIT_CODE}), so a wrapper decides without parsing prose;
  * - `--json`, which prints exactly one closed object on stdout.
  */
+import { installPack } from './agent-pack.js';
 import { prepareArtifact, type Artifact } from './artifact.js';
 import { exchangePublisherToken, fetchDiscovery } from './control-plane.js';
 import { discoverFlows, inventoryJson, type Inventory } from './discovery.js';
@@ -48,8 +49,19 @@ export const HOME_KEY_VARIABLE = 'MIAKAPP_HOME_KEY';
 
 export interface FileSystem {
   read(path: string): Promise<Uint8Array>;
+  /** Creates. Fails if the path exists: no command may clobber by accident. */
   write(path: string, bytes: Uint8Array): Promise<void>;
+  /**
+   * Creates or overwrites.
+   *
+   * Separate from {@link FileSystem.write} so overwriting is never the default
+   * a command falls into. Only `agent-pack` calls it, and only after merging
+   * the existing bytes, so what it replaces is a file it generated.
+   */
+  replace(path: string, bytes: Uint8Array): Promise<void>;
   exists(path: string): Promise<boolean>;
+  /** Creates the directory and its parents. Succeeds if it already exists. */
+  makeDirectory(path: string): Promise<void>;
 }
 
 export interface CliHost {
@@ -87,6 +99,7 @@ Usage
 
 Commands
   init                    Write ${PROJECT_FILE} in the current directory
+  agent-pack              Install the guide and the MCP wiring into a repository
   discover                Inventory an existing Node-RED installation offline
   check                   Validate the project and the artifact offline
   publish                 Upload, finalize and activate the built artifact
@@ -120,6 +133,9 @@ mcp options
                               command above becomes one tool; publish, activate
                               and rollback additionally require confirm: true.
 
+agent-pack options
+  --dir <path>                Repository to install into (default: cwd)
+
 init options
   --home <homeId>             Home ID to write into ${PROJECT_FILE} (required)
   --control-plane <https url> Control-plane issuer (required)
@@ -142,6 +158,7 @@ const GLOBAL_OPTIONS = ['project'] as const;
 /** Exported so the MCP surface can be proved to expose every option, and no other. */
 export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   init: ['home', 'control-plane', 'artifact', 'release'],
+  'agent-pack': ['dir'],
   discover: ['flows'],
   check: [],
   publish: ['expected-generation', 'generation', 'release'],
@@ -277,6 +294,12 @@ async function nodeFileSystem(): Promise<FileSystem> {
     async write(path, bytes) {
       await fs.writeFile(path, bytes, { flag: 'wx' });
     },
+    async replace(path, bytes) {
+      await fs.writeFile(path, bytes);
+    },
+    async makeDirectory(path) {
+      await fs.mkdir(path, { recursive: true });
+    },
     async exists(path) {
       try {
         await fs.access(path);
@@ -403,6 +426,61 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
     summary: `Wrote ${path}`,
     fields: [['project', path]],
     json: { project: path, schema: PROJECT_SCHEMA },
+  };
+}
+
+/**
+ * Absolute path of the guide shipped with this package.
+ *
+ * Resolved from this module rather than from the working directory: the pack is
+ * installed into someone else's repository, and the guide has to come from the
+ * installed CLI wherever that repository happens to be.
+ *
+ * Exported so a test reads the same path the command does. A test that seeded a
+ * fixture at a path the command never opens would prove nothing.
+ */
+export async function guideAssetPath(): Promise<string> {
+  const { fileURLToPath } = await import('node:url');
+  return fileURLToPath(new URL('../assets/agent-guide.md', import.meta.url));
+}
+
+/**
+ * Installs the agent pack. Like `discover`, it loads no project file: the
+ * repository it prepares is usually one that has no V4 project yet.
+ */
+async function runAgentPack(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const filesystem = await files(host);
+  const root = invocation.options.get('dir') ?? host.cwd();
+  if (!await filesystem.exists(root)) {
+    throw projectError(
+      `No directory at ${root}`,
+      'Point --dir at the repository to install into, or run the command inside it.',
+    );
+  }
+
+  const guidePath = await guideAssetPath();
+  let guide: string;
+  try {
+    guide = new TextDecoder('utf-8', { fatal: true }).decode(await filesystem.read(guidePath));
+  } catch {
+    throw projectError(
+      `The packaged guide is missing or unreadable at ${guidePath}`,
+      'Reinstall @miakapp/cli: the pack copies the guide out of the package, never off the network.',
+    );
+  }
+
+  const result = await installPack(filesystem, root, guide);
+  const changed = result.files.filter((entry) => entry.action !== 'unchanged').length;
+  return {
+    summary: changed === 0
+      ? `The pack in ${root} is already current`
+      : `Installed the agent pack in ${root}`,
+    fields: result.files.map((entry) => [entry.path, entry.action] as Field),
+    json: {
+      root: result.root,
+      changed,
+      files: result.files.map((entry) => ({ path: entry.path, action: entry.action })),
+    },
   };
 }
 
@@ -622,6 +700,8 @@ export async function dispatch(host: CliHost, invocation: Invocation): Promise<C
   switch (invocation.command) {
     case 'init':
       return await runInit(host, invocation);
+    case 'agent-pack':
+      return await runAgentPack(host, invocation);
     case 'discover':
       return await runDiscover(host, invocation);
     case 'check':

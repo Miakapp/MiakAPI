@@ -56,6 +56,7 @@ duplicate keys — is rejected with the offending line rather than guessed at.
 | Command | What it does |
 | --- | --- |
 | `init` | Writes `miakapp.yaml`. Never overwrites an existing one. |
+| `agent-pack` | Offline. Installs the guide and the MCP wiring into a repository. |
 | `discover` | Offline. Inventories a Node-RED installation from its flows export. |
 | `check` | Offline. Parses the project, verifies the artifact, prints the digest. |
 | `publish` | Capability → delivery → finalization → activation, in one run. |
@@ -84,6 +85,39 @@ not model, so the reader knows what the inventory missed. It reports that a
 coordinator secret is present in the export; it never prints the secret itself.
 `docs/agent-guide.md` §3 explains what to do with each finding.
 
+## The agent pack
+
+`agent-pack` is the command to run *once* in a home repository, so that the next
+agent to open it arrives already knowing the rules:
+
+```
+miakapp agent-pack            # or --dir /path/to/the/repository
+```
+
+It writes four files and reports what it did to each one:
+
+| File | Why |
+| --- | --- |
+| `.miakapp/agent-guide.md` | The full guide, copied out of this package. No network, no stale bookmark. |
+| `AGENTS.md` | The instruction file Codex reads. |
+| `CLAUDE.md` | The instruction file Claude Code reads. |
+| `.mcp.json` | Project-scope MCP configuration, registering `miakapp mcp`. |
+
+The repository is yours, so the pack edits rather than replaces. The guide is a
+file it owns outright. The instruction files are touched only between
+`<!-- miakapp:begin -->` and `<!-- miakapp:end -->`: prose above and below the
+markers is copied through byte for byte, and a second run rewrites the block in
+place instead of appending another copy. `.mcp.json` is merged as a structure —
+one key, by name — so every other server in it survives, and a file that does
+not parse is refused rather than replaced with a valid one.
+
+The server is registered as the bare `miakapp` command rather than an absolute
+path, because the file is committed and the next machine to check it out will
+not have this one's directory layout.
+
+Run it again whenever the CLI is upgraded: an unchanged file is reported
+`unchanged`, and a guide that moved on is reported `updated`.
+
 ## MCP
 
 An agent that already runs a shell does not need this. An agent that speaks the
@@ -109,6 +143,7 @@ tools over newline-delimited JSON-RPC on stdio.
 | `miakapp_release` | `release` | read-only |
 | `miakapp_upload` | `upload` | read-only |
 | `miakapp_init` | `init` | writes `miakapp.yaml`, never overwrites |
+| `miakapp_agent_pack` | `agent-pack` | offline, writes the pack into a repository |
 | `miakapp_publish` | `publish` | **moves the pointer — needs `confirm: true`** |
 | `miakapp_activate` | `activate` | **moves the pointer — needs `confirm: true`** |
 | `miakapp_rollback` | `rollback` | **moves the pointer — needs `confirm: true`** |
