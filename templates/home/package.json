@@ -11,9 +11,9 @@
   "scripts": {
     "build": "bun build component/main.ts --format=iife --minify --outfile dist/component.js",
     "check": "bun run typecheck && bun run build && bun run test && bun run check:artifact",
-    "check:artifact": "bunx @miakapp/cli check",
+    "check:artifact": "miakapp check",
     "dev": "bun run coordinator/main.ts",
-    "publish:home": "bun run build && bunx @miakapp/cli publish --expected-generation 0",
+    "publish:home": "bun run build && miakapp publish --expected-generation 0",
     "test": "bun test test/",
     "typecheck": "tsc --noEmit"
   },

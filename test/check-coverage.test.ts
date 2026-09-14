@@ -139,6 +139,29 @@ function directoriesCheckedBy(entry: string): string[] {
   return [...reached].sort();
 }
 
+/** Every package name in the tree that is published nowhere. */
+function privatePackages(): string[] {
+  const names: string[] = [];
+  walk('.', (child, entry) => {
+    if (entry !== 'package.json') return;
+    const parsed = JSON.parse(readFileSync(join(ROOT, child), 'utf8')) as Manifest & { private?: boolean };
+    if (parsed.private === true && typeof parsed.name === 'string') names.push(parsed.name);
+  });
+  return names.sort();
+}
+
+/** Every Bun lockfile in the tree, with the format version it declares. */
+function lockfileVersions(): Record<string, string> {
+  // bun.lock is JSONC, so read the declaration rather than parsing the file.
+  const versions: Record<string, string> = {};
+  walk('.', (child, entry) => {
+    if (entry !== 'bun.lock') return;
+    const declared = /"lockfileVersion"\s*:\s*(\d+)/.exec(readFileSync(join(ROOT, child), 'utf8'));
+    versions[child] = declared === null ? 'undeclared' : declared[1]!;
+  });
+  return versions;
+}
+
 /** The root scripts the CI workflow runs. */
 function scriptsRunByCi(): string[] {
   const workflow = readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf8');
@@ -188,5 +211,46 @@ describe('the checks CI runs cover every test on disk', () => {
 
   test('the root check is what runs the sweep', () => {
     expect(root.scripts?.check ?? '').toContain('bun run test');
+  });
+
+  // `bunx @miakapp/cli` reached the registry on the Bun CI pins and got a 404:
+  // the package is private, so it exists nowhere to fetch. A project that
+  // depends on it must call the binary its own install links.
+  test('no project runs a private package through bunx', () => {
+    const unpublished = privatePackages();
+    for (const project of ['.', ...standaloneProjects()]) {
+      const scripts = manifest(project).scripts ?? {};
+      for (const [name, script] of Object.entries(scripts)) {
+        const fetched = [...script.matchAll(/\bbunx\s+(?:--\S+\s+)*(\S+)/g)]
+          .map((match) => match[1]!)
+          .filter((packageName) => unpublished.includes(packageName));
+        expect({ project, script: name, fetched }).toEqual({ project, script: name, fetched: [] });
+      }
+    }
+  });
+
+  // The template shipped a lockfile written by a newer Bun than the one this
+  // repository pins. CI could not parse it, ignored it and silently resolved
+  // afresh — the opposite of what a committed lockfile is for.
+  test('every lockfile is in the format the pinned Bun writes', () => {
+    const versions = lockfileVersions();
+    const reference = versions['bun.lock'];
+    if (reference === undefined) throw new Error('the root lockfile is missing');
+    expect(Object.keys(versions)).toContain('templates/home/bun.lock');
+    for (const [file, version] of Object.entries(versions)) {
+      expect({ file, version }).toEqual({ file, version: reference });
+    }
+  });
+
+  // A lockfile CI is free to rewrite proves nothing about what it installed.
+  test('every install CI runs is frozen against its lockfile', () => {
+    const scripts = root.scripts ?? {};
+    for (const [name, script] of Object.entries(scripts)) {
+      for (const step of script.split('&&').map((part) => part.trim())) {
+        if (!/^bun install\b/.test(step)) continue;
+        expect({ script: name, step, frozen: step.includes('--frozen-lockfile') })
+          .toEqual({ script: name, step, frozen: true });
+      }
+    }
   });
 });

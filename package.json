@@ -35,7 +35,7 @@
     "check:cli": "bun --filter @miakapp/cli check",
     "check:component": "bun --filter @miakapp/component check",
     "check:packages": "bun run check:cli && bun run check:component && bun run check:template",
-    "check:template": "bun run build && bun --filter @miakapp/component build && bun --filter @miakapp/cli build && cd templates/home && rm -rf node_modules && bun install && bun run check",
+    "check:template": "bun run build && bun --filter @miakapp/component build && bun --filter @miakapp/cli build && cd templates/home && rm -rf node_modules && bun install --frozen-lockfile && bun run check",
     "pack:check": "npm pack --dry-run",
     "prepublishOnly": "bun run check",
     "smoke:browser": "node scripts/check-browser-bundle.mjs",
