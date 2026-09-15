@@ -84,6 +84,8 @@ export interface CommandResult {
   readonly summary: string;
   readonly fields: readonly Field[];
   readonly json: Record<string, unknown>;
+  /** Complete human-facing document for commands such as `docs start`. */
+  readonly text?: string;
 }
 
 export interface Invocation {
@@ -99,6 +101,7 @@ Usage
   miakapp <command> [options]
 
 Commands
+  docs start              Print the complete agent guide bundled with this CLI
   init                    Write ${PROJECT_FILE} in the current directory
   agent-pack              Install the guide and the MCP wiring into a repository
   discover                Inventory an existing Node-RED installation offline
@@ -158,6 +161,7 @@ const GLOBAL_OPTIONS = ['project'] as const;
 
 /** Exported so the MCP surface can be proved to expose every option, and no other. */
 export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
+  docs: [],
   init: ['home', 'control-plane', 'artifact', 'release'],
   'agent-pack': ['dir'],
   discover: ['flows'],
@@ -446,6 +450,39 @@ export async function guideAssetPath(): Promise<string> {
 }
 
 /**
+ * Gives an agent its complete starting contract without requiring a repository,
+ * a network request or an MCP client. The onboarding page can therefore hand a
+ * person one stable command and the installed CLI remains the source of truth.
+ */
+async function runDocs(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  if (invocation.positional.length !== 1 || invocation.positional[0] !== 'start') {
+    throw usageError(
+      'docs requires the topic start',
+      'Run miakapp docs start to print the complete agent guide.',
+    );
+  }
+
+  const path = await guideAssetPath();
+  let guide: string;
+  try {
+    const filesystem = await files(host);
+    guide = new TextDecoder('utf-8', { fatal: true }).decode(await filesystem.read(path));
+  } catch {
+    throw projectError(
+      `The packaged guide is missing or unreadable at ${path}`,
+      'Reinstall @miakapp/cli: the guide is bundled with the package and opens no network connection.',
+    );
+  }
+
+  return {
+    summary: 'Miakapp agent guide',
+    fields: [],
+    json: { topic: 'start', guide },
+    text: guide.endsWith('\n') ? guide : `${guide}\n`,
+  };
+}
+
+/**
  * Installs the agent pack. Like `discover`, it loads no project file: the
  * repository it prepares is usually one that has no V4 project yet.
  */
@@ -699,6 +736,8 @@ async function runUpload(host: CliHost, invocation: Invocation): Promise<Command
  */
 export async function dispatch(host: CliHost, invocation: Invocation): Promise<CommandResult> {
   switch (invocation.command) {
+    case 'docs':
+      return await runDocs(host, invocation);
     case 'init':
       return await runInit(host, invocation);
     case 'agent-pack':
@@ -722,6 +761,7 @@ export async function dispatch(host: CliHost, invocation: Invocation): Promise<C
 }
 
 function renderText(result: CommandResult): string {
+  if (result.text !== undefined) return result.text;
   const lines = [result.summary];
   for (const [key, value] of result.fields) {
     lines.push(`  ${key}: ${Array.isArray(value) ? `[${value.join(', ')}]` : String(value)}`);

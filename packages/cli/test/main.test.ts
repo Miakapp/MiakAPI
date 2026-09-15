@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { EXIT_CODE } from '../src/errors.js';
-import { HOME_KEY_VARIABLE, parseArguments, run } from '../src/main.js';
+import { HOME_KEY_VARIABLE, guideAssetPath, parseArguments, run } from '../src/main.js';
+import { CLI_VERSION } from '../src/version.js';
 import { digestOf, fakeControlPlane, homeKey } from './support/control-plane.js';
 import {
   ARTIFACT_SOURCE,
@@ -47,7 +48,25 @@ describe('offline commands', () => {
   test('version prints the package version', async () => {
     const host = testHost();
     expect(await run(['version'], host)).toBe(EXIT_CODE.success);
-    expect(host.stdout().trim()).toBe('4.0.0-alpha.0');
+    expect(host.stdout().trim()).toBe(CLI_VERSION);
+  });
+
+  test('docs start prints the complete bundled guide without a project or network', async () => {
+    const files = new MemoryFiles({
+      [await guideAssetPath()]: '# Miakapp agent guide\n\nStart here.\n',
+    });
+    const host = testHost({ files, fetch: async () => { throw new Error('network used'); } });
+
+    expect(await run(['docs', 'start'], host)).toBe(EXIT_CODE.success);
+    expect(host.stdout()).toBe('# Miakapp agent guide\n\nStart here.\n');
+    expect(host.stderr()).toBe('');
+  });
+
+  test('docs rejects an unknown topic instead of printing the wrong contract', async () => {
+    const host = testHost();
+
+    expect(await run(['docs', 'publish'], host)).toBe(EXIT_CODE.usage);
+    expect(host.stderr()).toContain('miakapp docs start');
   });
 
   test('an unknown command exits with the usage code', async () => {
