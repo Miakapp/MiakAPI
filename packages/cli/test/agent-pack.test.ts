@@ -16,6 +16,7 @@ import {
 import { EXIT_CODE } from '../src/errors.js';
 import { guideAssetPath, run } from '../src/main.js';
 import { TOOLS, buildArgv } from '../src/mcp.js';
+import { CLI_VERSION, PACKAGE_NAME } from '../src/version.js';
 import { MemoryFiles, PROJECT_ROOT, testHost } from './support/host.js';
 
 const GUIDE_TEXT = '# Building a Miakapp home\n\nThe packaged guide.\n';
@@ -57,11 +58,21 @@ describe('the pack installs into an empty repository', () => {
     expect(config(files)['mcpServers'][SERVER_NAME]).toEqual(serverEntry());
   });
 
-  test('the server is launched by bare name, so the repository is portable', () => {
+  // This assertion used to require the bare binary name, on the reasoning that
+  // a name travels between machines and a path does not. The reasoning held;
+  // the conclusion did not. Rehearsed in a fresh repository, `command:
+  // "miakapp"` names a binary nobody installed, so the server never starts.
+  // Portability is still the property under test — it now has to be satisfied
+  // by something the repository can actually run.
+  test('the server is launched by something a fresh repository can run', () => {
     const entry = serverEntry();
-    expect(entry['command']).toBe(SERVER_NAME);
-    expect(entry['args']).toEqual(['mcp']);
-    expect(JSON.stringify(entry)).not.toContain('/');
+    expect(entry['command']).toBe('npx');
+    expect(entry['args']).toEqual(['-y', `${PACKAGE_NAME}@${CLI_VERSION}`, 'mcp']);
+    expect(entry['args']).not.toContain(PROJECT_ROOT);
+  });
+
+  test('the entry is keyed by the server name, whatever launches it', () => {
+    expect(Object.keys({ [SERVER_NAME]: serverEntry() })).toEqual([SERVER_NAME]);
   });
 
   test('it installs where --dir points, not where the process happens to be', async () => {

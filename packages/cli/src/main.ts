@@ -15,6 +15,7 @@
  * - `--json`, which prints exactly one closed object on stdout.
  */
 import { installPack } from './agent-pack.js';
+import { CLI_VERSION } from './version.js';
 import { prepareArtifact, type Artifact } from './artifact.js';
 import { exchangePublisherToken, fetchDiscovery } from './control-plane.js';
 import { discoverFlows, inventoryJson, type Inventory } from './discovery.js';
@@ -38,7 +39,7 @@ import {
   type PublicationTarget,
 } from './publication.js';
 
-export const CLI_VERSION = '4.0.0-alpha.0';
+export { CLI_VERSION };
 
 /**
  * The Home Key is read from the environment only. A secret passed as an
