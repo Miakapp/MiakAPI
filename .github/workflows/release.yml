@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'cli-v*'
   workflow_dispatch:
 
 permissions:
@@ -34,20 +35,35 @@ jobs:
       - run: bun run check
 
       - name: Verify the tag matches the package version
+        id: release
         if: github.event_name == 'push'
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          version="$(node -p 'require("./package.json").version')"
+          case "$GITHUB_REF_NAME" in
+            cli-v*)
+              tag="${GITHUB_REF_NAME#cli-v}"
+              package_dir="packages/cli"
+              ;;
+            v*)
+              tag="${GITHUB_REF_NAME#v}"
+              package_dir="."
+              ;;
+            *)
+              echo "Unsupported release tag $GITHUB_REF_NAME" >&2
+              exit 1
+              ;;
+          esac
+          version="$(node -p "require('./${package_dir}/package.json').version")"
           if [ "$tag" != "$version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            echo "Tag $GITHUB_REF_NAME does not match ${package_dir}/package.json version $version" >&2
             exit 1
           fi
+          echo "package_dir=$package_dir" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
         if: github.event_name == 'push'
         # The dist-tag comes from publishConfig in package.json, so alpha
         # releases land on `next` and never move `latest`.
-        run: npm publish --provenance --access public
+        run: npm publish "${{ steps.release.outputs.package_dir }}" --provenance --access public
         env:
           # Ignored when the package uses trusted publishing; kept so the
           # workflow also works with a classic automation token.
