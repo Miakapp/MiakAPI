@@ -42,10 +42,12 @@ jobs:
             cli-v*)
               tag="${GITHUB_REF_NAME#cli-v}"
               package_dir="./packages/cli"
+              dist_tag="latest"
               ;;
             v*)
               tag="${GITHUB_REF_NAME#v}"
               package_dir="."
+              dist_tag="next"
               ;;
             *)
               echo "Unsupported release tag $GITHUB_REF_NAME" >&2
@@ -58,12 +60,13 @@ jobs:
             exit 1
           fi
           echo "package_dir=$package_dir" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
         if: github.event_name == 'push'
-        # The dist-tag comes from publishConfig in package.json, so alpha
-        # releases land on `next` and never move `latest`.
-        run: npm publish "${{ steps.release.outputs.package_dir }}" --provenance --access public
+        # The tag namespace selects the package and its public dist-tag.
+        # CLI prereleases intentionally remain installable without --tag.
+        run: npm publish "${{ steps.release.outputs.package_dir }}" --tag "${{ steps.release.outputs.dist_tag }}" --provenance --access public
         env:
           # Ignored when the package uses trusted publishing; kept so the
           # workflow also works with a classic automation token.

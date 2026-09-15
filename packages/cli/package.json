@@ -1,6 +1,6 @@
 {
   "name": "@miakapp/cli",
-  "version": "4.0.0-alpha.2",
+  "version": "4.0.0-alpha.3",
   "description": "Agent-first Miakapp command line: check, build, publish, activate and roll back home components",
   "type": "module",
   "engines": {
@@ -8,7 +8,7 @@
     "node": ">=22.9"
   },
   "bin": {
-    "miakapp": "./bin/miakapp.js"
+    "miakapp": "bin/miakapp.js"
   },
   "files": [
     "assets",
@@ -30,7 +30,8 @@
     "directory": "packages/cli"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "tag": "latest"
   },
   "keywords": [
     "Miakapp",
