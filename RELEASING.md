@@ -28,13 +28,21 @@ publishing should need a second pair of eyes.
 ## Cutting a release
 
 1. Land every change on `main` and confirm CI is green.
-2. Set the version in `package.json`. Pre-releases keep the `next` dist-tag
-   through `publishConfig`, so they never move `latest`.
+2. Set the version in the package being released. Root `miakapi` pre-releases
+   keep the `next` dist-tag through `publishConfig`; `@miakapp/cli` remains the
+   installable agent entry point on `latest`.
 3. Tag and push:
 
    ```sh
    git tag v4.0.0-alpha.1
    git push origin v4.0.0-alpha.1
+   ```
+
+   For the CLI, use its package-specific tag:
+
+   ```sh
+   git tag cli-v4.0.0-alpha.1
+   git push origin cli-v4.0.0-alpha.1
    ```
 
 4. Watch the *Release* workflow. It publishes only on a tag push. A manual
@@ -48,6 +56,7 @@ Verify the dist-tags before announcing:
 
 ```sh
 npm view miakapi dist-tags
+npm view @miakapp/cli dist-tags
 ```
 
 `latest` must still point at the MiakAPI 3 line until version 4 is stable.
