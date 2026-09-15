@@ -3,7 +3,6 @@
   "version": "4.0.0-alpha.0",
   "description": "Guest SDK for Miakapp home components: semantic UI, granted state, calls and events inside the sandboxed Worker",
   "type": "module",
-  "private": true,
   "engines": {
     "bun": ">=1.2.23",
     "node": ">=22.9"
@@ -32,8 +31,7 @@
     "directory": "packages/component"
   },
   "publishConfig": {
-    "access": "public",
-    "tag": "next"
+    "access": "public"
   },
   "keywords": [
     "Miakapp",

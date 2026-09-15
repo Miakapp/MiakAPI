@@ -18,6 +18,7 @@
  * Bytes outside those regions are copied through untouched.
  */
 import { projectError } from './errors.js';
+import { CLI_VERSION, PACKAGE_NAME } from './version.js';
 
 /** Directory the pack owns inside the owner's repository. */
 export const PACK_DIRECTORY = '.miakapp';
@@ -163,15 +164,23 @@ export function mergeInstructions(existing: string | undefined, block: string): 
 /**
  * The server entry, as a client expects to find it.
  *
- * `command` is the bare binary name: the pack is written into a repository that
- * may be opened on another machine, where an absolute path from this one would
- * resolve to nothing.
+ * An absolute path is wrong: the pack is written into a repository that may be
+ * opened on another machine, where a path from this one resolves to nothing.
+ * The bare binary name is wrong for the same reason in reverse — it assumes a
+ * global install nobody performed, so the server simply fails to start in the
+ * repository the pack was meant to equip. Both were observed: a rehearsal in a
+ * fresh repository found `command: "miakapp"` unresolvable.
+ *
+ * `npx` resolves the published package on any machine with Node, installing it
+ * on first use. The version is pinned rather than floating because the guide
+ * written beside this file is the guide of *this* release: a floating spec
+ * would pair one release's prose with another release's tool surface.
  */
 export function serverEntry(): Record<string, unknown> {
   return {
     type: 'stdio',
-    command: SERVER_NAME,
-    args: ['mcp'],
+    command: 'npx',
+    args: ['-y', `${PACKAGE_NAME}@${CLI_VERSION}`, 'mcp'],
   };
 }
 
