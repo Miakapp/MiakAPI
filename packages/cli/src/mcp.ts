@@ -114,6 +114,22 @@ const CONFIRM: ToolArgument = {
  */
 export const TOOLS: readonly ToolDefinition[] = [
   {
+    name: 'miakapp_docs',
+    title: 'Read the Miakapp agent guide',
+    command: 'docs',
+    description:
+      'Read the complete agent guide bundled with this exact CLI release. Start here before '
+      + 'creating or changing a home: it defines the repository shape, authorization boundary, '
+      + 'component contract, verification loop, publication and rollback rules. Offline and read-only.',
+    args: [],
+    positional: {
+      name: 'topic',
+      description: 'Guide topic. Use "start".',
+    },
+    readOnly: true,
+    guarded: false,
+  },
+  {
     name: 'miakapp_discover',
     title: 'Inventory an existing Node-RED house',
     command: 'discover',

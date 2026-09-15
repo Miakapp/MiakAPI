@@ -132,6 +132,11 @@ describe('argument translation', () => {
       .toEqual(['release', ARTIFACT_DIGEST]);
   });
 
+  test('docs start is exposed as the same read-only positional command', () => {
+    expect(buildArgv(tool('miakapp_docs'), { topic: 'start' }))
+      .toEqual(['docs', 'start']);
+  });
+
   test('an invented argument is refused rather than dropped', () => {
     expect(() => buildArgv(tool('miakapp_check'), { force: true })).toThrow(/Unknown argument/);
   });
