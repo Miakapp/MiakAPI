@@ -41,7 +41,7 @@ jobs:
           case "$GITHUB_REF_NAME" in
             cli-v*)
               tag="${GITHUB_REF_NAME#cli-v}"
-              package_dir="packages/cli"
+              package_dir="./packages/cli"
               ;;
             v*)
               tag="${GITHUB_REF_NAME#v}"
