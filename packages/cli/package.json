@@ -1,6 +1,6 @@
 {
   "name": "@miakapp/cli",
-  "version": "4.0.0-alpha.3",
+  "version": "4.0.0-alpha.4",
   "description": "Agent-first Miakapp command line: check, build, publish, activate and roll back home components",
   "type": "module",
   "engines": {
@@ -20,6 +20,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "bun run build",
     "test": "bun test test/",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run build && bun run test"
