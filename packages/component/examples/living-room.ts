@@ -5,7 +5,7 @@
  * the CLI check it before publishing:
  *
  * ```bash
- * bun build examples/salon.ts --format=iife --minify --outfile dist/component.js
+ * bun build examples/living-room.ts --format=iife --minify --outfile dist/component.js
  * bunx @miakapp/cli check
  * ```
  *
@@ -36,7 +36,7 @@ defineComponent((home) => {
     } catch (error) {
       // An unknown outcome is deliberately not retried: the home may already
       // have applied it. The next state snapshot is the authority.
-      failure = error instanceof Error ? error.message : 'La commande a échoué';
+      failure = error instanceof Error ? error.message : 'The command failed';
     } finally {
       pending = false;
       home.invalidate();
@@ -45,21 +45,21 @@ defineComponent((home) => {
 
   return {
     render: () => {
-      const on = asBoolean(home.state.get('zone.salon.light.on'));
-      const temperature = asNumber(home.state.get('climate.salon.temperature'), 0);
+      const on = asBoolean(home.state.get('zone.living_room.light.on'));
+      const temperature = asNumber(home.state.get('climate.living_room.temperature'), 0);
 
-      return ui.screen({ title: 'Salon' }, [
-        ui.section({ id: 'lights', heading: 'Lumières' }, [
+      return ui.screen({ title: 'Living room' }, [
+        ui.section({ id: 'lights', heading: 'Lights' }, [
           ui.toggle({
-            id: 'salon-light',
-            label: 'Lampe du salon',
+            id: 'living-room-light',
+            label: 'Living-room lamp',
             value: on,
             pending,
             onChange: (next) => void setLight(next),
           }),
           ui.status({
             id: 'light-status',
-            label: 'État',
+            label: 'Status',
             state: home.state.stale
               ? 'stale'
               : failure !== undefined
@@ -70,7 +70,7 @@ defineComponent((home) => {
             ...(failure === undefined ? {} : { detail: failure }),
           }),
         ]),
-        ui.section({ id: 'climate', heading: 'Climat' }, [
+        ui.section({ id: 'climate', heading: 'Climate' }, [
           ui.text({
             id: 'temperature',
             text: `${temperature.toFixed(1)} °C`,
@@ -79,8 +79,8 @@ defineComponent((home) => {
           ui.text({
             id: 'temperature-note',
             text: home.state.stale
-              ? 'Valeur peut-être périmée, en attente d’un instantané.'
-              : `Relevé à la révision ${home.state.revision}.`,
+              ? 'Value may be stale; waiting for a snapshot.'
+              : `Reading at revision ${home.state.revision}.`,
             tone: home.state.stale ? 'warning' : 'muted',
           }),
         ]),

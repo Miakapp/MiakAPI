@@ -118,11 +118,11 @@ describe('argument translation', () => {
   test('an underscore in a tool argument is the CLI hyphen', () => {
     expect(optionName('expected_generation')).toBe('expected-generation');
     expect(buildArgv(tool('miakapp_init'), {
-      home: 'lumiere',
+      home: 'light',
       control_plane: 'https://control.example.test/api',
     })).toEqual([
       'init',
-      '--home', 'lumiere',
+      '--home', 'light',
       '--control-plane', 'https://control.example.test/api',
     ]);
   });
