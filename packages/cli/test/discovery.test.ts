@@ -49,7 +49,7 @@ describe('reading a flows export', () => {
 describe('the inventory of a house', () => {
   test('every tab is reported with how many nodes it holds', () => {
     const tabs = inventory().flows;
-    expect(tabs.map((tab) => tab.label)).toEqual(['Salon', 'Chauffage']);
+    expect(tabs.map((tab) => tab.label)).toEqual(['Living room', 'Heating']);
     expect(tabs[0]?.nodeCount).toBe(5);
     expect(tabs[1]?.disabled).toBe(true);
   });
@@ -58,13 +58,13 @@ describe('the inventory of a house', () => {
     const broker = inventory().brokers[0];
     expect(broker?.host).toBe('192.168.1.10');
     expect(broker?.port).toBe(1883);
-    expect(broker?.subscribes).toEqual(['maison/salon/#', 'maison/salon/temperature']);
-    expect(broker?.publishes).toEqual(['maison/salon/lampe/set']);
+    expect(broker?.subscribes).toEqual(['home/living-room/#', 'home/living-room/temperature']);
+    expect(broker?.publishes).toEqual(['home/living-room/lamp/set']);
   });
 
   test('the home binding is reported without reading the secret out', () => {
     const home = inventory().homes[0];
-    expect(home?.homeId).toBe('maison-colmon');
+    expect(home?.homeId).toBe('sample-home');
     expect(home?.coordinatorId).toBe('coord-1');
     expect(home?.secretInExport).toBe(true);
     expect(JSON.stringify(inventory())).not.toContain('s3cr3t-in-the-file');
@@ -73,22 +73,22 @@ describe('the inventory of a house', () => {
   test('committed variables become state candidates, sorted and name-checked', () => {
     const state = inventory().state;
     expect(state.map((entry) => entry.path)).toEqual([
-      'chauffage.consigne',
-      'salon.*.on',
-      'salon.lampe.on',
-      'salon.temperature',
-      'salon/humidite',
+      'heating.setpoint',
+      'living_room.*.on',
+      'living_room.lamp.on',
+      'living_room.temperature',
+      'living_room/humidity',
     ]);
-    expect(state.find((entry) => entry.path === 'salon.temperature')?.source).toBe('jsonata');
-    expect(state.find((entry) => entry.path === 'chauffage.consigne')?.source).toBe('env');
-    expect(state.find((entry) => entry.path === 'salon.lampe.on')?.source).toBe('literal');
-    expect(state.find((entry) => entry.path === 'salon/humidite')?.legalV4Name).toBe(true);
+    expect(state.find((entry) => entry.path === 'living_room.temperature')?.source).toBe('jsonata');
+    expect(state.find((entry) => entry.path === 'heating.setpoint')?.source).toBe('env');
+    expect(state.find((entry) => entry.path === 'living_room.lamp.on')?.source).toBe('literal');
+    expect(state.find((entry) => entry.path === 'living_room/humidity')?.legalV4Name).toBe(true);
   });
 
   test('user actions become function candidates with their groups', () => {
     const actions = inventory().actions;
-    expect(actions.map((entry) => entry.inputId)).toEqual(['chauffage.set', 'salon.lampe.toggle']);
-    expect(actions[0]?.allowedGroups).toEqual(['adultes']);
+    expect(actions.map((entry) => entry.inputId)).toEqual(['heating.set', 'living_room.lamp.toggle']);
+    expect(actions[0]?.allowedGroups).toEqual(['adults']);
     expect(actions[1]?.allowedGroups).toEqual([]);
   });
 
@@ -117,17 +117,17 @@ describe('what the inventory refuses to leave unsaid', () => {
   test('an action with no group is reported as reachable by every user', () => {
     const open = inventory().findings.find((item) => item.kind === 'unrestricted_action');
     expect(open?.severity).toBe('critical');
-    expect(open?.detail).toContain('salon.lampe.toggle');
+    expect(open?.detail).toContain('living_room.lamp.toggle');
   });
 
   test('a V3 name that V4 would reject is reported for rename', () => {
     const rename = inventory().findings.filter((item) => item.kind === 'name_needs_rename');
-    expect(rename.map((item) => item.detail).join(' ')).toContain('salon.*.on');
+    expect(rename.map((item) => item.detail).join(' ')).toContain('living_room.*.on');
   });
 
   test('a wildcard subscription is separated from a device topic', () => {
     const wildcard = inventory().findings.find((item) => item.kind === 'wildcard_subscription');
-    expect(wildcard?.detail).toContain('maison/salon/#');
+    expect(wildcard?.detail).toContain('home/living-room/#');
   });
 
   test('a broker without TLS is reported', () => {
@@ -144,10 +144,10 @@ describe('what the inventory refuses to leave unsaid', () => {
 
   test('a house with nothing wrong reports no finding', () => {
     const clean = inventory(JSON.stringify([
-      { id: 't1', type: 'tab', label: 'Salon' },
+      { id: 't1', type: 'tab', label: 'Living room' },
       { id: 'b1', type: 'mqtt-broker', name: 'local', broker: 'mqtt.example.test', port: '8883', usetls: true },
-      { id: 'i1', type: 'initMiakapi', z: 't1', home: 'maison', coordID: 'c1', coordSecret: '' },
-      { id: 'a1', type: 'onUserAction', z: 't1', inputID: 'salon.lampe.toggle', allowedGroups: ['adultes'] },
+      { id: 'i1', type: 'initMiakapi', z: 't1', home: 'home', coordID: 'c1', coordSecret: '' },
+      { id: 'a1', type: 'onUserAction', z: 't1', inputID: 'living_room.lamp.toggle', allowedGroups: ['adults'] },
     ]));
     expect(clean.findings).toEqual([]);
   });

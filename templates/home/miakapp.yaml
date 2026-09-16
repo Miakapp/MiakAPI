@@ -10,11 +10,11 @@ component:
   # so every name here must also be covered there.
   requires:
     state_read:
-      - climate.salon.temperature
+      - climate.living_room.temperature
       - service.coordinator.health
-      - zone.salon.light.on
+      - zone.living_room.light.on
     event_subscribe:
-      - zone.salon.light.changed
+      - zone.living_room.light.changed
     event_publish: []
     call:
       - lighting.set

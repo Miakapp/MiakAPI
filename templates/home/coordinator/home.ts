@@ -13,12 +13,12 @@ import {
 } from 'miakapi';
 
 export const STATE = {
-  lightOn: 'zone.salon.light.on',
-  temperature: 'climate.salon.temperature',
+  lightOn: 'zone.living_room.light.on',
+  temperature: 'climate.living_room.temperature',
   health: 'service.coordinator.health',
 } as const;
 
-export const EVENT_LIGHT_CHANGED = 'zone.salon.light.changed';
+export const EVENT_LIGHT_CHANGED = 'zone.living_room.light.changed';
 
 export interface HomeOptions {
   /** Firebase UID of the person who may see and drive this home. */
@@ -53,7 +53,7 @@ export function createHomeConfiguration(options: HomeOptions): CoordinatorConfig
     // miakapp.yaml can never exceed it.
     stateAccess: [{
       userId: options.ownerUserId,
-      patterns: ['climate.salon.*', 'service.coordinator.health', 'zone.salon.*'],
+      patterns: ['climate.living_room.*', 'service.coordinator.health', 'zone.living_room.*'],
     }],
 
     events: [{ topic: EVENT_LIGHT_CHANGED, directions: EventDirection.publishToUsers }],

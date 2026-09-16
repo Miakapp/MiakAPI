@@ -44,9 +44,9 @@ describe('declarations', () => {
     // Mirrors miakapp.yaml requires.state_read. If one moves, this test fails
     // before the relay silently withholds a path the interface expects.
     const required = [
-      'climate.salon.temperature',
+      'climate.living_room.temperature',
       'service.coordinator.health',
-      'zone.salon.light.on',
+      'zone.living_room.light.on',
     ];
     for (const path of required) {
       const covered = granted.some((pattern) => pattern.endsWith('.*')
