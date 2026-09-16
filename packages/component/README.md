@@ -15,11 +15,11 @@ This package is that bridge, typed.
 import { defineComponent, ui } from '@miakapp/component';
 
 defineComponent((home) => ({
-  render: () => ui.screen({ title: 'Salon' }, [
+  render: () => ui.screen({ title: 'Living room' }, [
     ui.toggle({
       id: 'lamp',
-      label: 'Lampe du salon',
-      value: home.state.get('zone.salon.light.on') === true,
+      label: 'Living-room lamp',
+      value: home.state.get('zone.living_room.light.on') === true,
       onChange: (on) => void home.call('lighting.set', { on }),
     }),
   ]),
@@ -106,7 +106,7 @@ There is no URL property anywhere. Images and camera surfaces are named by exact
 granted handles:
 
 ```ts
-ui.media({ id: 'door', label: 'Caméra d’entrée', handle: 'media.front_door' })
+ui.media({ id: 'door', label: 'Front-door camera', handle: 'media.front_door' })
 ```
 
 Handlers may be callbacks or handler IDs. A callback is registered for the

@@ -28,7 +28,7 @@ function screenOf(node: unknown): UiNode {
 
 describe('handshake', () => {
   test('guest.ready is sent before any other work', () => {
-    const { broker } = mount(() => ({ render: () => ui.screen({ title: 'Salon' }) }));
+    const { broker } = mount(() => ({ render: () => ui.screen({ title: 'Living room' }) }));
     expect(broker.kinds()).toEqual(['guest.ready']);
     expect(broker.last('guest.ready').payload).toEqual({ abi: 'miakapp.component/1' });
   });
@@ -37,7 +37,7 @@ describe('handshake', () => {
     let setups = 0;
     const { broker } = mount(() => {
       setups += 1;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     expect(setups).toBe(0);
     broker.boot();
@@ -45,13 +45,13 @@ describe('handshake', () => {
   });
 
   test('the first render is revision one and its root is a screen', async () => {
-    const { broker, handle } = mount(() => ({ render: () => ui.screen({ title: 'Salon' }) }));
+    const { broker, handle } = mount(() => ({ render: () => ui.screen({ title: 'Living room' }) }));
     broker.boot();
     await handle.ready;
     const render = broker.last('ui.render');
     expect(render.payload['revision']).toBe(1);
     expect(screenOf(render.payload['tree']).type).toBe('screen');
-    expect(screenOf(render.payload['tree']).props['title']).toBe('Salon');
+    expect(screenOf(render.payload['tree']).props['title']).toBe('Living room');
   });
 
   test('render revisions are contiguous', () => {
@@ -79,7 +79,7 @@ describe('state', () => {
     const { broker } = mount((home) => ({
       render: () => {
         seen = home.state.get('zone.alpha.light.on');
-        return ui.screen({ title: 'Salon' });
+        return ui.screen({ title: 'Living room' });
       },
     }));
     broker.boot({}, { 'zone.alpha.light.on': false });
@@ -97,7 +97,7 @@ describe('state', () => {
     const { broker } = mount((home) => ({
       render: () => {
         present = home.state.has('zone.alpha.light.on');
-        return ui.screen({ title: 'Salon' });
+        return ui.screen({ title: 'Living room' });
       },
     }));
     broker.boot({}, { 'zone.alpha.light.on': false });
@@ -114,7 +114,7 @@ describe('state', () => {
     const { broker } = mount((home) => ({
       render: () => {
         stale = home.state.stale;
-        return ui.screen({ title: 'Salon' });
+        return ui.screen({ title: 'Living room' });
       },
     }));
     broker.boot({}, { 'climate.zone.temperature': 19 });
@@ -130,7 +130,7 @@ describe('state', () => {
       render: () => {
         temperature = home.state.get('climate.zone.temperature');
         stale = home.state.stale;
-        return ui.screen({ title: 'Salon' });
+        return ui.screen({ title: 'Living room' });
       },
     }));
     broker.boot({}, { 'climate.zone.temperature': 19 });
@@ -150,10 +150,10 @@ describe('interaction', () => {
   test('a toggle handler receives the boolean and the tree recommits', () => {
     const received: boolean[] = [];
     const { broker } = mount(() => ({
-      render: () => ui.screen({ title: 'Salon' }, [
+      render: () => ui.screen({ title: 'Living room' }, [
         ui.toggle({
           id: 'lamp',
-          label: 'Lampe',
+          label: 'Lamp',
           value: false,
           onChange: (value) => void received.push(value),
         }),
@@ -174,8 +174,8 @@ describe('interaction', () => {
   test('a button handler is called without a value', () => {
     let presses = 0;
     const { broker } = mount(() => ({
-      render: () => ui.screen({ title: 'Salon' }, [
-        ui.button({ id: 'go', label: 'Allumer', onPress: () => void (presses += 1) }),
+      render: () => ui.screen({ title: 'Living room' }, [
+        ui.button({ id: 'go', label: 'Turn on', onPress: () => void (presses += 1) }),
       ]),
     }));
     broker.boot();
@@ -191,8 +191,8 @@ describe('interaction', () => {
   test('an interaction for a stale render is ignored', () => {
     let presses = 0;
     const { broker } = mount(() => ({
-      render: () => ui.screen({ title: 'Salon' }, [
-        ui.button({ id: 'go', label: 'Allumer', onPress: () => void (presses += 1) }),
+      render: () => ui.screen({ title: 'Living room' }, [
+        ui.button({ id: 'go', label: 'Turn on', onPress: () => void (presses += 1) }),
       ]),
     }));
     broker.boot();
@@ -211,7 +211,7 @@ describe('calls', () => {
     let home: Home | undefined;
     const { broker } = mount((instance) => {
       home = instance;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     broker.boot();
     const pending = (home as Home).call('lighting.set', { on: true });
@@ -228,7 +228,7 @@ describe('calls', () => {
     let home: Home | undefined;
     const { broker } = mount((instance) => {
       home = instance;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     broker.boot();
     const pending = (home as Home).call('lighting.set', { on: true });
@@ -250,7 +250,7 @@ describe('calls', () => {
     let home: Home | undefined;
     const { broker } = mount((instance) => {
       home = instance;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     broker.boot();
     const pending = (home as Home).call('lighting.set', { on: true });
@@ -263,7 +263,7 @@ describe('calls', () => {
     let home: Home | undefined;
     const { broker } = mount((instance) => {
       home = instance;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     broker.boot();
     const stream = (home as Home).stream('lighting.set', null);
@@ -291,7 +291,7 @@ describe('calls', () => {
     let home: Home | undefined;
     const { broker } = mount((instance) => {
       home = instance;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     broker.boot({ staging: true });
     expect(broker.of('ui.render')).toHaveLength(1);
@@ -306,7 +306,7 @@ describe('events', () => {
     let home: Home | undefined;
     const { broker } = mount((instance) => {
       home = instance;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     broker.boot();
     const received: unknown[] = [];
@@ -348,7 +348,7 @@ describe('lifecycle', () => {
     const { broker, handle } = mount((instance) => {
       home = instance;
       return {
-        render: () => ui.screen({ title: 'Salon' }),
+        render: () => ui.screen({ title: 'Living room' }),
         dispose: () => void (disposed = true),
       };
     });
@@ -364,7 +364,7 @@ describe('lifecycle', () => {
     let home: Home | undefined;
     const { broker } = mount((instance) => {
       home = instance;
-      return { render: () => ui.screen({ title: 'Salon' }) };
+      return { render: () => ui.screen({ title: 'Living room' }) };
     });
     broker.boot();
     broker.deliver('lifecycle.dispose', {});
@@ -405,7 +405,7 @@ describe('render rate', () => {
 
 describe('bridge hygiene', () => {
   test('reserved runtime messages are ignored, never answered', () => {
-    const { broker } = mount(() => ({ render: () => ui.screen({ title: 'Salon' }) }));
+    const { broker } = mount(() => ({ render: () => ui.screen({ title: 'Living room' }) }));
     broker.boot();
     const before = broker.sent.length;
     broker.deliver('runtime.probe', { challenge: 1 });
@@ -413,15 +413,15 @@ describe('bridge hygiene', () => {
   });
 
   test('an unknown broker kind is ignored rather than fatal', () => {
-    const { broker } = mount(() => ({ render: () => ui.screen({ title: 'Salon' }) }));
+    const { broker } = mount(() => ({ render: () => ui.screen({ title: 'Living room' }) }));
     broker.boot();
     expect(() => broker.deliver('ui.something_new', { a: 1 })).not.toThrow();
   });
 
   test('no message carries an undefined property', () => {
     const { broker } = mount(() => ({
-      render: () => ui.screen({ title: 'Salon' }, [
-        ui.button({ id: 'go', label: 'Allumer', onPress: () => undefined }),
+      render: () => ui.screen({ title: 'Living room' }, [
+        ui.button({ id: 'go', label: 'Turn on', onPress: () => undefined }),
         ui.text({ id: 'hint', text: 'Sans ton ni emphase' }),
         ui.input({ id: 'name', label: 'Nom', value: '', onChange: () => undefined }),
       ]),

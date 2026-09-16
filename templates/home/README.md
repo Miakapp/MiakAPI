@@ -38,7 +38,7 @@ nothing and catches the artifact rules the runtime would reject anyway.
 To run the coordinator against a real home:
 
 ```bash
-export MIAKAPP_COORDINATOR_NAME=salon
+export MIAKAPP_COORDINATOR_NAME=living-room
 export MIAKAPP_CONTROL_PLANE_EXCHANGE_ENDPOINT=https://control.miakapp.app/v1/access-tokens:exchange
 export MIAKAPP_OWNER_USER_ID=<your Firebase UID>
 export MIAKAPP_HOME_KEY="$(your-secret-manager read miakapp/home-key)"

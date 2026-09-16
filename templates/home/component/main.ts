@@ -9,10 +9,10 @@
  */
 import { defineComponent, ui, type StructuredValue } from '@miakapp/component';
 
-const LIGHT_ON = 'zone.salon.light.on';
-const TEMPERATURE = 'climate.salon.temperature';
+const LIGHT_ON = 'zone.living_room.light.on';
+const TEMPERATURE = 'climate.living_room.temperature';
 const HEALTH = 'service.coordinator.health';
-const LIGHT_CHANGED = 'zone.salon.light.changed';
+const LIGHT_CHANGED = 'zone.living_room.light.changed';
 
 function asBoolean(value: StructuredValue | undefined): boolean {
   return value === true;
@@ -40,7 +40,7 @@ defineComponent((home) => {
     } catch (error) {
       // Deliberately not retried. The call may already have reached the lamp,
       // and the next state snapshot settles the question.
-      failure = error instanceof Error ? error.message : 'La commande a échoué';
+      failure = error instanceof Error ? error.message : 'The command failed';
     } finally {
       pending = false;
       home.invalidate();
@@ -58,11 +58,11 @@ defineComponent((home) => {
       const temperature = asNumber(home.state.get(TEMPERATURE));
       const healthy = home.state.get(HEALTH) === 'healthy';
 
-      return ui.screen({ title: 'Salon' }, [
-        ui.section({ id: 'lights', heading: 'Lumières' }, [
+      return ui.screen({ title: 'Living room' }, [
+        ui.section({ id: 'lights', heading: 'Lights' }, [
           ui.toggle({
-            id: 'salon-light',
-            label: 'Lampe du salon',
+            id: 'living-room-light',
+            label: 'Living-room lamp',
             value: asBoolean(home.state.get(LIGHT_ON)),
             disabled: home.staging || !healthy,
             pending,
@@ -70,15 +70,15 @@ defineComponent((home) => {
           }),
           ui.status({
             id: 'light-status',
-            label: 'État',
+            label: 'Status',
             state: lightState(),
             ...(failure === undefined ? {} : { detail: failure }),
           }),
         ]),
 
-        ui.section({ id: 'climate', heading: 'Climat' }, [
+        ui.section({ id: 'climate', heading: 'Climate' }, [
           temperature === undefined
-            ? ui.text({ id: 'temperature', text: 'Température indisponible', tone: 'muted' })
+            ? ui.text({ id: 'temperature', text: 'Temperature unavailable', tone: 'muted' })
             : ui.text({
               id: 'temperature',
               text: `${temperature.toFixed(1)} °C`,
@@ -87,8 +87,8 @@ defineComponent((home) => {
           ui.text({
             id: 'temperature-note',
             text: home.state.stale
-              ? 'Valeur peut-être périmée, en attente d’un instantané.'
-              : `Relevé à la révision ${home.state.revision}.`,
+              ? 'Value may be stale; waiting for a snapshot.'
+              : `Reading at revision ${home.state.revision}.`,
             tone: home.state.stale ? 'warning' : 'muted',
           }),
         ]),
@@ -96,7 +96,7 @@ defineComponent((home) => {
         ...(home.staging
           ? [ui.text({
             id: 'staging-note',
-            text: 'Version en pré-activation : l’affichage fonctionne, les commandes non.',
+            text: 'Pre-activation version: display works; controls do not.',
             tone: 'warning',
           })]
           : []),

@@ -1,7 +1,7 @@
 import type { CliHost, FileSystem } from '../../src/main.js';
 import type { FetchLike } from '../../src/internal/http.js';
 
-export const PROJECT_ROOT = '/home/mathieu/lumiere';
+export const PROJECT_ROOT = '/home/tester/light-project';
 
 export const ARTIFACT_SOURCE = "self.addEventListener('fetch', function () {});\n";
 

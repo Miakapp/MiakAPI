@@ -145,8 +145,8 @@ Four declarations:
 
 ```ts
 {
-  state:        { 'zone.salon.light.on': false },   // paths and initial values
-  stateAccess:  [{ userId, patterns: ['zone.salon.*'] }],
+  state:        { 'zone.living_room.light.on': false },   // paths and initial values
+  stateAccess:  [{ userId, patterns: ['zone.living_room.*'] }],
   events:       [{ topic, directions: EventDirection.publishToUsers }],
   eventAccess:  [{ userId, publish: [], subscribe: [topic] }],
   functions:    { async 'lighting.set'(call) { /* authorize, act, return */ } },
@@ -201,8 +201,8 @@ Handlers are functions, not identifiers to wire up by hand:
 
 ```ts
 ui.toggle({
-  id: 'salon-light',
-  label: 'Lampe du salon',
+  id: 'living-room-light',
+  label: 'Living-room lamp',
   value: asBoolean(home.state.get(LIGHT_ON)),
   disabled: home.staging || !healthy,
   pending,
@@ -238,7 +238,7 @@ try {
 } catch (error) {
   // Deliberately not retried. The call may already have reached the lamp,
   // and the next state snapshot settles the question.
-  failure = error instanceof Error ? error.message : 'La commande a échoué';
+  failure = error instanceof Error ? error.message : 'The command failed';
 }
 ```
 
