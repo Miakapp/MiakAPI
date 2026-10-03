@@ -129,7 +129,7 @@ export interface Invocation {
   readonly positional: readonly string[];
 }
 
-const USAGE = `miakapp ${CLI_VERSION} — build, publish and roll back a Miakapp home component
+const USAGE = `miakapp ${CLI_VERSION} — build, publish and roll back a Miakapp home interface
 
 Usage
   miakapp <command> [options]
@@ -156,6 +156,7 @@ Commands
   version                 Print the CLI version
 
 Common options
+  --help, -h              Print this guide without running the command
   --json                  Print one machine-readable object on stdout
   --project <dir>         Start the ${PROJECT_FILE} search here (default: cwd)
   --context <name>        Use this stored context (status, publish, activate,
@@ -172,7 +173,7 @@ pair options
 publish options
   --expected-generation <n>   Generation the pointer holds (default: read live)
   --generation <n>            Generation to publish (default: expected + 1)
-  --release <name>            Override component.release from ${PROJECT_FILE}
+  --release <name>            Override app.release or component.release from ${PROJECT_FILE}
 
 activate / rollback options
   --sha256 <digest>           Finalized artifact digest (required)
@@ -193,7 +194,9 @@ agent-pack options
 init options
   --home <homeId>             Home ID (default: from the selected context)
   --control-plane <https url> Control-plane issuer (default: from the context)
-  --artifact <path>           Built artifact path (default: dist/component.js)
+  --kind <app|component>      Interface kind (default: app)
+  --artifact <path>           Built artifact path (default: dist/app.js for app,
+                              dist/component.js for component)
   --release <name>            Initial release name (default: 0.1.0)
 
 Credentials, highest precedence first
@@ -213,7 +216,7 @@ Exit codes
   4 authorization  5 contract     6 conflict     7 unknown outcome
 `;
 
-const GLOBAL_FLAGS = ['json'] as const;
+const GLOBAL_FLAGS = ['json', 'help'] as const;
 const GLOBAL_OPTIONS = ['project'] as const;
 
 /** Exported so the MCP surface can be proved to expose every option, and no other. */
@@ -265,6 +268,10 @@ export function parseArguments(argv: readonly string[]): Invocation {
 
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index] as string;
+    if (argument === '-h') {
+      flags.add('help');
+      continue;
+    }
     if (!argument.startsWith('--')) {
       positional.push(argument);
       continue;
@@ -296,7 +303,7 @@ export function parseArguments(argv: readonly string[]): Invocation {
     options.set(name, value);
     index += 1;
   }
-  return { command, options, flags, positional };
+  return { command: flags.has('help') ? 'help' : command, options, flags, positional };
 }
 
 function requiredOption(invocation: Invocation, name: string): string {

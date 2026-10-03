@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { EXIT_CODE } from '../src/errors.js';
-import { HOME_KEY_VARIABLE, guideAssetPath, parseArguments, run } from '../src/main.js';
+import { COMMAND_OPTIONS, HOME_KEY_VARIABLE, guideAssetPath, parseArguments, run } from '../src/main.js';
 import { CLI_VERSION } from '../src/version.js';
 import { digestOf, fakeControlPlane, homeKey } from './support/control-plane.js';
 import {
@@ -45,6 +45,34 @@ describe('argument parsing', () => {
 });
 
 describe('offline commands', () => {
+  test('every command supports help without reading secrets, project files or the network', async () => {
+    for (const command of Object.keys(COMMAND_OPTIONS)) {
+      for (const flag of ['--help', '-h']) {
+        const files = new MemoryFiles();
+        const host = testHost({ files, fetch: async () => { throw new Error('network used'); } });
+        let secretReads = 0;
+        expect(await run([command, flag, '--json'], {
+          ...host,
+          readSecret: async () => { secretReads += 1; throw new Error('secret prompt used'); },
+        })).toBe(EXIT_CODE.success);
+        expect(host.json()['usage']).toContain('--kind <app|component>');
+        expect(host.json()['usage']).toContain('default: dist/app.js for app');
+        expect(host.stderr()).toBe('');
+        expect(secretReads).toBe(0);
+        expect(files.entries.size).toBe(0);
+      }
+    }
+  });
+
+  test('context removal help preserves existing project files', async () => {
+    const files = standardProject();
+    const before = [...files.entries];
+    const host = testHost({ files });
+    expect(await run(['context', 'remove', 'home', '--help'], host)).toBe(EXIT_CODE.success);
+    expect([...files.entries]).toEqual(before);
+    expect(host.stdout()).toContain('Commands');
+  });
+
   test('version prints the package version', async () => {
     const host = testHost();
     expect(await run(['version'], host)).toBe(EXIT_CODE.success);
