@@ -10,6 +10,42 @@ Everything below is true of the code in this repository. Where a rule exists for
 a reason that is not obvious, the reason is given, because a rule whose purpose
 you cannot see is one you will optimize away.
 
+## 0. What "done" means
+
+The owner asked for a home they can use, not for a picture of one. You are done
+when the household can open the published interface, read real values from it
+and use every control the owner authorized — and you checked that yourself.
+Concretely:
+
+- **Publish, then verify.** A build that only runs on your machine, a mockup, a
+  prototype kept offline or a screenshot is an intermediate result, never the
+  deliverable. Do not stop to show one and ask whether to continue: the owner
+  asked for the home, and publication is reversible in one command (§8).
+- **Hand over a link that works.** Give the owner the Miakapp app address where
+  the home appears for its members, and say what you verified there. The `url`
+  that `miakapp publish` prints is the raw component bytes, not an interface:
+  never send it as "the link". If you cannot open the app yourself, say exactly
+  that, and what `miakapp status` proved instead.
+- **Ask once, at the start, and only for what you cannot find.** Access comes
+  from pairing (§9), the existing installation from inventory (§3). Repeated
+  permission questions in the middle of the work are a failure of the work.
+- **You need nothing from the platform's source.** This guide, the CLI, the
+  public packages and `templates/home` are the whole toolchain. Never edit or
+  redeploy the Miakapp platform to make one house work; if a capability is
+  missing, report it to the owner as missing instead of patching around it.
+
+Two scopes must not be confused:
+
+| In scope by default | Needs the owner's explicit, separate request |
+| --- | --- |
+| reading the existing installation (§3) | changing flows, automations, brokers or devices that already run the house |
+| writing and testing a coordinator and a component | granting a physical action (heat, lock, unlock, open, close) that the owner has not named |
+| publishing, verifying and rolling back the V4 interface | anything on the owner's own machines beyond the coordinator you were asked to run |
+
+Caution about the second column is not a reason to withhold the first. A new V4
+interface that only reads is still a useful, publishable V1; say plainly which
+controls are not offered and why.
+
 ## 1. What you are building
 
 Three artifacts, and no more:
@@ -93,6 +129,37 @@ before you design anything:
 Write down what you found before you write the configuration. The state paths you
 choose become a disclosure boundary and a public interface at the same time, and
 renaming one after the household has used it is not free.
+
+### The inventory comes before the design
+
+Commit the inventory as `docs/inventory.md` in the home repository, one line per
+datum or action, before you design a single screen:
+
+| Field | Example |
+| --- | --- |
+| source | `zigbee2mqtt/salon_thermo` over the house broker |
+| what it is | temperature, °C, one decimal |
+| how fresh | reports every ~60 s; last seen 2 min ago |
+| who may read it | every member / owner only |
+| command | none — a measurement, not a control |
+
+Then design **from** it: the V1 shows every datum the household would care
+about and every action that is both technically possible and authorized,
+grouped the way people live in the house — by room or by use, not by device
+or protocol. Anything you leave out, leave out on purpose, and say why in the
+inventory. A V1 that shows three values when the house reports twenty is not a
+first version; it is an unfinished one.
+
+What the interface must never do:
+
+- **invent data.** A value with no source is shown as absent, never filled in
+  with a plausible number or a demo fixture;
+- **blur freshness.** Distinguish *current*, *stale* (with its age) and
+  *unavailable* for every value, in words a resident understands;
+- **spend space on plumbing.** No protocol or platform vocabulary
+  (`ACCEPTED`, "relay connected", ABI, schema names, IDs), no banner restating
+  that a view is read-only, no title repeating the home's name on every card.
+  Every line of text is either information or an action.
 
 ### Reading a V3 house you inherited
 
@@ -305,24 +372,33 @@ writes no history, rewrites no source it did not generate, and invents no
 control-plane endpoint. The repository is the owner's.
 
 ```bash
-miakapp agent-pack                                             # once, per repository
-miakapp init --home <homeId> --control-plane <https url>
+miakapp docs start                             # this guide, from the installed CLI
+miakapp pair                                   # once per home and machine (§9)
+miakapp agent-pack                             # once, per repository
+miakapp init                                   # home and issuer come from the paired context
 miakapp check
-miakapp publish  --expected-generation <n>
-miakapp activate --sha256 <digest> --expected-generation <n>
-miakapp rollback --sha256 <digest> --expected-generation <n>   # alias of activate
+miakapp status                                 # what is live now: generation, release, digest
+miakapp publish                                # upload, finalize, activate
+miakapp status                                 # verify the new digest is what is live
+miakapp activate --sha256 <digest>             # promote an already finalized digest
+miakapp rollback --sha256 <digest>             # alias of activate
 miakapp release <sha256>      # read one finalized release
 miakapp upload  <uploadId>    # reconcile a lost request
 ```
 
-`--expected-generation` is a compare-and-swap on the home's component pointer: the
-generation you believe it currently holds. It is `0` for a home that has never
-published. It is required, and it is what stops two agents from silently
-overwriting each other.
+Activation is a compare-and-set on the home's component pointer. Without
+`--expected-generation` the CLI reads the live generation first and activates
+the next one; the read takes no lock, so another publication landing in between
+still fails with `conflict` instead of being overwritten. Pass
+`--expected-generation <n>` when you want to assert the state you reviewed.
 
 Rollback is `activate` pointed at a digest you already trust. Keep the digest of
 every release you shipped; a rollback you can perform in one command is worth
 more than an incident you can explain.
+
+`miakapp status` after `publish` is the minimum verification: the live `sha256`
+must be the one you just built. It proves what the home runs, not that the
+interface is right — open it as a member would before telling the owner it works.
 
 ### Driving the CLI as a program
 
@@ -366,22 +442,68 @@ Three differences are worth knowing before you call anything:
 `packages/cli/README.md` lists the tools. The exit codes above are the
 `exit_code` field in every result, so branch on the same table either way.
 
-## 9. Secrets
+## 9. Access: pairing and contexts
 
-`MIAKAPP_HOME_KEY` comes from the environment. It is never a command-line
-argument, never printed, never written into a project file. No command accepts
-one, deliberately: an argument lands in shell history, in a process listing and
-in most CI logs.
+You never sign in as the owner and never ask for a password, a Google login or
+an existing key. The owner grants access to one home, in their own browser:
+
+1. Ask the owner to open **https://miakapp.com/pair**, sign in to their own
+   account, choose the home (or create it), confirm the access it grants, and
+   send you the one-time code it shows. A code works once, for ten minutes.
+2. Redeem it. The code is read from stdin and never echoed:
+
+   ```bash
+   printf '%s\n' "<code>" | miakapp pair            # add --issuer <url> if the page shows one
+   ```
+
+   Over MCP, call `miakapp_pair` with `code`. Never repeat the code back in a
+   message, and never retry a refused code — ask for a new one.
+3. `pair` stores a **new, separately revocable** Home Key for this machine as a
+   context in `~/.miakapp`, keeps every other context, makes the new one
+   current, and proves the key can publish. It prints the key ID and label,
+   never the key.
 
 ```bash
-export MIAKAPP_HOME_KEY="$(your-secret-manager read miakapp/home-key)"
+miakapp context list          # every home this machine can publish to
+miakapp context show [name]   # one context; the key is never printed
+miakapp context use <name>    # make a context current
+miakapp context remove <name> # delete it locally (the owner revokes it server-side)
 ```
 
-If you are about to write a secret into `miakapp.yaml` so something works, stop:
-that is the failure this design exists to prevent.
+`~/.miakapp/config.json` holds names, homes, issuers and key IDs;
+`credentials.json` holds the keys. Both are mode 0600 in a 0700 directory and
+are replaced atomically; the CLI refuses a credentials file other accounts can
+read. `MIAKAPP_CONFIG_DIR` relocates the directory.
+
+Which key a command uses, highest precedence first:
+
+1. `--context <name>`, then `MIAKAPP_CONTEXT=<name>`;
+2. `MIAKAPP_HOME_KEY`, a raw key for CI and compatibility;
+3. the stored context paired with the home and issuer in `miakapp.yaml` — the
+   current context breaks a tie between two keys for that same home.
+
+A context, or a known key, for a different home than `miakapp.yaml` names is
+refused before any request: a key can never publish into the wrong house.
+
+Prefer one key per agent or machine, so the owner can revoke one without
+breaking the others. A coordinator running on the owner's machine still reads
+its own key from its environment (`templates/home/README.md`).
+
+If you are about to write a secret into `miakapp.yaml` or any file in the
+repository so something works, stop: that is the failure this design exists to
+prevent.
 
 ## 10. Before you tell the owner you are done
 
+- [ ] `docs/inventory.md` lists every source, datum and action you found, and
+      the interface covers it or says why not.
+- [ ] Every value shows whether it is current, stale or unavailable; nothing is
+      invented, and no technical vocabulary is on screen.
+- [ ] The interface is published, `miakapp status` shows your digest live, and
+      you opened it as a member would — or you say precisely what you could not
+      check.
+- [ ] The owner received a working link and the rollback digest, not a
+      screenshot or a mockup.
 - [ ] Every physically consequential function authorizes its caller on its first
       line, and a test proves an unauthorized caller is refused.
 - [ ] Every name in `miakapp.yaml` is covered by the coordinator, and a test
@@ -390,10 +512,15 @@ that is the failure this design exists to prevent.
 - [ ] No call path retries an unknown outcome.
 - [ ] State is written before its event is published.
 - [ ] `bun run check` is green, and CI ran it — not just you.
-- [ ] The Home Key exists only in the environment.
+- [ ] The Home Key exists only in `~/.miakapp` or the environment, never in the
+      repository.
 - [ ] You recorded the digest of what you published, so rollback is one command.
 
 ## Where to read further
+
+Everything a home needs is above, in the CLI and in the template. The RFCs and
+platform paths below explain *why* the platform behaves as it does; you never
+need them, or the platform repository, to build and publish a home.
 
 - `packages/cli/README.md` — every command and every tool, including what the
   pack writes and what it refuses to overwrite.

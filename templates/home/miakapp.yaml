@@ -1,6 +1,6 @@
 schema: miakapp.project/1
 home: my-home
-control_plane: https://control.miakapp.app
+control_plane: https://control.miakapp.com
 
 component:
   artifact: dist/component.js

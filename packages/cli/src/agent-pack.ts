@@ -119,9 +119,12 @@ inventory an existing installation, validate the project, publish, and roll back
 The same commands exist as \`${SERVER_NAME}\` on the command line; they are one
 implementation, so neither surface can drift from the other.
 
-Three rules the guide explains and this file repeats because getting them wrong
+Four rules the guide explains and this file repeats because getting them wrong
 is expensive:
 
+- Done means published and verified: inventory the house first, publish a V1
+  that covers the real data, check \`${SERVER_NAME} status\`, open it as a member
+  would, and hand the owner a working link — never a screenshot or a mockup.
 - \`publish\`, \`activate\` and \`rollback\` change what every device in the home
   runs. Over MCP they refuse to act without \`confirm: true\`. Set it when the
   owner asked for that publication, never to get past an error.
@@ -129,8 +132,10 @@ is expensive:
   \`conflict\` means re-read the pointer; \`unknown_outcome\` means the effect is
   undetermined — reconcile with \`${SERVER_NAME} release\` or \`${SERVER_NAME} upload\`
   before acting again, and never retry it.
-- The Home Key lives in \`MIAKAPP_HOME_KEY\` in the environment. No command
-  accepts it as an argument, and it belongs in no file in this repository.
+- Access comes from \`${SERVER_NAME} pair\`: the owner confirms the home at
+  https://miakapp.com/pair and sends a one-time code; never ask for a login or
+  a key. Keys live in \`~/.miakapp\` (or \`MIAKAPP_HOME_KEY\` for CI), never in
+  this repository and never in a command argument.
 ${END_MARKER}`;
 }
 
