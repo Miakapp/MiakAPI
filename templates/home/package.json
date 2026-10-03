@@ -1,7 +1,7 @@
 {
   "name": "miakapp-home-template",
   "version": "0.1.0",
-  "description": "Starting point for a Miakapp home: a coordinator, a component and a project file",
+  "description": "Starting point for a Miakapp home: a coordinator, a whole-house application and a project file",
   "type": "module",
   "private": true,
   "engines": {
@@ -9,15 +9,17 @@
     "node": ">=22.9"
   },
   "scripts": {
-    "build": "bun build component/main.ts --format=iife --minify --outfile dist/component.js",
+    "build": "bun build app/main.ts --format=iife --minify --outfile dist/app.js",
     "check": "bun run typecheck && bun run build && bun run test && bun run check:artifact",
-    "check:artifact": "miakapp check",
+    "check:artifact": "node ./node_modules/@miakapp/cli/bin/miakapp.js check",
     "dev": "bun run coordinator/main.ts",
-    "publish:home": "bun run build && miakapp publish --expected-generation 0",
+    "publish:home": "bun run build && node ./node_modules/@miakapp/cli/bin/miakapp.js publish",
     "test": "bun test test/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:component": "bun build component/main.ts --format=iife --minify --outfile dist/component.js"
   },
   "dependencies": {
+    "@miakapp/app": "file:../../packages/app",
     "@miakapp/component": "file:../../packages/component",
     "miakapi": "file:../.."
   },

@@ -13,6 +13,15 @@ const PRESENTATION_HANDLE = /^media\.[^.]/;
 /** RFC 0002 §7.1 caps the artifact at 2 MiB decoded. */
 export const MAXIMUM_ARTIFACT_BYTES = 2_097_152;
 
+/** RFC 0002 semantic component and whole-house application (house-app ABI spec). */
+export const COMPONENT_ABI = 'miakapp.component/1';
+export const APP_ABI = 'miakapp.app/1';
+export type ReleaseAbi = typeof COMPONENT_ABI | typeof APP_ABI;
+
+export function isReleaseAbi(value: unknown): value is ReleaseAbi {
+  return value === COMPONENT_ABI || value === APP_ABI;
+}
+
 /** RFC 0002 §10 aborts tokenization beyond this program ceiling. */
 export const MAXIMUM_PROGRAM_TOKENS = 100_000;
 

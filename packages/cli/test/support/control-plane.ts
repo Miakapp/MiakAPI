@@ -24,6 +24,7 @@ interface Upload {
   readonly uploadId: string;
   readonly token: string;
   readonly release: string;
+  readonly abi: string;
   readonly sha256: string;
   readonly size: number;
   readonly requires: unknown;
@@ -36,6 +37,10 @@ export interface FakeControlPlaneOptions {
   readonly generation?: number;
   /** Forces one response, by exact `${method} ${path}` key, for failure tests. */
   readonly fail?: ReadonlyMap<string, { status: number; code: string }>;
+  /** Replaces the pairing redeem response, for contract-violation tests. */
+  readonly pairingResponse?: (issued: { homeKey: string; homeId: string; keyId: string }) => Response;
+  /** Optional discovery members a newer control plane advertises. */
+  readonly discoveryExtras?: Readonly<Record<string, string>>;
 }
 
 export interface FakeControlPlane {
@@ -44,6 +49,13 @@ export interface FakeControlPlane {
   generation: number;
   readonly uploads: Map<string, Upload>;
   readonly releases: Map<string, { release: string; sha256: string; size: number; requires: unknown }>;
+  /** One-time pairing codes still redeemable, mapped to the home they open. */
+  readonly pairingCodes: Map<string, string>;
+  /** Every pairing redeem body received, to prove what the CLI sent. */
+  readonly pairingRequests: Array<{ code: string; label: string }>;
+  /** Every Home Key presented to the token exchange. */
+  readonly exchangedKeys: string[];
+  active: { release: string; sha256: string; size: number; requires: unknown } | undefined;
 }
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -74,6 +86,10 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
     generation: options.generation ?? 0,
     uploads: new Map(),
     releases: new Map(),
+    pairingCodes: new Map(),
+    pairingRequests: [],
+    exchangedKeys: [],
+    active: undefined,
   };
 
   async function handle(input: string, init: RequestInit): Promise<Response> {
@@ -93,6 +109,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         user_relay_exchange_endpoint: `${ISSUER}/v1/user-relay-tokens:exchange`,
         push_audience: `${ISSUER}/v1/push`,
         components_audience: `${ISSUER}/v1/components`,
+        ...options.discoveryExtras,
       });
     }
 
@@ -100,6 +117,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
       const authorization = (init.headers as Record<string, string>)['authorization'] ?? '';
       const keyId = /^Bearer mhk1_([A-Za-z0-9_-]{22})_/.exec(authorization)?.[1];
       if (keyId === undefined) return failure(401, 'invalid_home_key');
+      plane.exchangedKeys.push(authorization.slice('Bearer '.length));
       return json(200, {
         schema: 'miakapp.access-token/1',
         access_token: 'header.payload.signature',
@@ -113,12 +131,46 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
       });
     }
 
+    if (key === 'POST /v1/pairing/redeem') {
+      const body = JSON.parse(String(init.body)) as { code: string; label: string };
+      plane.pairingRequests.push(body);
+      const homeId = plane.pairingCodes.get(body.code);
+      if (homeId === undefined) return failure(410, 'invalid_pairing_code');
+      plane.pairingCodes.delete(body.code);
+      const issued = homeKey();
+      const keyId = issued.slice(5, 27);
+      if (options.pairingResponse !== undefined) {
+        return options.pairingResponse({ homeKey: issued, homeId, keyId });
+      }
+      return json(200, { home_key: issued, home_id: homeId, key_id: keyId, issuer: ISSUER }, {
+        'cache-control': 'no-store',
+        pragma: 'no-cache',
+        'referrer-policy': 'no-referrer',
+      });
+    }
+
+    const deliveryMatch = /^\/v1\/component-uploads\/([A-Za-z0-9_-]{22})$/.exec(path);
+    if (method === 'PUT' && deliveryMatch !== null) {
+      const upload = plane.uploads.get(deliveryMatch[1] as string);
+      if (upload === undefined) return failure(404, 'invalid_upload_capability');
+      if ((init.headers as Record<string, string>)['authorization'] !== `Bearer ${upload.token}`) {
+        return failure(403, 'invalid_upload_capability');
+      }
+      const bytes = init.body as Uint8Array;
+      if (digestOf(bytes) !== upload.sha256 || bytes.byteLength !== upload.size) {
+        return failure(422, 'invalid_artifact');
+      }
+      upload.status = 'delivered';
+      return new Response(null, { status: 204 });
+    }
+
     const local = input.startsWith(base) ? input.slice(base.length) : undefined;
     if (local === undefined) return failure(404, 'not_found');
 
     if (method === 'POST' && local === '/component-uploads') {
       const body = JSON.parse(String(init.body)) as {
         release: string;
+        abi: string;
         sha256: string;
         size: number;
         requires: unknown;
@@ -128,6 +180,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         uploadId,
         token: randomSecret(),
         release: body.release,
+        abi: body.abi,
         sha256: body.sha256,
         size: body.size,
         requires: body.requires,
@@ -137,7 +190,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
       return json(201, {
         schema: 'miakapp.component-upload/1',
         upload_id: uploadId,
-        upload_url: `${base}/component-uploads/${uploadId}`,
+        upload_url: `${ISSUER}/v1/component-uploads/${uploadId}`,
         upload_token: upload.token,
         expires_at: new Date(Date.now() + 600_000).toISOString(),
       });
@@ -157,28 +210,27 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
     if (uploadMatch !== null) {
       const upload = plane.uploads.get(uploadMatch[1] as string);
       if (upload === undefined) return failure(404, 'invalid_upload_capability');
-      if (method === 'PUT') {
-        if ((init.headers as Record<string, string>)['authorization']
-          !== `Bearer ${upload.token}`) {
-          return failure(403, 'invalid_upload_capability');
-        }
-        const bytes = init.body as Uint8Array;
-        if (digestOf(bytes) !== upload.sha256 || bytes.byteLength !== upload.size) {
-          return failure(422, 'invalid_artifact');
-        }
-        upload.status = 'delivered';
-        return new Response(null, { status: 204 });
-      }
+      // Like the real control plane, delivery is not served under the home.
+      if (method === 'PUT') return failure(404, 'not_found');
       return json(200, {
         schema: 'miakapp.component-upload-status/1',
         upload_id: upload.uploadId,
         status: upload.status,
         release: upload.release,
-        abi: COMPONENT_ABI,
+        abi: upload.abi,
         sha256: upload.sha256,
         size: upload.size,
         requires: upload.requires,
         expires_at: new Date(Date.now() + 600_000).toISOString(),
+      });
+    }
+
+    if (method === 'GET' && local === '/component-pointer') {
+      const active = plane.active;
+      return json(200, {
+        schema: 'miakapp.component-pointer-state/1',
+        generation: plane.generation,
+        pointer: active === undefined ? null : pointerBody(plane.generation, active),
       });
     }
 
@@ -201,20 +253,28 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         return failure(409, 'generation_conflict');
       }
       plane.generation = body.generation;
-      return json(200, {
-        schema: 'miakapp.component-pointer/1',
-        home_id: options.homeId,
-        generation: body.generation,
-        release: record.release,
-        abi: COMPONENT_ABI,
-        url: `${ISSUER}/v1/components/${record.sha256}.js`,
-        sha256: record.sha256,
-        size: record.size,
-        requires: record.requires,
-      });
+      plane.active = record;
+      return json(200, pointerBody(body.generation, record));
     }
 
     return failure(404, 'not_found');
+  }
+
+  function pointerBody(
+    generation: number,
+    record: { release: string; sha256: string; size: number; requires: unknown; abi?: string },
+  ): unknown {
+    return {
+      schema: 'miakapp.component-pointer/1',
+      home_id: options.homeId,
+      generation,
+      release: record.release,
+      abi: record.abi ?? COMPONENT_ABI,
+      url: `${ISSUER}/v1/components/${record.sha256}.js`,
+      sha256: record.sha256,
+      size: record.size,
+      requires: record.requires,
+    };
   }
 
   function releaseBody(record: {
@@ -222,11 +282,12 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
     sha256: string;
     size: number;
     requires: unknown;
+    abi?: string;
   }): unknown {
     return {
       schema: 'miakapp.component-release/1',
       release: record.release,
-      abi: COMPONENT_ABI,
+      abi: record.abi ?? COMPONENT_ABI,
       sha256: record.sha256,
       size: record.size,
       requires: record.requires,

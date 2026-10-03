@@ -39,21 +39,32 @@ To run the coordinator against a real home:
 
 ```bash
 export MIAKAPP_COORDINATOR_NAME=living-room
-export MIAKAPP_CONTROL_PLANE_EXCHANGE_ENDPOINT=https://control.miakapp.app/v1/access-tokens:exchange
+export MIAKAPP_CONTROL_PLANE_EXCHANGE_ENDPOINT=https://control.miakapp.com/v1/access-tokens:exchange
 export MIAKAPP_OWNER_USER_ID=<your Firebase UID>
 export MIAKAPP_HOME_KEY="$(your-secret-manager read miakapp/home-key)"
 bun run dev
 ```
 
-The Home Key is read from the environment and never written to a file in this
-project. Publishing reads the same variable:
+The coordinator's Home Key is read from its environment and never written to a
+file in this project. Give the coordinator its own key, separate from the one
+you publish with, so either can be revoked alone.
+
+Publishing uses the key `miakapp pair` stored for this home in `~/.miakapp` —
+the owner confirms the home at https://miakapp.com/pair and sends you a
+one-time code — or `MIAKAPP_HOME_KEY` in CI:
 
 ```bash
-bun run publish:home        # bundles, then publishes at generation 1
+printf '%s\n' "<code>" | miakapp pair   # once per home and machine
+bun run publish:home                    # bundles, then publishes the next generation
+miakapp status                          # verify the new digest is live
 ```
 
-`--expected-generation` is the generation you believe the home's component
-pointer currently holds. It is `0` for a home that has never published.
+`miakapp.yaml` names the home. Replace `my-home` with the home ID `pair`
+printed (or write the file with `miakapp init`, which takes both values from
+the paired context); a key paired with another home is refused. The CLI reads
+the live generation before activating, and the activation stays a
+compare-and-set, so a concurrent publication fails with `conflict` instead of
+being overwritten.
 
 ## The one rule that ties the three files together
 

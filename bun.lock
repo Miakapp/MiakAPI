@@ -15,9 +15,18 @@
         "typescript": "7.0.2",
       },
     },
+    "packages/app": {
+      "name": "@miakapp/app",
+      "version": "4.0.0-alpha.0",
+      "devDependencies": {
+        "@types/bun": "1.2.23",
+        "@types/node": "22.20.1",
+        "typescript": "7.0.2",
+      },
+    },
     "packages/cli": {
       "name": "@miakapp/cli",
-      "version": "4.0.0-alpha.3",
+      "version": "4.0.0-alpha.5",
       "bin": {
         "miakapp": "./bin/miakapp.js",
       },
@@ -38,6 +47,8 @@
     },
   },
   "packages": {
+    "@miakapp/app": ["@miakapp/app@workspace:packages/app"],
+
     "@miakapp/cli": ["@miakapp/cli@workspace:packages/cli"],
 
     "@miakapp/component": ["@miakapp/component@workspace:packages/component"],

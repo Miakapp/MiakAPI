@@ -1,18 +1,19 @@
 {
-  "name": "@miakapp/cli",
-  "version": "4.0.0-alpha.6",
-  "description": "Agent-first Miakapp command line: check, build, publish, activate and roll back home components",
+  "name": "@miakapp/app",
+  "version": "4.0.0-alpha.0",
+  "description": "Typed SDK for Miakapp whole-house applications (miakapp.app/1): granted state, calls and preferences inside the isolated house frame",
   "type": "module",
   "engines": {
     "bun": ">=1.2.23",
     "node": ">=22.9"
   },
-  "bin": {
-    "miakapp": "bin/miakapp.js"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "files": [
-    "assets",
-    "bin",
     "dist",
     "LICENSE",
     "README.md"
@@ -20,26 +21,24 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "prepack": "bun run build",
     "test": "bun test test/",
     "typecheck": "tsc --noEmit",
-    "check": "bun run typecheck && bun run build && bun run test"
+    "check": "bun run build && bun run typecheck && bun run test"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Miakapp/MiakAPI.git",
-    "directory": "packages/cli"
+    "directory": "packages/app"
   },
   "publishConfig": {
-    "access": "public",
-    "tag": "latest"
+    "access": "public"
   },
   "keywords": [
     "Miakapp",
     "MiakAPI",
-    "cli",
+    "app",
     "smart-home",
-    "components"
+    "iframe"
   ],
   "author": "Mathieu Colmon",
   "license": "ISC",
