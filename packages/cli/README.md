@@ -295,3 +295,10 @@ $ miakapp publish --json
 
 Alpha, tracking Miakapp 4. The package is `private` until the control plane it
 talks to is deployed; publishing it to npm is a deliberate, separate step.
+
+### Command help
+
+Run `miakapp help` or append `--help` / `-h` to any command, including
+`miakapp pair --help`. Help never prompts for a code or executes the command.
+`miakapp init` defaults to a whole-house app at `dist/app.js`; use
+`--kind component` for a semantic component at `dist/component.js`.
