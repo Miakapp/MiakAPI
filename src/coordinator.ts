@@ -282,6 +282,10 @@ class CoordinatorImpl implements
     this.calls.setActiveDeclarations(active);
   }
 
+  restoreDeletions(session: RelaySession, active: ActiveDeclarations, paths: readonly string[]): void {
+    this.state.restoreDeletions(session, active, paths);
+  }
+
   declarationsReady(_receipt: DeclarationReceipt): void {
     const session = this.#session;
     if (session === undefined) return;
