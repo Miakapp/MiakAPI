@@ -36,6 +36,8 @@ export interface FakeControlPlaneOptions {
   readonly generation?: number;
   /** Forces one response, by exact `${method} ${path}` key, for failure tests. */
   readonly fail?: ReadonlyMap<string, { status: number; code: string }>;
+  /** Replaces the pairing redeem response, for contract-violation tests. */
+  readonly pairingResponse?: (issued: { homeKey: string; homeId: string; keyId: string }) => Response;
 }
 
 export interface FakeControlPlane {
@@ -44,6 +46,13 @@ export interface FakeControlPlane {
   generation: number;
   readonly uploads: Map<string, Upload>;
   readonly releases: Map<string, { release: string; sha256: string; size: number; requires: unknown }>;
+  /** One-time pairing codes still redeemable, mapped to the home they open. */
+  readonly pairingCodes: Map<string, string>;
+  /** Every pairing redeem body received, to prove what the CLI sent. */
+  readonly pairingRequests: Array<{ code: string; label: string }>;
+  /** Every Home Key presented to the token exchange. */
+  readonly exchangedKeys: string[];
+  active: { release: string; sha256: string; size: number; requires: unknown } | undefined;
 }
 
 function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
@@ -74,6 +83,10 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
     generation: options.generation ?? 0,
     uploads: new Map(),
     releases: new Map(),
+    pairingCodes: new Map(),
+    pairingRequests: [],
+    exchangedKeys: [],
+    active: undefined,
   };
 
   async function handle(input: string, init: RequestInit): Promise<Response> {
@@ -100,6 +113,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
       const authorization = (init.headers as Record<string, string>)['authorization'] ?? '';
       const keyId = /^Bearer mhk1_([A-Za-z0-9_-]{22})_/.exec(authorization)?.[1];
       if (keyId === undefined) return failure(401, 'invalid_home_key');
+      plane.exchangedKeys.push(authorization.slice('Bearer '.length));
       return json(200, {
         schema: 'miakapp.access-token/1',
         access_token: 'header.payload.signature',
@@ -107,6 +121,24 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         expires_at_ms: Date.now() + 300_000,
         key: { id: keyId, label: 'test publisher' },
       }, {
+        'cache-control': 'no-store',
+        pragma: 'no-cache',
+        'referrer-policy': 'no-referrer',
+      });
+    }
+
+    if (key === 'POST /v1/pairing/redeem') {
+      const body = JSON.parse(String(init.body)) as { code: string; label: string };
+      plane.pairingRequests.push(body);
+      const homeId = plane.pairingCodes.get(body.code);
+      if (homeId === undefined) return failure(410, 'invalid_pairing_code');
+      plane.pairingCodes.delete(body.code);
+      const issued = homeKey();
+      const keyId = issued.slice(5, 27);
+      if (options.pairingResponse !== undefined) {
+        return options.pairingResponse({ homeKey: issued, homeId, keyId });
+      }
+      return json(200, { home_key: issued, home_id: homeId, key_id: keyId, issuer: ISSUER }, {
         'cache-control': 'no-store',
         pragma: 'no-cache',
         'referrer-policy': 'no-referrer',
@@ -182,6 +214,15 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
       });
     }
 
+    if (method === 'GET' && local === '/component-pointer') {
+      const active = plane.active;
+      return json(200, {
+        schema: 'miakapp.component-pointer-state/1',
+        generation: plane.generation,
+        pointer: active === undefined ? null : pointerBody(plane.generation, active),
+      });
+    }
+
     const releaseMatch = /^\/component-releases\/([A-Za-z0-9_-]{43})$/.exec(local);
     if (method === 'GET' && releaseMatch !== null) {
       const record = plane.releases.get(releaseMatch[1] as string);
@@ -201,20 +242,28 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         return failure(409, 'generation_conflict');
       }
       plane.generation = body.generation;
-      return json(200, {
-        schema: 'miakapp.component-pointer/1',
-        home_id: options.homeId,
-        generation: body.generation,
-        release: record.release,
-        abi: COMPONENT_ABI,
-        url: `${ISSUER}/v1/components/${record.sha256}.js`,
-        sha256: record.sha256,
-        size: record.size,
-        requires: record.requires,
-      });
+      plane.active = record;
+      return json(200, pointerBody(body.generation, record));
     }
 
     return failure(404, 'not_found');
+  }
+
+  function pointerBody(
+    generation: number,
+    record: { release: string; sha256: string; size: number; requires: unknown },
+  ): unknown {
+    return {
+      schema: 'miakapp.component-pointer/1',
+      home_id: options.homeId,
+      generation,
+      release: record.release,
+      abi: COMPONENT_ABI,
+      url: `${ISSUER}/v1/components/${record.sha256}.js`,
+      sha256: record.sha256,
+      size: record.size,
+      requires: record.requires,
+    };
   }
 
   function releaseBody(record: {
