@@ -5,6 +5,7 @@ import type {
   EventDeclaration,
   FunctionHandler,
   ProtocolValue,
+  StateMutation,
   UserEventAccess,
   UserStateAccess,
 } from '../api.js';
@@ -76,6 +77,24 @@ export interface DeclarationHost {
     hasQueuedSnapshot: boolean,
   ): void;
   transportFailure(error: unknown): void;
+  /**
+   * Activation staged the declared value for paths whose acknowledged state is
+   * a deletion, which `STATE_SYNC` cannot express; the host reapplies them.
+   */
+  restoreDeletions(session: RelaySession, active: ActiveDeclarations, paths: readonly string[]): void;
+}
+
+/**
+ * The last value the relay acknowledged for one path, through `STATE_SET_OK`.
+ * `revision` is the state-slice revision the mutation was applied to: the entry
+ * only ever amends a re-declaration of that same slice, so an explicit
+ * `state.declare` or `configure` stays authoritative.
+ */
+interface ConfirmedEntry {
+  readonly revision: number;
+  readonly sequence: number;
+  readonly deleted: boolean;
+  readonly value: ProtocolValue | undefined;
 }
 
 interface PendingDeclaration {
@@ -137,6 +156,28 @@ function copySnapshot(value: DeclarationSnapshot): DeclarationSnapshot {
   });
 }
 
+function protocolValuesEqual(left: ProtocolValue | undefined, right: ProtocolValue | undefined): boolean {
+  if (left === right) return true;
+  if (left instanceof Uint8Array || right instanceof Uint8Array) {
+    return left instanceof Uint8Array && right instanceof Uint8Array
+      && left.length === right.length && left.every((byte, index) => byte === right[index]);
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+      && left.every((item, index) => protocolValuesEqual(item, right[index]));
+  }
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    return Number.isNaN(left) && Number.isNaN(right);
+  }
+  const leftKeys = Object.keys(left);
+  return leftKeys.length === Object.keys(right).length
+    && leftKeys.every((key) => Object.hasOwn(right, key)
+      && protocolValuesEqual(
+        (left as Record<string, ProtocolValue>)[key],
+        (right as Record<string, ProtocolValue>)[key],
+      ));
+}
+
 function revisionsEqual(left: DeclarationRevisions, right: DeclarationRevisions): boolean {
   return DECLARATION_DOMAINS.every((domain) => left[domain] === right[domain]);
 }
@@ -189,6 +230,9 @@ export class DeclarationManager {
   #current: DeclarationTransaction | undefined;
   #transactionToken = 0;
   #stopped = false;
+  readonly #confirmed = new Map<string, ConfirmedEntry>();
+  /** A confirmed value arrived after the current transaction was handed off. */
+  #confirmedAfterHandoff = false;
 
   constructor(host: DeclarationHost) {
     this.#host = host;
@@ -275,7 +319,80 @@ export class DeclarationManager {
   synchronize(session: RelaySession): void {
     this.#requests.clear();
     this.#current = undefined;
+    this.#confirmedAfterHandoff = false;
     this.#begin(session);
+  }
+
+  /**
+   * Records a mutation batch the relay acknowledged with `STATE_SET_OK`.
+   *
+   * Every later re-declaration of the same state slice carries these values
+   * instead of the declared ones, because `STATE_SYNC` replaces the relay's
+   * values and an ACL, event or function change — or a reconnect — must not
+   * roll the home back. Only acknowledged batches are recorded: a rejected or
+   * unknown mutation never reaches this method, so it is never replayed.
+   *
+   * `sequence` is the order in which the batches were sent. The relay applies
+   * one connection's frames in order, so the later batch wins a path.
+   */
+  recordConfirmed(
+    mutations: readonly StateMutation[],
+    revision: number,
+    sequence: number,
+  ): void {
+    let changedValue = false;
+    for (const mutation of mutations) {
+      const existing = this.#confirmed.get(mutation.path);
+      if (existing !== undefined && existing.revision === revision && existing.sequence > sequence) continue;
+      const deleted = 'delete' in mutation;
+      this.#confirmed.set(mutation.path, Object.freeze({
+        revision,
+        sequence,
+        deleted,
+        value: deleted ? undefined : mutation.value,
+      }));
+      const current = this.#current;
+      if (!deleted && current !== undefined
+        && current.snapshot.revisions.state === revision
+        && Object.hasOwn(current.snapshot.state, mutation.path)
+        && !protocolValuesEqual(current.snapshot.state[mutation.path], mutation.value)) {
+        changedValue = true;
+      }
+    }
+    const current = this.#current;
+    if (!changedValue || current === undefined) return;
+    // The relay applied this batch before it staged the current STATE_SYNC,
+    // which captured the older value. Activating that stage would roll the
+    // mutation back while users see the result as current, so the stage is
+    // replaced: a new STATE_SYNC discards it on the relay (RFC 0001 §7.5).
+    if (!current.handedOff) {
+      this.#current = undefined;
+      this.#begin(current.session);
+    } else {
+      this.#confirmedAfterHandoff = true;
+    }
+  }
+
+  /**
+   * The relay refused to reapply an acknowledged deletion, so it holds the
+   * declared value again. That value becomes the acknowledged one, unless a
+   * newer mutation of the path was acknowledged meanwhile.
+   */
+  restorationRefused(paths: ReadonlyMap<string, number>): void {
+    for (const [path, sequence] of paths) {
+      const entry = this.#confirmed.get(path);
+      if (entry?.deleted === true && entry.sequence === sequence) this.#confirmed.delete(path);
+    }
+  }
+
+  /** The confirmed entry sequence of each path, for a restoration in flight. */
+  confirmedSequences(paths: readonly string[]): Map<string, number> {
+    const result = new Map<string, number>();
+    for (const path of paths) {
+      const entry = this.#confirmed.get(path);
+      if (entry !== undefined) result.set(path, entry.sequence);
+    }
+    return result;
   }
 
   handleFrame(frame: Frame): boolean {
@@ -407,7 +524,7 @@ export class DeclarationManager {
     const welcome = session.welcome;
     this.#current = {
       token: this.#transactionToken,
-      snapshot: copySnapshot(this.#desired),
+      snapshot: this.#withConfirmedState(copySnapshot(this.#desired)),
       session,
       receipt: Object.freeze({
         sessionId: welcome.readySession.sessionId,
@@ -479,6 +596,40 @@ export class DeclarationManager {
     };
   }
 
+  /**
+   * The snapshot to send: the desired slices, with each declared path carrying
+   * the value the relay last acknowledged for that same state revision.
+   */
+  #withConfirmedState(snapshot: DeclarationSnapshot): DeclarationSnapshot {
+    let state: Record<string, ProtocolValue> | undefined;
+    for (const [path, entry] of this.#confirmed) {
+      if (entry.deleted
+        || entry.revision !== snapshot.revisions.state
+        || !Object.hasOwn(snapshot.state, path)) continue;
+      state ??= { ...snapshot.state };
+      state[path] = entry.value as ProtocolValue;
+    }
+    return state === undefined
+      ? snapshot
+      : copySnapshot({ ...snapshot, state: Object.freeze(state) });
+  }
+
+  /**
+   * After activation, forgets what the activated declaration superseded and
+   * returns the acknowledged deletions the activation undid.
+   */
+  #settleConfirmedState(snapshot: DeclarationSnapshot): string[] {
+    const deletions: string[] = [];
+    for (const [path, entry] of this.#confirmed) {
+      if (entry.revision !== snapshot.revisions.state || !Object.hasOwn(snapshot.state, path)) {
+        this.#confirmed.delete(path);
+      } else if (entry.deleted) {
+        deletions.push(path);
+      }
+    }
+    return deletions;
+  }
+
   #activate(transaction: DeclarationTransaction): void {
     if (this.#current?.token !== transaction.token) return;
     this.#active = Object.freeze({
@@ -490,8 +641,12 @@ export class DeclarationManager {
     });
     this.#current = undefined;
     this.#host.activeDeclarationsChanged(this.#active);
+    const deletions = this.#settleConfirmedState(transaction.snapshot);
+    if (deletions.length > 0) this.#host.restoreDeletions(transaction.session, this.#active, deletions);
     this.#settleThrough(transaction.snapshot.revisions, transaction.receipt, undefined);
-    if (!revisionsEqual(this.#desired.revisions, transaction.snapshot.revisions)) {
+    const refresh = this.#confirmedAfterHandoff;
+    this.#confirmedAfterHandoff = false;
+    if (refresh || !revisionsEqual(this.#desired.revisions, transaction.snapshot.revisions)) {
       this.#begin(transaction.session);
     } else {
       this.#host.declarationsReady(transaction.receipt);
@@ -501,6 +656,8 @@ export class DeclarationManager {
   #rejectTransaction(transaction: DeclarationTransaction, failure: CoordinatorError): void {
     if (this.#current?.token !== transaction.token) return;
     this.#current = undefined;
+    // Nothing activated, so the relay still holds every acknowledged value.
+    this.#confirmedAfterHandoff = false;
     this.#settleThrough(transaction.snapshot.revisions, transaction.receipt, failure);
     const activeSnapshot = this.#active?.snapshot ?? emptySnapshot();
     const desired = this.#desired;

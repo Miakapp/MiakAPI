@@ -265,6 +265,12 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
   });
 
   test('the generated check uses its local CLI even when PATH contains an older global CLI', async () => {
+    // This test executes the packaged entry point, so it must build its own
+    // prerequisite rather than depend on another test having run first.
+    const cliBuild = Bun.spawnSync(['bun', 'run', 'build'], {
+      cwd: join(REPOSITORY, 'packages/cli'), stdout: 'pipe', stderr: 'pipe',
+    });
+    expect(cliBuild.exitCode).toBe(0);
     const shadow = join(directory, 'shadow-bin');
     await mkdir(shadow);
     await writeFile(join(shadow, 'miakapp'), '#!/bin/sh\necho stale-global-cli >&2\nexit 81\n');
