@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, symlink, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -262,6 +262,25 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
     const host = testHost({ cwd: directory });
     expect(await run(['check', '--json'], host)).toBe(EXIT_CODE.success);
     expect(host.json()).toMatchObject({ abi: 'miakapp.app/1', home_id: 'demo-home' });
+  });
+
+  test('the generated check uses its local CLI even when PATH contains an older global CLI', async () => {
+    const shadow = join(directory, 'shadow-bin');
+    await mkdir(shadow);
+    await writeFile(join(shadow, 'miakapp'), '#!/bin/sh\necho stale-global-cli >&2\nexit 81\n');
+    await chmod(join(shadow, 'miakapp'), 0o755);
+    await mkdir(join(directory, 'node_modules/@miakapp'), { recursive: true });
+    await symlink(join(REPOSITORY, 'packages/cli'), join(directory, 'node_modules/@miakapp/cli'), 'dir');
+    const pkg = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+    const result = Bun.spawnSync(['sh', '-c', pkg.scripts['check']!], {
+      cwd: directory,
+      env: { ...process.env, PATH: `${shadow}:${process.env['PATH'] ?? ''}` },
+      stdout: 'pipe', stderr: 'pipe',
+    });
+    const output = result.stdout.toString() + result.stderr.toString();
+    expect(output).not.toContain('stale-global-cli');
+    expect(output).toContain('miakapp.app/1');
+    expect(result.exitCode).toBe(0);
   });
 
   test('with nothing shared it shows an honest empty state and no value', () => {
