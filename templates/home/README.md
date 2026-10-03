@@ -1,29 +1,38 @@
-# A Miakapp home
+# A Miakapp home — developer example
 
-A complete, working home: a coordinator that owns the logic, a component that is
-the interface, and a project file that ties them to a control plane. It controls
-one lamp and reports one temperature. Replace those with yours.
+> **Building a home? Do not start here.** The public path needs only the
+> published CLI and Bun: `npx @miakapp/cli init --starter app` writes a
+> buildable app, its bridge, its build configuration and a README, with no
+> source repository and no unpublished package. See `miakapp docs start`.
+>
+> This directory is a developer example that lives inside the MiakAPI
+> repository and builds against its sources. It is verified in this
+> repository's CI; it is not a supported way to create a home.
+
+A working example of the three parts of a home: a coordinator that owns the
+logic and authorization, a whole-house application that is the interface, and a
+project file that ties them to a control plane. It controls one lamp and
+reports one temperature.
 
 ```
 coordinator/home.ts    what this home is, as data — testable without a network
 coordinator/main.ts    the only file that touches the outside world
-component/main.ts      the interface, running in a sandboxed Worker
+app/main.ts            the interface: a whole-house application (miakapp.app/1)
+app/view.ts            what the interface shows, as a pure function
+component/main.ts      the same home as a semantic component (miakapp.component/1)
 miakapp.yaml           home, control plane, artifact, capability requirements
 test/home.test.ts      the coordinator's authorization, tested without a relay
+test/app.test.ts       the interface's decisions, tested without a browser
 ```
 
-## Copying this out of the MiakAPI repository
+## Why it does not leave this repository as is
 
-The three Miakapp dependencies use `file:` paths so the template stays verified
-inside the repository. Replace them with published versions:
-
-```bash
-bun remove miakapi @miakapp/component @miakapp/cli
-bun add miakapi @miakapp/component
-bun add -d @miakapp/cli
-```
-
-Nothing else in the template refers to the repository.
+Its Miakapp dependencies are `file:` paths into this repository —
+`miakapi`, `@miakapp/component`, `@miakapp/cli` and `@miakapp/app` — and
+`@miakapp/app` is not published on npm. Copied elsewhere, `bun install` fails.
+For a new home's interface, use `miakapp init --starter app`, whose
+`app/miakapp.ts` is the same bridge source. For a coordinator, the published
+`miakapi` package and `coordinator/` here are the reference.
 
 ## Running it
 

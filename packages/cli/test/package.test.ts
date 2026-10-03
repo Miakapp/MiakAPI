@@ -36,5 +36,11 @@ describe('the published package', () => {
     expect(files).toContain('assets/agent-guide.md');
     expect(files).toContain('bin/miakapp.js');
     expect(files).toContain('dist/main.js');
+    // The app starter is copied out of the installed package, so every file it
+    // writes must ship in the tarball.
+    for (const asset of ['tsconfig.json', 'app/main.ts', 'app/miakapp.ts', 'app/README.md']) {
+      expect(files).toContain(`assets/starter/app/${asset}`);
+    }
+    expect(files).toContain('dist/starter.js');
   });
 });
