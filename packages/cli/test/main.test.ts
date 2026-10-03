@@ -128,7 +128,7 @@ describe('offline commands', () => {
     expect(host.stderr()).toContain('dynamic_import');
   });
 
-  test('init writes a project file that check accepts', async () => {
+  test('init writes a project file that check accepts, a whole-house app by default', async () => {
     const files = new MemoryFiles();
     const host = testHost({ files });
     const code = await run([
@@ -137,13 +137,30 @@ describe('offline commands', () => {
       '--control-plane', 'https://control.example.test/api',
     ], host);
     expect(code).toBe(EXIT_CODE.success);
+    expect(new TextDecoder().decode(files.entries.get(`${PROJECT_ROOT}/miakapp.yaml`))).toContain('\napp:\n');
 
     files.entries.set(
-      `${PROJECT_ROOT}/dist/component.js`,
+      `${PROJECT_ROOT}/dist/app.js`,
       new TextEncoder().encode(ARTIFACT_SOURCE),
     );
     const second = testHost({ files });
-    expect(await run(['check'], second)).toBe(EXIT_CODE.success);
+    expect(await run(['check', '--json'], second)).toBe(EXIT_CODE.success);
+    expect(JSON.parse(second.stdout()).abi).toBe('miakapp.app/1');
+  });
+
+  test('init --kind component keeps the semantic component shape', async () => {
+    const files = new MemoryFiles();
+    const host = testHost({ files });
+    expect(await run([
+      'init',
+      '--kind', 'component',
+      '--home', HOME_ID,
+      '--control-plane', 'https://control.example.test/api',
+    ], host)).toBe(EXIT_CODE.success);
+    files.entries.set(`${PROJECT_ROOT}/dist/component.js`, new TextEncoder().encode(ARTIFACT_SOURCE));
+    const second = testHost({ files });
+    expect(await run(['check', '--json'], second)).toBe(EXIT_CODE.success);
+    expect(JSON.parse(second.stdout()).abi).toBe('miakapp.component/1');
   });
 
   test('init never overwrites an existing project file', async () => {

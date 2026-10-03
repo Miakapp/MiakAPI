@@ -29,14 +29,18 @@ import {
   isHomeId,
   isRandomId,
   isRelease,
+  isReleaseAbi,
   isUploadToken,
+  type ReleaseAbi,
   REQUIREMENT_KINDS,
   type Requirements,
 } from './internal/names.js';
 import { canonicalRequirements, sameRequirements } from './internal/requirements.js';
 import type { Artifact } from './artifact.js';
 
-export const COMPONENT_ABI = 'miakapp.component/1';
+import { COMPONENT_ABI } from './internal/names.js';
+
+export { APP_ABI, COMPONENT_ABI } from './internal/names.js';
 
 /** RFC 0004 §13.2 expires an upload capability within fifteen minutes. */
 const MAXIMUM_CAPABILITY_LIFETIME_MS = 900_000;
@@ -54,7 +58,7 @@ export interface UploadState {
   readonly uploadId: string;
   readonly status: UploadStatus;
   readonly release: string;
-  readonly abi: string;
+  readonly abi: ReleaseAbi;
   readonly sha256: string;
   readonly size: number;
   readonly requires: Requirements;
@@ -63,7 +67,7 @@ export interface UploadState {
 
 export interface ComponentRelease {
   readonly release: string;
-  readonly abi: string;
+  readonly abi: ReleaseAbi;
   readonly sha256: string;
   readonly size: number;
   readonly requires: Requirements;
@@ -74,7 +78,7 @@ export interface ComponentPointer {
   readonly homeId: string;
   readonly generation: number;
   readonly release: string;
-  readonly abi: string;
+  readonly abi: ReleaseAbi;
   readonly url: string;
   readonly sha256: string;
   readonly size: number;
@@ -93,6 +97,8 @@ export interface PublicationTarget {
 
 export interface UploadRequest {
   readonly release: string;
+  /** Defaults to the semantic component ABI for compatibility. */
+  readonly abi?: ReleaseAbi;
   readonly requires: Requirements;
 }
 
@@ -271,12 +277,12 @@ function decodeUploadState(value: unknown): UploadState {
   if (!isRandomId(document.upload_id)) throw contractError('upload_id is invalid');
   if (!isRelease(document.release)) throw contractError('release is invalid');
   if (!isDigest(document.sha256)) throw contractError('sha256 is not a base64url SHA-256 digest');
-  if (document.abi !== COMPONENT_ABI) throw contractError('abi is not the supported ABI');
+  if (!isReleaseAbi(document.abi)) throw contractError('abi is not a supported ABI');
   return Object.freeze({
     uploadId: document.upload_id,
     status,
     release: document.release,
-    abi: COMPONENT_ABI,
+    abi: document.abi,
     sha256: document.sha256,
     size: positiveInteger(document.size, MAXIMUM_ARTIFACT_BYTES),
     requires: decodeRequirements(document.requires),
@@ -299,10 +305,10 @@ function decodeRelease(value: unknown): ComponentRelease {
   }
   if (!isRelease(document.release)) throw contractError('release is invalid');
   if (!isDigest(document.sha256)) throw contractError('sha256 is not a base64url SHA-256 digest');
-  if (document.abi !== COMPONENT_ABI) throw contractError('abi is not the supported ABI');
+  if (!isReleaseAbi(document.abi)) throw contractError('abi is not a supported ABI');
   return Object.freeze({
     release: document.release,
-    abi: COMPONENT_ABI,
+    abi: document.abi,
     sha256: document.sha256,
     size: positiveInteger(document.size, MAXIMUM_ARTIFACT_BYTES),
     requires: decodeRequirements(document.requires),
@@ -333,7 +339,7 @@ function decodePointer(value: unknown, target: PublicationTarget): ComponentPoin
   }
   if (!isRelease(document.release)) throw contractError('Pointer release is invalid');
   if (!isDigest(document.sha256)) throw contractError('Pointer sha256 is invalid');
-  if (document.abi !== COMPONENT_ABI) throw contractError('Pointer abi is not the supported ABI');
+  if (!isReleaseAbi(document.abi)) throw contractError('Pointer abi is not a supported ABI');
   const url = boundedString(document.url, 1, 2_048);
   if (url !== `${target.issuer}/v1/components/${document.sha256}.js`) {
     throw contractError('Pointer url is not the token-free control-plane artifact resource');
@@ -342,7 +348,7 @@ function decodePointer(value: unknown, target: PublicationTarget): ComponentPoin
     homeId: target.homeId,
     generation: document.generation,
     release: document.release,
-    abi: COMPONENT_ABI,
+    abi: document.abi,
     url,
     sha256: document.sha256,
     size: positiveInteger(document.size, MAXIMUM_ARTIFACT_BYTES),
@@ -362,7 +368,7 @@ export async function requestUpload(
   }
   const body = requestBody({
     release: request.release,
-    abi: COMPONENT_ABI,
+    abi: request.abi ?? COMPONENT_ABI,
     sha256: artifact.sha256,
     size: artifact.size,
     requires: request.requires,
@@ -374,7 +380,10 @@ export async function requestUpload(
   if (response.status !== 201) {
     throw failure('Upload capability request', response.status, await readFailure(response), false);
   }
-  return decodeUploadCapability(await readJsonBody(response), `${base}/component-uploads/`);
+  // RFC 0004 §13.2: the capability is delivered to the issuer-level
+  // `PUT /v1/component-uploads/{uploadId}`, not under the home path that
+  // issued it.
+  return decodeUploadCapability(await readJsonBody(response), `${target.issuer}/v1/component-uploads/`);
 }
 
 /**
@@ -474,6 +483,45 @@ export async function readRelease(
 }
 
 /**
+ * Reads what is live: the generation the pointer holds and the release it
+ * points at, or generation 0 and no pointer for a home that never activated.
+ *
+ * RFC 0004 §13.2 serves this under the same publisher authorization as the
+ * other reads. It takes no lock, so the activation that follows remains a
+ * compare-and-set and a concurrent publisher still fails with
+ * `generation_conflict` instead of being overwritten.
+ */
+export async function readPointer(
+  target: PublicationTarget,
+): Promise<{ readonly generation: number; readonly pointer: ComponentPointer | null }> {
+  const { fetcher, signal, base } = client(target);
+  const response = await fetcher(
+    `${base}/component-pointer`,
+    jsonRequestInit('GET', target.token, undefined, signal),
+  );
+  if (response.status !== 200) {
+    throw failure('Pointer read', response.status, await readFailure(response), false);
+  }
+  const document = exactRecord(await readJsonBody(response), ['schema', 'generation', 'pointer']);
+  if (document.schema !== 'miakapp.component-pointer-state/1') {
+    throw contractError('Pointer state has an unsupported schema');
+  }
+  const generation = document.generation;
+  if (typeof generation !== 'number' || !Number.isSafeInteger(generation) || generation < 0) {
+    throw contractError('Pointer state generation is not a non-negative safe integer');
+  }
+  if (document.pointer === null) {
+    if (generation !== 0) throw contractError('Pointer state has a generation but no pointer');
+    return Object.freeze({ generation, pointer: null });
+  }
+  const pointer = decodePointer(document.pointer, target);
+  if (pointer.generation !== generation) {
+    throw contractError('Pointer state generation does not match its pointer');
+  }
+  return Object.freeze({ generation, pointer });
+}
+
+/**
  * Step 4: compare-and-set the home pointer to a strictly greater generation.
  *
  * Activation is one transaction and is never blindly retried: a stale
@@ -530,12 +578,14 @@ export async function publish(
   },
 ): Promise<{ readonly release: ComponentRelease; readonly pointer: ComponentPointer }> {
   const requires = canonicalRequirements(request.requires);
-  const capability = await requestUpload(target, artifact, { release: request.release, requires });
+  const abi = request.abi ?? COMPONENT_ABI;
+  const capability = await requestUpload(target, artifact, { release: request.release, abi, requires });
   await deliverArtifact(target, capability, artifact);
   const state = await readUpload(target, capability.uploadId);
   if (state.sha256 !== artifact.sha256
     || state.size !== artifact.size
     || state.release !== request.release
+    || state.abi !== abi
     || !sameRequirements(state.requires, requires)) {
     throw contractError('Upload state does not match the tuple the capability was bound to');
   }
@@ -548,7 +598,7 @@ export async function publish(
   const release = state.status === 'finalized'
     ? await requireRelease(target, artifact.sha256)
     : await finalizeUpload(target, capability.uploadId);
-  if (release.sha256 !== artifact.sha256 || release.size !== artifact.size) {
+  if (release.sha256 !== artifact.sha256 || release.size !== artifact.size || release.abi !== abi) {
     throw contractError('Finalized release does not match the delivered artifact');
   }
   const pointer = await activateRelease(target, {
@@ -556,7 +606,9 @@ export async function publish(
     expectedGeneration: request.expectedGeneration,
     generation: request.generation,
   });
-  if (pointer.sha256 !== artifact.sha256 || !sameRequirements(pointer.requires, requires)) {
+  if (pointer.sha256 !== artifact.sha256
+    || pointer.abi !== abi
+    || !sameRequirements(pointer.requires, requires)) {
     throw contractError('Activated pointer does not match the published release');
   }
   return { release, pointer };

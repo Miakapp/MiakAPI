@@ -60,19 +60,25 @@ interface ToolArgument {
 interface ToolPositional {
   readonly name: string;
   readonly description: string;
+  /** Defaults to true. */
+  readonly required?: boolean;
 }
 
 interface ToolDefinition {
   readonly name: string;
   readonly title: string;
   readonly command: string;
+  /** Fixed first positional, for commands with actions such as `context list`. */
+  readonly action?: string;
   readonly description: string;
   readonly args: readonly ToolArgument[];
   readonly positional?: ToolPositional;
   /** Reads only; opens no socket and writes no file. */
   readonly readOnly: boolean;
-  /** Moves the home pointer, so it demands `confirm: true`. */
+  /** Moves the home pointer or deletes a credential, so it demands `confirm: true`. */
   readonly guarded: boolean;
+  /** Why `confirm: true` is demanded, repeated in the refusal. */
+  readonly guardReason?: string;
 }
 
 const PROJECT_ARGUMENT: ToolArgument = {
@@ -85,12 +91,26 @@ const PROJECT_ARGUMENT: ToolArgument = {
 const EXPECTED_GENERATION: ToolArgument = {
   name: 'expected_generation',
   type: 'integer',
-  required: true,
+  required: false,
   description:
-    'Generation the home pointer is expected to hold right now. The activation is a '
+    'Generation the home pointer is expected to hold right now. Omit it to use the live '
+    + 'generation read just before activating (miakapp_status shows it). The activation is a '
     + 'compare-and-set: if the real generation differs the call fails with kind "conflict" and '
     + 'changes nothing. Re-read the state, do not retry blindly.',
 };
+
+const CONTEXT_ARGUMENT: ToolArgument = {
+  name: 'context',
+  type: 'string',
+  required: false,
+  description:
+    'Stored context to use (see miakapp_context_list). By default the context paired with the '
+    + "project's home is used. A context for another home is refused.",
+};
+
+const POINTER_GUARD =
+  'This tool changes what every device in the home runs, and will not act without an explicit '
+  + 'confirmation from the caller.';
 
 const GENERATION: ToolArgument = {
   name: 'generation',
@@ -106,6 +126,19 @@ const CONFIRM: ToolArgument = {
   description:
     'Must be true. Guard against an unintended call: this tool changes what every device in '
     + 'the home runs. Set it only when the owner asked for this exact publication.',
+};
+
+const CONFIRM_REMOVAL: ToolArgument = {
+  name: 'confirm',
+  type: 'boolean',
+  required: true,
+  description:
+    'Must be true. Deletes the stored Home Key; the home stays reachable only by pairing again.',
+};
+
+const CONTEXT_NAME: ToolPositional = {
+  name: 'name',
+  description: 'Context name, as listed by miakapp_context_list.',
 };
 
 /**
@@ -126,6 +159,110 @@ export const TOOLS: readonly ToolDefinition[] = [
       name: 'topic',
       description: 'Guide topic. Use "start".',
     },
+    readOnly: true,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_pair',
+    title: 'Pair a home with a one-time code',
+    command: 'pair',
+    description:
+      'Redeem the one-time pairing code the owner created at https://miakapp.com/pair for a new, '
+      + 'separately revocable Home Key, and store it as a new context in ~/.miakapp (private '
+      + 'files, other contexts kept, the new one made current). The owner chooses the home and '
+      + 'confirms access in their own browser; never ask them for a password, a Google login or '
+      + 'an existing key. A code works once for ten minutes: never retry it after a failure, ask '
+      + 'for a new one. The result never contains the key.',
+    args: [
+      {
+        name: 'code',
+        type: 'string',
+        required: true,
+        description: 'The one-time code exactly as the owner sent it. Never repeat it in a reply.',
+      },
+      {
+        name: 'issuer',
+        type: 'string',
+        required: false,
+        description: 'Control plane to redeem at. Defaults to https://control.miakapp.com.',
+      },
+      {
+        name: 'label',
+        type: 'string',
+        required: false,
+        description: 'Key label the owner sees in their key list. Defaults to miakapp-cli@<host>.',
+      },
+      {
+        name: 'name',
+        type: 'string',
+        required: false,
+        description: 'Context name. Defaults to the paired home ID.',
+      },
+    ],
+    readOnly: false,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_context_list',
+    title: 'List stored contexts',
+    command: 'context',
+    action: 'list',
+    description:
+      'List the homes this machine holds a key for: context name, home ID, issuer, key ID and '
+      + 'whether the key is stored. Never returns a key. Offline.',
+    args: [],
+    readOnly: true,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_context_show',
+    title: 'Show one stored context',
+    command: 'context',
+    action: 'show',
+    description: 'Show one context, the current one when no name is given. Never returns a key.',
+    args: [],
+    positional: { ...CONTEXT_NAME, required: false },
+    readOnly: true,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_context_use',
+    title: 'Make a context current',
+    command: 'context',
+    action: 'use',
+    description:
+      'Make a stored context current. Publication still follows the home named in miakapp.yaml: '
+      + 'the current context only breaks a tie between several keys for that same home.',
+    args: [],
+    positional: CONTEXT_NAME,
+    readOnly: false,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_context_remove',
+    title: 'Delete a stored context',
+    command: 'context',
+    action: 'remove',
+    description:
+      'Delete a context and its stored Home Key from this machine. The key stays valid on the '
+      + 'server until the owner revokes it.',
+    args: [CONFIRM_REMOVAL],
+    positional: CONTEXT_NAME,
+    readOnly: false,
+    guarded: true,
+    guardReason:
+      'This tool deletes a stored Home Key, and will not act without an explicit confirmation '
+      + 'from the caller.',
+  },
+  {
+    name: 'miakapp_status',
+    title: 'Read what the home runs now',
+    command: 'status',
+    description:
+      'Read the live component pointer of the home in miakapp.yaml: generation, release, digest '
+      + 'and requirements, or generation 0 for a home that never activated. Read-only. Run it '
+      + 'before publishing and after, to verify the publication is what is live.',
+    args: [PROJECT_ARGUMENT, CONTEXT_ARGUMENT],
     readOnly: true,
     guarded: false,
   },
@@ -175,26 +312,34 @@ export const TOOLS: readonly ToolDefinition[] = [
     command: 'init',
     description:
       'Write miakapp.yaml in the project directory. Refuses to overwrite an existing one, so it '
-      + 'is safe to call when unsure. Declares no requirements: grant them one at a time, as the '
-      + 'component earns them.',
+      + 'is safe to call when unsure. home and control_plane default to the selected or current '
+      + 'context, so after miakapp_pair no identifier needs typing. kind defaults to app: a '
+      + 'whole-house application you draw yourself (any DOM, CSS, framework) bundled as one IIFE. '
+      + 'Declares no requirements: grant them one at a time, as the interface earns them.',
     args: [
+      {
+        name: 'kind',
+        type: 'string',
+        required: false,
+        description: 'app (whole-house application, default) or component (semantic tree).',
+      },
       {
         name: 'home',
         type: 'string',
-        required: true,
-        description: 'Home ID the component is published to.',
+        required: false,
+        description: 'Home ID the component is published to. Defaults to the context home.',
       },
       {
         name: 'control_plane',
         type: 'string',
-        required: true,
-        description: 'Control-plane issuer, an https URL.',
+        required: false,
+        description: 'Control-plane issuer, an https URL. Defaults to the context issuer.',
       },
       {
         name: 'artifact',
         type: 'string',
         required: false,
-        description: 'Built artifact path. Defaults to dist/component.js.',
+        description: 'Built artifact path. Defaults to dist/app.js (app) or dist/component.js.',
       },
       {
         name: 'release',
@@ -203,6 +348,7 @@ export const TOOLS: readonly ToolDefinition[] = [
         description: 'Initial release name. Defaults to 0.1.0.',
       },
       PROJECT_ARGUMENT,
+      CONTEXT_ARGUMENT,
     ],
     readOnly: false,
     guarded: false,
@@ -227,7 +373,7 @@ export const TOOLS: readonly ToolDefinition[] = [
       'Read the finalized release record for one digest: release name, ABI, size, requirements '
       + 'and finalization instant. This is the reconciliation read after a lost finalize '
       + 'response — call it before deciding that a publication did not happen.',
-    args: [PROJECT_ARGUMENT],
+    args: [PROJECT_ARGUMENT, CONTEXT_ARGUMENT],
     positional: {
       name: 'sha256',
       description: 'Artifact digest, 43 base64url characters.',
@@ -243,7 +389,7 @@ export const TOOLS: readonly ToolDefinition[] = [
       'Read the status of one upload: awaiting_upload, delivered or finalized. This is the read '
       + 'that tells a lost PUT from an upload that never arrived. Call it after any '
       + 'unknown_outcome, before touching the control plane again.',
-    args: [PROJECT_ARGUMENT],
+    args: [PROJECT_ARGUMENT, CONTEXT_ARGUMENT],
     positional: {
       name: 'upload_id',
       description: 'Upload ID returned when the capability was issued, 22 characters.',
@@ -257,8 +403,9 @@ export const TOOLS: readonly ToolDefinition[] = [
     command: 'publish',
     description:
       'Upload the built artifact, finalize it and activate it as the new generation, in one run. '
-      + 'Changes what every device in the home runs. Requires MIAKAPP_HOME_KEY in the '
-      + 'environment. Run miakapp_check first; this tool does not build the component.',
+      + 'Changes what every device in the home runs. Uses the context paired with the home in '
+      + 'miakapp.yaml (or MIAKAPP_HOME_KEY in the environment, for CI). Run miakapp_check first; '
+      + 'this tool does not build the component. Afterwards, run miakapp_status to verify.',
     args: [
       EXPECTED_GENERATION,
       GENERATION,
@@ -269,6 +416,7 @@ export const TOOLS: readonly ToolDefinition[] = [
         description: 'Release name for this publication. Defaults to component.release.',
       },
       PROJECT_ARGUMENT,
+      CONTEXT_ARGUMENT,
       CONFIRM,
     ],
     readOnly: false,
@@ -291,6 +439,7 @@ export const TOOLS: readonly ToolDefinition[] = [
       EXPECTED_GENERATION,
       GENERATION,
       PROJECT_ARGUMENT,
+      CONTEXT_ARGUMENT,
       CONFIRM,
     ],
     readOnly: false,
@@ -314,6 +463,7 @@ export const TOOLS: readonly ToolDefinition[] = [
       EXPECTED_GENERATION,
       GENERATION,
       PROJECT_ARGUMENT,
+      CONTEXT_ARGUMENT,
       CONFIRM,
     ],
     readOnly: false,
@@ -345,7 +495,7 @@ export function inputSchema(tool: ToolDefinition): Record<string, unknown> {
       minLength: 1,
       description: tool.positional.description,
     };
-    required.push(tool.positional.name);
+    if (tool.positional.required !== false) required.push(tool.positional.name);
   }
   for (const argument of tool.args) {
     properties[argument.name] = schemaProperty(argument);
@@ -370,7 +520,8 @@ function descriptor(tool: ToolDefinition): Record<string, unknown> {
       readOnlyHint: tool.readOnly,
       destructiveHint: tool.guarded,
       idempotentHint: false,
-      openWorldHint: !tool.readOnly || tool.command === 'release' || tool.command === 'upload',
+      openWorldHint: tool.command !== 'context'
+        && (!tool.readOnly || ['release', 'upload', 'status'].includes(tool.command)),
     },
   };
 }
@@ -387,7 +538,7 @@ export function buildArgv(
   args: Record<string, unknown>,
 ): readonly string[] {
   const byName = new Map(tool.args.map((argument) => [argument.name, argument]));
-  const argv: string[] = [tool.command];
+  const argv: string[] = tool.action === undefined ? [tool.command] : [tool.command, tool.action];
   const positional = tool.positional;
 
   for (const key of Object.keys(args)) {
@@ -402,10 +553,12 @@ export function buildArgv(
 
   if (positional !== undefined) {
     const value = args[positional.name];
-    if (typeof value !== 'string' || value === '') {
-      throw usageError(`${positional.name} is required and must be a non-empty string`);
+    if (value !== undefined || positional.required !== false) {
+      if (typeof value !== 'string' || value === '') {
+        throw usageError(`${positional.name} is required and must be a non-empty string`);
+      }
+      argv.push(value);
     }
-    argv.push(value);
   }
 
   for (const argument of tool.args) {
@@ -414,11 +567,7 @@ export function buildArgv(
       // A guard is not an option: it is checked here and never reaches the argv,
       // so the command line keeps exactly the shape it had before MCP existed.
       if (value !== true) {
-        throw usageError(
-          `${argument.name} must be set to true`,
-          'This tool changes what every device in the home runs, and will not act without an '
-          + 'explicit confirmation from the caller.',
-        );
+        throw usageError(`${argument.name} must be set to true`, tool.guardReason ?? POINTER_GUARD);
       }
       continue;
     }
@@ -507,9 +656,13 @@ export async function callTool(
   );
 }
 
-/** The dispatch never prints; the protocol owns both streams of this process. */
+/**
+ * The dispatch never prints and never reads: the protocol owns stdin and stdout
+ * of this process, so a pairing code arrives as a tool argument instead.
+ */
 function silentHost(host: CliHost): CliHost {
-  return { ...host, write: () => {}, writeError: () => {} };
+  const { readSecret: _stdinBelongsToTheProtocol, ...rest } = host;
+  return { ...rest, write: () => {}, writeError: () => {} };
 }
 
 export interface Message {
@@ -533,14 +686,17 @@ function errorResponse(id: unknown, code: number, message: string): Record<strin
 }
 
 const INSTRUCTIONS =
-  'Publish and roll back one Miakapp home component. Start with miakapp_discover on a house '
+  'Publish and roll back one Miakapp home component. Read miakapp_docs first. To get access, '
+  + 'ask the owner to open https://miakapp.com/pair, choose the home, confirm, and send you the '
+  + 'one-time code; then call miakapp_pair. Start with miakapp_discover on a house '
   + 'that already exists, then miakapp_check before every publication. A publication is a '
   + 'compare-and-set on the home generation: when a call fails with kind "conflict" the state '
   + 'moved under you, so read it again rather than retrying. When a call fails with kind '
   + '"unknown_outcome" the effect is undetermined — call miakapp_upload or miakapp_release to '
   + 'find out what happened before acting. Every result is a closed JSON object with a stable '
-  + `"kind"; branch on that, never on the prose. Publishing needs ${HOME_KEY_VARIABLE} in this `
-  + 'server\'s environment; it is never an argument and never printed.';
+  + '"kind"; branch on that, never on the prose. Publishing uses the paired context for the home '
+  + `in miakapp.yaml, or ${HOME_KEY_VARIABLE} in this server's environment; a key is never an `
+  + 'argument and never printed.';
 
 /**
  * Handles one decoded message.

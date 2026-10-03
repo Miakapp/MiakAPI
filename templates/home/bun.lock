@@ -4,6 +4,7 @@
     "": {
       "name": "miakapp-home-template",
       "dependencies": {
+        "@miakapp/app": "file:../../packages/app",
         "@miakapp/component": "file:../../packages/component",
         "miakapi": "file:../..",
       },
@@ -16,6 +17,8 @@
     },
   },
   "packages": {
+    "@miakapp/app": ["@miakapp/app@file:../../packages/app", { "devDependencies": { "@types/bun": "1.2.23", "@types/node": "22.20.1", "typescript": "7.0.2" } }],
+
     "@miakapp/cli": ["@miakapp/cli@file:../../packages/cli", { "devDependencies": { "@types/bun": "1.2.23", "@types/node": "22.20.1", "typescript": "7.0.2" }, "bin": { "miakapp": "./bin/miakapp.js" } }],
 
     "@miakapp/component": ["@miakapp/component@file:../../packages/component", { "devDependencies": { "@types/bun": "1.2.23", "@types/node": "22.20.1", "typescript": "7.0.2" } }],

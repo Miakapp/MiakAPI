@@ -59,7 +59,14 @@ describe('the tool surface mirrors the command surface', () => {
     const commands = Object.keys(COMMAND_OPTIONS)
       .filter((name) => !['help', 'version', 'mcp'].includes(name))
       .sort();
-    expect(TOOLS.map((entry) => entry.command).sort()).toEqual(commands);
+    expect([...new Set(TOOLS.map((entry) => entry.command))].sort()).toEqual(commands);
+  });
+
+  test('every context action is its own tool, so no tool takes a free-form verb', () => {
+    const actions = TOOLS.filter((entry) => entry.command === 'context')
+      .map((entry) => entry.action)
+      .sort();
+    expect(actions).toEqual(['list', 'remove', 'show', 'use']);
   });
 
   test('no tool hides an option the command accepts', () => {
@@ -82,9 +89,14 @@ describe('the tool surface mirrors the command surface', () => {
     }
   });
 
-  test('exactly the pointer-moving tools are guarded and declared destructive', () => {
-    const guarded = TOOLS.filter((entry) => entry.guarded).map((entry) => entry.command).sort();
-    expect(guarded).toEqual(['activate', 'publish', 'rollback']);
+  test('exactly the pointer-moving and key-deleting tools are guarded and declared destructive', () => {
+    const guarded = TOOLS.filter((entry) => entry.guarded).map((entry) => entry.name).sort();
+    expect(guarded).toEqual([
+      'miakapp_activate',
+      'miakapp_context_remove',
+      'miakapp_publish',
+      'miakapp_rollback',
+    ]);
     for (const entry of TOOLS) {
       const confirms = entry.args.some((argument) => argument.name === 'confirm');
       expect([entry.name, confirms]).toEqual([entry.name, entry.guarded]);
@@ -103,7 +115,9 @@ describe('the tool surface mirrors the command surface', () => {
       expect([entry.name, declared]).toEqual([entry.name, expected.sort()]);
 
       const required = entry.args.filter((argument) => argument.required).map((a) => a.name);
-      if (entry.positional !== undefined) required.unshift(entry.positional.name);
+      if (entry.positional !== undefined && entry.positional.required !== false) {
+        required.unshift(entry.positional.name);
+      }
       expect([entry.name, schema['required']]).toEqual([entry.name, required]);
     }
   });
@@ -142,7 +156,30 @@ describe('argument translation', () => {
   });
 
   test('a missing required argument is refused before anything runs', () => {
-    expect(() => buildArgv(tool('miakapp_publish'), { confirm: true })).toThrow(/required/);
+    expect(() => buildArgv(tool('miakapp_activate'), { confirm: true })).toThrow(/required/);
+    expect(() => buildArgv(tool('miakapp_pair'), {})).toThrow(/code is required/);
+  });
+
+  test('publish may omit the expected generation and let the CLI read it live', () => {
+    expect(buildArgv(tool('miakapp_publish'), { confirm: true })).toEqual(['publish']);
+  });
+
+  test('a context action is a fixed verb followed by the name', () => {
+    expect(buildArgv(tool('miakapp_context_use'), { name: 'home-a' }))
+      .toEqual(['context', 'use', 'home-a']);
+    expect(buildArgv(tool('miakapp_context_show'), {})).toEqual(['context', 'show']);
+    expect(() => buildArgv(tool('miakapp_context_remove'), { name: 'home-a' }))
+      .toThrow(/confirm must be set to true/);
+    expect(buildArgv(tool('miakapp_context_remove'), { name: 'home-a', confirm: true }))
+      .toEqual(['context', 'remove', 'home-a']);
+  });
+
+  test('a stored context can be selected for every networked command', () => {
+    for (const name of ['miakapp_status', 'miakapp_publish', 'miakapp_activate',
+      'miakapp_rollback', 'miakapp_release', 'miakapp_upload', 'miakapp_init']) {
+      expect([name, tool(name).args.some((argument) => argument.name === 'context')])
+        .toEqual([name, true]);
+    }
   });
 
   test('a negative generation is refused before the parser sees it', () => {

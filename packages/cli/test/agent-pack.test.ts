@@ -14,7 +14,7 @@ import {
   serverEntry,
 } from '../src/agent-pack.js';
 import { EXIT_CODE } from '../src/errors.js';
-import { guideAssetPath, run } from '../src/main.js';
+import { COMMAND_OPTIONS, guideAssetPath, run } from '../src/main.js';
 import { TOOLS, buildArgv } from '../src/mcp.js';
 import { CLI_VERSION, PACKAGE_NAME } from '../src/version.js';
 import { MemoryFiles, PROJECT_ROOT, testHost } from './support/host.js';
@@ -230,6 +230,16 @@ describe('the block tells an agent what it must not get wrong', () => {
     expect(block).toContain('unknown_outcome');
   });
 
+  test('it sends the agent through pairing and to a verified publication', () => {
+    const block = instructionBlock('Codex');
+    expect(block).toContain('miakapp pair');
+    expect(block).toContain('https://miakapp.com/pair');
+    expect(block).toContain('miakapp status');
+    expect(block).toContain('home_url');
+    expect(block).toContain('never the artifact URL');
+    expect(block).toContain('screenshot');
+  });
+
   test('each instruction file names the client that reads it', () => {
     for (const { path, client } of INSTRUCTION_FILES) {
       expect([path, instructionBlock(client).includes(client)]).toEqual([path, true]);
@@ -247,6 +257,25 @@ describe('the packaged guide is the repository guide', () => {
     // not. Copy it across: the pack installs the asset, so a stale asset ships
     // an agent the wrong rules.
     expect(shipped.equals(source)).toBe(true);
+  });
+
+  test('the guide teaches every command an agent can run', async () => {
+    const guide = (await readFile(await guideAssetPath())).toString('utf8');
+    const commands = Object.keys(COMMAND_OPTIONS).filter((name) => !['help', 'version'].includes(name));
+    for (const command of commands) {
+      expect([command, guide.includes(`miakapp ${command}`)]).toEqual([command, true]);
+    }
+    for (const action of ['list', 'show', 'use', 'remove']) {
+      expect([action, guide.includes(`miakapp context ${action}`)]).toEqual([action, true]);
+    }
+  });
+
+  test('the guide makes a verified publication the deliverable', async () => {
+    const guide = (await readFile(await guideAssetPath())).toString('utf8');
+    expect(guide).toContain('docs/inventory.md');
+    expect(guide).toContain('https://miakapp.com/pair');
+    expect(guide).toMatch(/screenshot/);
+    expect(guide).toContain('You need nothing from the platform');
   });
 
   test('the guide is served as a tool and reaches the command as plain argv', () => {

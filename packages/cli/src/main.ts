@@ -14,25 +14,45 @@
  *   {@link EXIT_CODE}), so a wrapper decides without parsing prose;
  * - `--json`, which prints exactly one closed object on stdout.
  */
+import { homedir, hostname } from 'node:os';
 import { installPack } from './agent-pack.js';
 import { CLI_VERSION } from './version.js';
 import { prepareArtifact, type Artifact } from './artifact.js';
-import { exchangePublisherToken, fetchDiscovery } from './control-plane.js';
+import { exchangePublisherToken, fetchDiscovery, homeKeyId, homeUrl } from './control-plane.js';
+import {
+  configDirectory,
+  contextNameError,
+  isContextName,
+  mutateContexts,
+  readContexts,
+  readCredential,
+  type StoredContext,
+} from './contexts.js';
 import { discoverFlows, inventoryJson, type Inventory } from './discovery.js';
 import {
   CliError,
   EXIT_CODE,
   artifactError,
   authorizationError,
+  contractError,
   projectError,
   usageError,
 } from './errors.js';
 import type { FetchLike } from './internal/http.js';
 import { isDigest, isRelease, REQUIREMENT_KINDS, type Requirements } from './internal/names.js';
+import {
+  DEFAULT_ISSUER,
+  PAIRING_PAGE,
+  normalizeCode,
+  pairingIssuer,
+  redeemPairingCode,
+  validateLabel,
+} from './pairing.js';
 import { PROJECT_FILE, PROJECT_SCHEMA, findProjectFile, parseProject, type Project } from './project.js';
 import {
   activateRelease,
   publish,
+  readPointer,
   readRelease,
   readUpload,
   type ComponentPointer,
@@ -42,11 +62,15 @@ import {
 export { CLI_VERSION };
 
 /**
- * The Home Key is read from the environment only. A secret passed as an
- * argument would land in shell history, in a process listing and in most CI
- * logs, so no command accepts one.
+ * A Home Key comes from a paired context in `~/.miakapp` or, for CI and
+ * compatibility, from this variable. A secret passed as an argument would land
+ * in shell history, in a process listing and in most CI logs, so no command
+ * accepts one.
  */
 export const HOME_KEY_VARIABLE = 'MIAKAPP_HOME_KEY';
+
+/** Selects a stored context for one invocation, like `--context`. */
+export const CONTEXT_VARIABLE = 'MIAKAPP_CONTEXT';
 
 export interface FileSystem {
   read(path: string): Promise<Uint8Array>;
@@ -76,6 +100,16 @@ export interface CliHost {
   fetch?: FetchLike;
   /** Read only by `mcp`, which serves a request stream instead of one command. */
   input?: AsyncIterable<Uint8Array>;
+  /** Parent of `.miakapp`. Injected by tests; defaults to the account's home. */
+  homeDirectory?(): string;
+  /** Names the machine in a default key label. Defaults to the OS host name. */
+  hostname?(): string;
+  /**
+   * Reads one secret line without echoing it: a hidden prompt on a terminal,
+   * the first line of a pipe otherwise. Absent under MCP, whose stdin is the
+   * protocol stream.
+   */
+  readSecret?(prompt: string): Promise<string>;
 }
 
 type Field = readonly [key: string, value: string | number | readonly string[]];
@@ -102,10 +136,16 @@ Usage
 
 Commands
   docs start              Print the complete agent guide bundled with this CLI
+  pair                    Redeem a one-time pairing code into a stored context
+  context list            List stored contexts (never prints a key)
+  context show [name]     Show one context, the current one by default
+  context use <name>      Make a context current
+  context remove <name>   Delete a context and its stored key
   init                    Write ${PROJECT_FILE} in the current directory
   agent-pack              Install the guide and the MCP wiring into a repository
   discover                Inventory an existing Node-RED installation offline
   check                   Validate the project and the artifact offline
+  status                  Read the live generation and release of the home
   publish                 Upload, finalize and activate the built artifact
   activate                Activate an already finalized digest at a new generation
   rollback                Alias of activate, for returning to a known-good digest
@@ -118,15 +158,25 @@ Commands
 Common options
   --json                  Print one machine-readable object on stdout
   --project <dir>         Start the ${PROJECT_FILE} search here (default: cwd)
+  --context <name>        Use this stored context (status, publish, activate,
+                          rollback, release, upload, init)
+
+pair options
+  (code)                      Read from stdin: hidden prompt on a terminal, first
+                              line of a pipe otherwise. Preferred: never echoed.
+  --code <code>               Pass the code explicitly (lands in shell history)
+  --issuer <https url>        Control plane to redeem at (default: ${DEFAULT_ISSUER})
+  --label <label>             Key label shown to the owner (default: miakapp-cli@host)
+  --name <context>            Context name (default: the paired home ID)
 
 publish options
-  --expected-generation <n>   Generation the pointer is expected to hold (required)
+  --expected-generation <n>   Generation the pointer holds (default: read live)
   --generation <n>            Generation to publish (default: expected + 1)
   --release <name>            Override component.release from ${PROJECT_FILE}
 
 activate / rollback options
   --sha256 <digest>           Finalized artifact digest (required)
-  --expected-generation <n>   Generation the pointer is expected to hold (required)
+  --expected-generation <n>   Generation the pointer holds (default: read live)
   --generation <n>            Generation to publish (default: expected + 1)
 
 discover options
@@ -141,15 +191,22 @@ agent-pack options
   --dir <path>                Repository to install into (default: cwd)
 
 init options
-  --home <homeId>             Home ID to write into ${PROJECT_FILE} (required)
-  --control-plane <https url> Control-plane issuer (required)
+  --home <homeId>             Home ID (default: from the selected context)
+  --control-plane <https url> Control-plane issuer (default: from the context)
   --artifact <path>           Built artifact path (default: dist/component.js)
   --release <name>            Initial release name (default: 0.1.0)
 
+Credentials, highest precedence first
+  1. --context <name>       a context stored by miakapp pair
+  2. ${CONTEXT_VARIABLE}=<name>  the same, from the environment
+  3. ${HOME_KEY_VARIABLE}      a raw Home Key, for CI and compatibility
+  4. the stored context whose home and issuer match ${PROJECT_FILE}
+     (the current context wins a tie)
+  A stored context whose home or issuer differs from ${PROJECT_FILE} is refused,
+  so a key can never publish into another home. Keys are never printed.
+
 Environment
-  ${HOME_KEY_VARIABLE}   Home Key with the components:publish scope. Required by
-                     publish, activate, rollback, release and upload. It is never
-                     accepted as an argument and never printed.
+  MIAKAPP_CONFIG_DIR   Absolute directory replacing ~/.miakapp
 
 Exit codes
   0 success        1 usage        2 project      3 artifact
@@ -162,15 +219,18 @@ const GLOBAL_OPTIONS = ['project'] as const;
 /** Exported so the MCP surface can be proved to expose every option, and no other. */
 export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   docs: [],
-  init: ['home', 'control-plane', 'artifact', 'release'],
+  pair: ['code', 'issuer', 'label', 'name'],
+  context: [],
+  init: ['home', 'control-plane', 'artifact', 'release', 'context', 'kind'],
   'agent-pack': ['dir'],
   discover: ['flows'],
   check: [],
-  publish: ['expected-generation', 'generation', 'release'],
-  activate: ['sha256', 'expected-generation', 'generation'],
-  rollback: ['sha256', 'expected-generation', 'generation'],
-  release: [],
-  upload: [],
+  status: ['context'],
+  publish: ['expected-generation', 'generation', 'release', 'context'],
+  activate: ['sha256', 'expected-generation', 'generation', 'context'],
+  rollback: ['sha256', 'expected-generation', 'generation', 'context'],
+  release: ['context'],
+  upload: ['context'],
   mcp: [],
   help: [],
   version: [],
@@ -255,17 +315,42 @@ function generationOption(invocation: Invocation, name: string): number {
   return value;
 }
 
-/** `--generation` defaults to one above the expected generation, never higher. */
-function generationPair(invocation: Invocation): {
-  expectedGeneration: number;
-  generation: number;
-} {
-  const expectedGeneration = generationOption(invocation, 'expected-generation');
+interface GenerationPlan {
+  readonly expectedGeneration: number | undefined;
+  readonly generation: number | undefined;
+}
+
+/** Validated before any network use, so a typo never costs a request. */
+function generationPlan(invocation: Invocation): GenerationPlan {
+  const expectedGeneration = invocation.options.has('expected-generation')
+    ? generationOption(invocation, 'expected-generation')
+    : undefined;
   const generation = invocation.options.has('generation')
     ? generationOption(invocation, 'generation')
-    : expectedGeneration + 1;
-  if (generation <= expectedGeneration) {
+    : undefined;
+  if (expectedGeneration !== undefined && generation !== undefined
+    && generation <= expectedGeneration) {
     throw usageError('--generation must be strictly above --expected-generation');
+  }
+  return { expectedGeneration, generation };
+}
+
+/**
+ * Resolves the compare-and-set pair. Without `--expected-generation` the live
+ * generation is read first. That read takes no lock: the activation is still a
+ * compare-and-set, so a publication that lands in between fails with
+ * `conflict` rather than being overwritten.
+ */
+async function resolveGenerations(
+  target: PublicationTarget,
+  plan: GenerationPlan,
+): Promise<{ expectedGeneration: number; generation: number }> {
+  const expectedGeneration = plan.expectedGeneration ?? (await readPointer(target)).generation;
+  const generation = plan.generation ?? expectedGeneration + 1;
+  if (generation <= expectedGeneration) {
+    throw usageError(
+      `--generation must be strictly above the live generation ${expectedGeneration}`,
+    );
   }
   return { expectedGeneration, generation };
 }
@@ -278,16 +363,117 @@ function digestOption(invocation: Invocation, name: string): string {
   return value;
 }
 
-function homeKey(host: CliHost): string {
-  const value = host.env(HOME_KEY_VARIABLE);
-  if (value === undefined || value === '') {
+function nonEmpty(value: string | undefined): string | undefined {
+  return value === undefined || value === '' ? undefined : value;
+}
+
+function storeDirectory(host: CliHost): string {
+  return configDirectory((name) => host.env(name), host.homeDirectory?.() ?? homedir());
+}
+
+/** Where the Home Key of one invocation came from. The key itself never leaves. */
+interface Credential {
+  readonly homeKey: string;
+  readonly source: 'context' | 'environment';
+  readonly context: StoredContext | undefined;
+}
+
+/** The context named for this invocation, by flag first and then environment. */
+function explicitContext(host: CliHost, invocation: Invocation): string | undefined {
+  const name = invocation.options.get('context') ?? nonEmpty(host.env(CONTEXT_VARIABLE));
+  if (name !== undefined && !isContextName(name)) contextNameError(name);
+  return name;
+}
+
+/**
+ * The wrong-home guard. The project file says where a publication goes; a
+ * context says which home its key opens. When the two disagree the command
+ * stops, because the control plane would accept a valid key for home A
+ * publishing into home A, while the person meant home B.
+ */
+function requireSameHome(context: StoredContext, project: Project, origin: string): void {
+  if (context.homeId === project.homeId && context.issuer === project.issuer) return;
+  throw authorizationError(
+    `${origin} is for home ${context.homeId} at ${context.issuer}, but ${PROJECT_FILE} targets `
+    + `home ${project.homeId} at ${project.issuer}`,
+    'Select the context paired with this home (miakapp context list), or pair it with '
+    + 'miakapp pair. Nothing was sent.',
+  );
+}
+
+/**
+ * Picks the Home Key for one invocation. Precedence, highest first:
+ *
+ * 1. `--context <name>`, then `MIAKAPP_CONTEXT`: an explicit stored context;
+ * 2. `MIAKAPP_HOME_KEY`: a raw key, for CI and compatibility;
+ * 3. the stored context paired with the project's home and issuer, the
+ *    current context breaking a tie between several keys for that one home.
+ *
+ * A stored context is used only for the home it was paired with, and a raw
+ * key known to belong to another stored home is refused the same way.
+ */
+async function resolveCredential(
+  host: CliHost,
+  invocation: Invocation,
+  project: Project,
+): Promise<Credential> {
+  const directory = storeDirectory(host);
+  const explicit = explicitContext(host, invocation);
+  if (explicit !== undefined) {
+    const { context, homeKey } = await readCredential(directory, explicit);
+    requireSameHome(context, project, `Context ${context.name}`);
+    return { homeKey, source: 'context', context };
+  }
+
+  const environmentKey = nonEmpty(host.env(HOME_KEY_VARIABLE));
+  if (environmentKey !== undefined) {
+    const keyId = homeKeyId(environmentKey);
+    let known: Iterable<StoredContext> = [];
+    try {
+      known = (await readContexts(directory)).contexts.values();
+    } catch {
+      // The guard is best effort here: a CI runner has no store, and a broken
+      // one must not block a key the caller supplied explicitly.
+    }
+    for (const context of known) {
+      if (context.keyId === keyId) {
+        requireSameHome(context, project, `${HOME_KEY_VARIABLE} (paired as context ${context.name})`);
+      }
+    }
+    return { homeKey: environmentKey, source: 'environment', context: undefined };
+  }
+
+  const state = await readContexts(directory);
+  const matching = [...state.contexts.values()]
+    .filter((context) => context.homeId === project.homeId && context.issuer === project.issuer)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  const chosen = matching.find((context) => context.name === state.current) ?? matching[0];
+  if (chosen === undefined) {
+    const others = [...state.contexts.keys()];
     throw authorizationError(
-      `${HOME_KEY_VARIABLE} is not set`,
-      `Export a Home Key holding components:publish as ${HOME_KEY_VARIABLE}. `
-      + 'It is never accepted as a command-line argument.',
+      `No credential for home ${project.homeId} at ${project.issuer}`,
+      'Pair this home: ask the owner to open '
+      + `${PAIRING_PAGE}, choose it, confirm access and send you the code, then run `
+      + `miakapp pair. ${HOME_KEY_VARIABLE} also works, for CI.`
+      + (others.length === 0 ? '' : ` Stored contexts are for other homes: ${others.join(', ')}.`),
     );
   }
-  return value;
+  const { homeKey } = await readCredential(directory, chosen.name);
+  return { homeKey, source: 'context', context: chosen };
+}
+
+function credentialJson(credential: Credential): Record<string, unknown> {
+  return {
+    credential_source: credential.source,
+    context: credential.context?.name ?? null,
+  };
+}
+
+function credentialFields(credential: Credential): readonly Field[] {
+  return [[
+    'credential',
+    credential.context === undefined ? HOME_KEY_VARIABLE : `context ${credential.context.name}`,
+  ]];
 }
 
 async function nodeFileSystem(): Promise<FileSystem> {
@@ -345,32 +531,59 @@ async function loadArtifact(host: CliHost, project: Project): Promise<Artifact> 
   return prepareArtifact(await filesystem.read(project.artifactPath));
 }
 
-async function publicationTarget(host: CliHost, project: Project): Promise<PublicationTarget> {
-  const key = homeKey(host);
+async function publicationTarget(
+  host: CliHost,
+  invocation: Invocation,
+  project: Project,
+): Promise<{ target: PublicationTarget; credential: Credential; homeUrl: string | null }> {
+  const credential = await resolveCredential(host, invocation, project);
   const options = host.fetch === undefined ? {} : { fetch: host.fetch };
   const discovery = await fetchDiscovery({ issuer: project.issuer, ...options });
-  const token = await exchangePublisherToken(discovery, key, options);
-  return { issuer: discovery.issuer, homeId: project.homeId, token: token.accessToken, ...options };
+  const token = await exchangePublisherToken(discovery, credential.homeKey, options);
+  return {
+    target: { issuer: discovery.issuer, homeId: project.homeId, token: token.accessToken, ...options },
+    credential,
+    homeUrl: homeUrl(discovery, project.homeId),
+  };
 }
 
 function requirementFields(requires: Requirements): readonly Field[] {
   return REQUIREMENT_KINDS.map((kind): Field => [`requires.${kind}`, requires[kind]]);
 }
 
-function pointerResult(summary: string, pointer: ComponentPointer): CommandResult {
+/**
+ * `home_url` is the link residents open — the trusted Miakapp shell for this
+ * home, from discovery — and the only link to hand a person. `url` stays the
+ * raw artifact the shell verifies and runs; it is printed as `artifact_url` so
+ * it is never mistaken for a page.
+ */
+function pointerResult(
+  summary: string,
+  pointer: ComponentPointer,
+  credential: Credential,
+  expectedGeneration: number | undefined,
+  residentUrl: string | null,
+): CommandResult {
   return {
     summary,
     fields: [
+      ...credentialFields(credential),
+      ...(expectedGeneration === undefined
+        ? []
+        : [['expected_generation', expectedGeneration] as Field]),
       ['home', pointer.homeId],
+      ['home_url', residentUrl ?? 'not advertised by this control plane'],
+      ['abi', pointer.abi],
       ['generation', pointer.generation],
       ['release', pointer.release],
       ['sha256', pointer.sha256],
       ['size', pointer.size],
-      ['url', pointer.url],
+      ['artifact_url', pointer.url],
       ...requirementFields(pointer.requires),
     ],
     json: {
       home_id: pointer.homeId,
+      home_url: residentUrl,
       generation: pointer.generation,
       release: pointer.release,
       abi: pointer.abi,
@@ -378,6 +591,8 @@ function pointerResult(summary: string, pointer: ComponentPointer): CommandResul
       sha256: pointer.sha256,
       size: pointer.size,
       requires: pointer.requires,
+      ...(expectedGeneration === undefined ? {} : { expected_generation: expectedGeneration }),
+      ...credentialJson(credential),
     },
   };
 }
@@ -387,7 +602,25 @@ function projectTemplate(fields: {
   controlPlane: string;
   artifact: string;
   release: string;
+  kind: 'app' | 'component';
 }): string {
+  if (fields.kind === 'app') {
+    return `schema: ${PROJECT_SCHEMA}
+home: ${fields.home}
+control_plane: ${fields.controlPlane}
+
+# A whole-house application: one self-contained classic-script (IIFE) bundle
+# that draws its own interface in Miakapp's isolated frame. Every path read and
+# every function called must be declared; the coordinator still decides, per
+# resident, what each one may see and do.
+app:
+  artifact: ${fields.artifact}
+  release: ${fields.release}
+  requires:
+    state_read: []
+    call: []
+`;
+  }
   return `schema: ${PROJECT_SCHEMA}
 home: ${fields.home}
 control_plane: ${fields.controlPlane}
@@ -418,19 +651,82 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
   if (!isRelease(release)) {
     throw usageError('--release must be 1..64 UTF-8 bytes without control characters');
   }
+  const kind = invocation.options.get('kind') ?? 'app';
+  if (kind !== 'app' && kind !== 'component') {
+    throw usageError('--kind must be app (whole-house application, default) or component');
+  }
+  const target = await initTarget(host, invocation);
   const source = projectTemplate({
-    home: requiredOption(invocation, 'home'),
-    controlPlane: requiredOption(invocation, 'control-plane'),
-    artifact: invocation.options.get('artifact') ?? 'dist/component.js',
+    home: target.home,
+    controlPlane: target.controlPlane,
+    artifact: invocation.options.get('artifact') ?? (kind === 'app' ? 'dist/app.js' : 'dist/component.js'),
     release,
+    kind,
   });
   // Parsed before it is written, so init can never emit a file check rejects.
   parseProject(root, source);
   await filesystem.write(path, new TextEncoder().encode(source));
   return {
     summary: `Wrote ${path}`,
-    fields: [['project', path]],
-    json: { project: path, schema: PROJECT_SCHEMA },
+    fields: [
+      ['project', path],
+      ['home', target.home],
+      ['control_plane', target.controlPlane],
+      ...(target.context === undefined ? [] : [['context', target.context] as Field]),
+    ],
+    json: {
+      project: path,
+      schema: PROJECT_SCHEMA,
+      kind,
+      home_id: target.home,
+      control_plane: target.controlPlane,
+      context: target.context ?? null,
+    },
+  };
+}
+
+/**
+ * `--home` and `--control-plane` default to the selected context — the one
+ * named by `--context` or `MIAKAPP_CONTEXT`, else the current one — so the step
+ * after `miakapp pair` needs no identifier typed by hand. An explicit value
+ * that contradicts an explicitly selected context is refused rather than
+ * silently preferred.
+ */
+async function initTarget(host: CliHost, invocation: Invocation): Promise<{
+  home: string;
+  controlPlane: string;
+  context: string | undefined;
+}> {
+  const home = invocation.options.get('home');
+  const controlPlane = invocation.options.get('control-plane');
+  const explicit = explicitContext(host, invocation);
+  if (explicit === undefined && home !== undefined && controlPlane !== undefined) {
+    return { home, controlPlane, context: undefined };
+  }
+  const state = await readContexts(storeDirectory(host));
+  const name = explicit ?? state.current ?? undefined;
+  const context = name === undefined ? undefined : state.contexts.get(name);
+  if (explicit !== undefined && context === undefined) {
+    throw usageError(`No context named ${explicit}`, 'Run miakapp context list.');
+  }
+  if (context === undefined) {
+    throw usageError(
+      `--${home === undefined ? 'home' : 'control-plane'} is required when no context is selected`,
+      'Pair the home first with miakapp pair, or pass both --home and --control-plane.',
+    );
+  }
+  if (explicit !== undefined
+    && ((home !== undefined && home !== context.homeId)
+      || (controlPlane !== undefined && controlPlane !== context.issuer))) {
+    throw usageError(
+      `Context ${context.name} is for home ${context.homeId} at ${context.issuer}, which `
+      + 'contradicts --home or --control-plane',
+    );
+  }
+  return {
+    home: home ?? context.homeId,
+    controlPlane: controlPlane ?? context.issuer,
+    context: context.name,
   };
 }
 
@@ -605,6 +901,7 @@ async function runCheck(host: CliHost, invocation: Invocation): Promise<CommandR
     fields: [
       ['home', project.homeId],
       ['control_plane', project.issuer],
+      ['abi', project.abi],
       ['release', project.release],
       ['artifact', project.artifactPath],
       ['sha256', artifact.sha256],
@@ -615,6 +912,7 @@ async function runCheck(host: CliHost, invocation: Invocation): Promise<CommandR
     json: {
       home_id: project.homeId,
       control_plane: project.issuer,
+      abi: project.abi,
       release: project.release,
       artifact: project.artifactPath,
       sha256: artifact.sha256,
@@ -626,16 +924,18 @@ async function runCheck(host: CliHost, invocation: Invocation): Promise<CommandR
 }
 
 async function runPublish(host: CliHost, invocation: Invocation): Promise<CommandResult> {
-  const { expectedGeneration, generation } = generationPair(invocation);
+  const plan = generationPlan(invocation);
   const project = await loadProject(host, invocation);
   const release = invocation.options.get('release') ?? project.release;
   if (!isRelease(release)) {
     throw usageError('--release must be 1..64 UTF-8 bytes without control characters');
   }
   const artifact = await loadArtifact(host, project);
-  const target = await publicationTarget(host, project);
+  const { target, credential, homeUrl: residentUrl } = await publicationTarget(host, invocation, project);
+  const { expectedGeneration, generation } = await resolveGenerations(target, plan);
   const { pointer } = await publish(target, artifact, {
     release,
+    abi: project.abi,
     requires: project.requires,
     expectedGeneration,
     generation,
@@ -643,14 +943,17 @@ async function runPublish(host: CliHost, invocation: Invocation): Promise<Comman
   return pointerResult(
     `Published ${release} as generation ${pointer.generation}`,
     pointer,
+    credential,
+    expectedGeneration,
+    residentUrl,
   );
 }
 
 async function runActivate(host: CliHost, invocation: Invocation): Promise<CommandResult> {
   const sha256 = digestOption(invocation, 'sha256');
-  const { expectedGeneration, generation } = generationPair(invocation);
+  const plan = generationPlan(invocation);
   const project = await loadProject(host, invocation);
-  const target = await publicationTarget(host, project);
+  const { target, credential, homeUrl: residentUrl } = await publicationTarget(host, invocation, project);
   // Activation is checked against a readable finalized record first, so a typo
   // in a digest fails as an artifact error instead of spending a CAS attempt.
   const existing = await readRelease(target, sha256);
@@ -660,10 +963,14 @@ async function runActivate(host: CliHost, invocation: Invocation): Promise<Comma
       'Activate only a digest this home has already published.',
     );
   }
+  const { expectedGeneration, generation } = await resolveGenerations(target, plan);
   const pointer = await activateRelease(target, { sha256, expectedGeneration, generation });
   return pointerResult(
     `Activated ${existing.release} as generation ${pointer.generation}`,
     pointer,
+    credential,
+    expectedGeneration,
+    residentUrl,
   );
 }
 
@@ -674,7 +981,7 @@ async function runRelease(host: CliHost, invocation: Invocation): Promise<Comman
     throw usageError('The release digest must be 43 base64url characters');
   }
   const project = await loadProject(host, invocation);
-  const target = await publicationTarget(host, project);
+  const { target } = await publicationTarget(host, invocation, project);
   const record = await readRelease(target, sha256);
   if (record === undefined) {
     throw artifactError(`No finalized release for ${sha256}`);
@@ -703,7 +1010,7 @@ async function runUpload(host: CliHost, invocation: Invocation): Promise<Command
   const uploadId = invocation.positional[0];
   if (uploadId === undefined) throw usageError('upload requires one uploadId argument');
   const project = await loadProject(host, invocation);
-  const target = await publicationTarget(host, project);
+  const { target } = await publicationTarget(host, invocation, project);
   const state = await readUpload(target, uploadId);
   return {
     summary: `Upload ${state.uploadId} is ${state.status}`,
@@ -728,6 +1035,309 @@ async function runUpload(host: CliHost, invocation: Invocation): Promise<Command
   };
 }
 
+async function runStatus(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const project = await loadProject(host, invocation);
+  const { target, credential, homeUrl: residentUrl } = await publicationTarget(host, invocation, project);
+  const { generation, pointer } = await readPointer(target);
+  if (pointer === null) {
+    return {
+      summary: `${project.homeId} has never activated an interface (generation 0)`,
+      fields: [
+        ['home', project.homeId],
+        ['home_url', residentUrl ?? 'not advertised by this control plane'],
+        ['generation', 0],
+        ...credentialFields(credential),
+      ],
+      json: {
+        home_id: project.homeId,
+        home_url: residentUrl,
+        generation,
+        active: false,
+        ...credentialJson(credential),
+      },
+    };
+  }
+  const result = pointerResult(
+    `${project.homeId} runs ${pointer.release} at generation ${generation}`,
+    pointer,
+    credential,
+    undefined,
+    residentUrl,
+  );
+  return { ...result, json: { ...result.json, active: true } };
+}
+
+function defaultLabel(host: CliHost): string {
+  const machine = (host.hostname?.() ?? hostname()).replace(/[^A-Za-z0-9._-]/g, '-');
+  return `miakapp-cli@${machine === '' ? 'unknown' : machine}`.slice(0, 64);
+}
+
+/** A free context name: the base itself, else base-2, base-3, ... */
+function freeContextName(taken: ReadonlyMap<string, unknown>, base: string): string {
+  if (!taken.has(base)) return base;
+  for (let suffix = 2; ; suffix += 1) {
+    const candidate = `${base.slice(0, 62 - String(suffix).length)}-${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+}
+
+async function pairingCode(host: CliHost, invocation: Invocation): Promise<string> {
+  const explicit = invocation.options.get('code');
+  if (explicit !== undefined) return explicit;
+  if (host.readSecret === undefined) {
+    throw usageError(
+      'pair needs the one-time code',
+      'Pipe it on stdin (printf %s "$CODE" | miakapp pair) or run miakapp pair in a terminal to '
+      + 'be prompted without echo.',
+    );
+  }
+  return await host.readSecret('Pairing code (hidden): ');
+}
+
+/**
+ * Trades a one-time pairing code for a fresh Home Key and stores it as a new
+ * context. Every existing context is kept. The new context becomes current.
+ *
+ * Everything that can fail without spending the code — the issuer, the label,
+ * the name, the readability of the store and the issuer's discovery document —
+ * is checked before the code is sent, because a code works exactly once.
+ */
+async function runPair(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const issuer = pairingIssuer(invocation.options.get('issuer') ?? DEFAULT_ISSUER);
+  const label = validateLabel(invocation.options.get('label') ?? defaultLabel(host));
+  const requestedName = invocation.options.get('name');
+  if (requestedName !== undefined && !isContextName(requestedName)) contextNameError(requestedName);
+  const directory = storeDirectory(host);
+  const before = await readContexts(directory);
+  if (requestedName !== undefined && before.contexts.has(requestedName)) {
+    throw usageError(
+      `A context named ${requestedName} already exists`,
+      `Choose another --name, or remove it first with miakapp context remove ${requestedName}. `
+      + 'The code was not used.',
+    );
+  }
+
+  const code = normalizeCode(await pairingCode(host, invocation));
+  const options = host.fetch === undefined ? {} : { fetch: host.fetch };
+  let discovery: Awaited<ReturnType<typeof fetchDiscovery>>;
+  try {
+    discovery = await fetchDiscovery({ issuer, ...options });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unknown failure';
+    throw contractError(
+      `${issuer} did not prove it is a Miakapp control plane: ${reason}`,
+      'The code was not sent and is still valid until it expires. Check --issuer and the '
+      + 'network, then run pair again with the same code.',
+    );
+  }
+  const paired = await redeemPairingCode({ issuer, code, label, ...options });
+
+  const createdAt = new Date().toISOString();
+  let stored: { name: string; previous: readonly StoredContext[] };
+  try {
+    stored = await mutateContexts(directory, (state) => {
+      const previous = [...state.contexts.values()]
+        .filter((context) => context.homeId === paired.homeId && context.issuer === paired.issuer);
+      const name = freeContextName(state.contexts, requestedName ?? paired.homeId);
+      state.contexts.set(name, {
+        name,
+        issuer: paired.issuer,
+        homeId: paired.homeId,
+        keyId: paired.keyId,
+        label,
+        createdAt,
+      });
+      state.keys.set(name, paired.homeKey);
+      state.current = name;
+      return { name, previous };
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unknown failure';
+    throw authorizationError(
+      `Home Key ${paired.keyId} for ${paired.homeId} was issued but could not be stored in `
+      + `${directory}: ${reason}`,
+      `Ask the owner to revoke the key labelled ${JSON.stringify(label)}, fix the directory, then pair again.`,
+    );
+  }
+
+  // The key is stored; proving it can obtain a publication token tells the
+  // agent now, rather than at its first publish, whether the grant is usable.
+  let publishAccess: 'verified' | 'refused' = 'verified';
+  let publishAccessDetail: string | undefined;
+  try {
+    await exchangePublisherToken(discovery, paired.homeKey, options);
+  } catch (error) {
+    publishAccess = 'refused';
+    publishAccessDetail = error instanceof Error ? error.message : 'unknown failure';
+  }
+
+  const previous = stored.previous.map((context) => context.name);
+  return {
+    summary: `Paired ${paired.homeId} as context ${stored.name}`
+      + (publishAccess === 'verified' ? '' : ' (the key could not obtain a publication token)'),
+    fields: [
+      ['context', stored.name],
+      ['home', paired.homeId],
+      ['issuer', paired.issuer],
+      ['key_id', paired.keyId],
+      ['label', label],
+      ['current', 'yes'],
+      ['publish_access', publishAccessDetail === undefined ? publishAccess : `${publishAccess}: ${publishAccessDetail}`],
+      ['config', directory],
+      ...(previous.length === 0 ? [] : [['earlier_contexts_for_this_home', previous] as Field]),
+    ],
+    json: {
+      context: stored.name,
+      home_id: paired.homeId,
+      issuer: paired.issuer,
+      key_id: paired.keyId,
+      label,
+      current: true,
+      publish_access: publishAccess,
+      ...(publishAccessDetail === undefined ? {} : { publish_access_detail: publishAccessDetail }),
+      config_directory: directory,
+      earlier_contexts_for_this_home: previous,
+    },
+  };
+}
+
+function contextJson(
+  context: StoredContext,
+  current: string | null,
+  credential: string | undefined,
+): Record<string, unknown> {
+  return {
+    name: context.name,
+    home_id: context.homeId,
+    issuer: context.issuer,
+    key_id: context.keyId,
+    label: context.label,
+    created_at: context.createdAt,
+    current: context.name === current,
+    credential: credential ?? 'missing',
+  };
+}
+
+/**
+ * `context list | show [name] | use <name> | remove <name>`.
+ *
+ * Nothing here prints a Home Key: `credential` reports only whether the stored
+ * key is present and is the key the context was paired with.
+ */
+async function runContext(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const [action, name, extra] = invocation.positional;
+  const directory = storeDirectory(host);
+  if (extra !== undefined) throw usageError('context takes at most one name');
+  const named = (verb: string): string => {
+    if (name === undefined) throw usageError(`context ${verb} requires a context name`);
+    if (!isContextName(name)) contextNameError(name);
+    return name;
+  };
+
+  switch (action) {
+    case 'list': {
+      if (name !== undefined) throw usageError('context list takes no name');
+      const state = await readContexts(directory);
+      const contexts = [...state.contexts.values()];
+      return {
+        summary: contexts.length === 0
+          ? `No context in ${directory}. Run miakapp pair to add one.`
+          : `${counted(contexts.length, 'context', 'contexts')} in ${directory}`,
+        fields: contexts.map((context): Field => [
+          `${context.name === state.current ? '* ' : ''}${context.name}`,
+          `home ${context.homeId} at ${context.issuer}, key ${context.keyId} `
+          + `(${state.credentials.get(context.name) ?? 'missing'})`,
+        ]),
+        json: {
+          config_directory: directory,
+          current_context: state.current,
+          contexts: contexts.map((context) => contextJson(
+            context,
+            state.current,
+            state.credentials.get(context.name),
+          )),
+        },
+      };
+    }
+    case 'show': {
+      const state = await readContexts(directory);
+      const selected = name ?? state.current ?? undefined;
+      if (selected === undefined) {
+        throw usageError('No current context', 'Name one: miakapp context show <name>, or pair with miakapp pair.');
+      }
+      if (!isContextName(selected)) contextNameError(selected);
+      const context = state.contexts.get(selected);
+      if (context === undefined) {
+        throw usageError(`No context named ${selected}`, 'Run miakapp context list.');
+      }
+      const json = contextJson(context, state.current, state.credentials.get(context.name));
+      return {
+        summary: `Context ${context.name}${json['current'] === true ? ' (current)' : ''}`,
+        fields: [
+          ['home', context.homeId],
+          ['issuer', context.issuer],
+          ['key_id', context.keyId],
+          ['label', context.label],
+          ['created_at', context.createdAt],
+          ['credential', `${String(json['credential'])} (never printed)`],
+          ['config', directory],
+        ],
+        json: { ...json, config_directory: directory },
+      };
+    }
+    case 'use': {
+      const selected = named('use');
+      const context = await mutateContexts(directory, (state) => {
+        const found = state.contexts.get(selected);
+        if (found === undefined) {
+          throw usageError(`No context named ${selected}`, 'Run miakapp context list.');
+        }
+        state.current = selected;
+        return found;
+      });
+      return {
+        summary: `Current context is now ${selected}`,
+        fields: [['home', context.homeId], ['issuer', context.issuer]],
+        json: { current_context: selected, home_id: context.homeId, issuer: context.issuer },
+      };
+    }
+    case 'remove': {
+      const selected = named('remove');
+      const result = await mutateContexts(directory, (state) => {
+        const found = state.contexts.get(selected);
+        if (found === undefined) {
+          throw usageError(`No context named ${selected}`, 'Run miakapp context list.');
+        }
+        state.contexts.delete(selected);
+        state.keys.delete(selected);
+        const wasCurrent = state.current === selected;
+        if (wasCurrent) state.current = null;
+        return { context: found, wasCurrent };
+      });
+      return {
+        summary: `Removed context ${selected} and its stored key`,
+        fields: [
+          ['home', result.context.homeId],
+          ['key_id', result.context.keyId],
+          ['still_valid_on_server', 'yes: ask the owner to revoke it if it is no longer needed'],
+        ],
+        json: {
+          removed: selected,
+          home_id: result.context.homeId,
+          key_id: result.context.keyId,
+          was_current: result.wasCurrent,
+          revoked: false,
+        },
+      };
+    }
+    default:
+      throw usageError(
+        action === undefined ? 'context requires an action' : `Unknown context action: ${action}`,
+        'Use context list, context show [name], context use <name> or context remove <name>.',
+      );
+  }
+}
+
 /**
  * Runs one parsed invocation.
  *
@@ -738,6 +1348,12 @@ export async function dispatch(host: CliHost, invocation: Invocation): Promise<C
   switch (invocation.command) {
     case 'docs':
       return await runDocs(host, invocation);
+    case 'pair':
+      return await runPair(host, invocation);
+    case 'context':
+      return await runContext(host, invocation);
+    case 'status':
+      return await runStatus(host, invocation);
     case 'init':
       return await runInit(host, invocation);
     case 'agent-pack':
