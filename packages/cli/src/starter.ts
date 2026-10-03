@@ -64,7 +64,7 @@ function packageJson(home: string, artifact: string): string {
     scripts: {
       build: `bun build app/main.ts --format=iife --minify --outfile ${artifact}`,
       typecheck: 'tsc --noEmit',
-      check: 'bun run build && miakapp check',
+      check: 'bun run build && node ./node_modules/@miakapp/cli/bin/miakapp.js check',
     },
     devDependencies: {
       [PACKAGE_NAME]: CLI_VERSION,
