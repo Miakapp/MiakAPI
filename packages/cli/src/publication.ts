@@ -380,7 +380,10 @@ export async function requestUpload(
   if (response.status !== 201) {
     throw failure('Upload capability request', response.status, await readFailure(response), false);
   }
-  return decodeUploadCapability(await readJsonBody(response), `${base}/component-uploads/`);
+  // RFC 0004 §13.2: the capability is delivered to the issuer-level
+  // `PUT /v1/component-uploads/{uploadId}`, not under the home path that
+  // issued it.
+  return decodeUploadCapability(await readJsonBody(response), `${target.issuer}/v1/component-uploads/`);
 }
 
 /**

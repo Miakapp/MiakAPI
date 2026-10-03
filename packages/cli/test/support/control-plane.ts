@@ -149,6 +149,21 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
       });
     }
 
+    const deliveryMatch = /^\/v1\/component-uploads\/([A-Za-z0-9_-]{22})$/.exec(path);
+    if (method === 'PUT' && deliveryMatch !== null) {
+      const upload = plane.uploads.get(deliveryMatch[1] as string);
+      if (upload === undefined) return failure(404, 'invalid_upload_capability');
+      if ((init.headers as Record<string, string>)['authorization'] !== `Bearer ${upload.token}`) {
+        return failure(403, 'invalid_upload_capability');
+      }
+      const bytes = init.body as Uint8Array;
+      if (digestOf(bytes) !== upload.sha256 || bytes.byteLength !== upload.size) {
+        return failure(422, 'invalid_artifact');
+      }
+      upload.status = 'delivered';
+      return new Response(null, { status: 204 });
+    }
+
     const local = input.startsWith(base) ? input.slice(base.length) : undefined;
     if (local === undefined) return failure(404, 'not_found');
 
@@ -175,7 +190,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
       return json(201, {
         schema: 'miakapp.component-upload/1',
         upload_id: uploadId,
-        upload_url: `${base}/component-uploads/${uploadId}`,
+        upload_url: `${ISSUER}/v1/component-uploads/${uploadId}`,
         upload_token: upload.token,
         expires_at: new Date(Date.now() + 600_000).toISOString(),
       });
@@ -195,18 +210,8 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
     if (uploadMatch !== null) {
       const upload = plane.uploads.get(uploadMatch[1] as string);
       if (upload === undefined) return failure(404, 'invalid_upload_capability');
-      if (method === 'PUT') {
-        if ((init.headers as Record<string, string>)['authorization']
-          !== `Bearer ${upload.token}`) {
-          return failure(403, 'invalid_upload_capability');
-        }
-        const bytes = init.body as Uint8Array;
-        if (digestOf(bytes) !== upload.sha256 || bytes.byteLength !== upload.size) {
-          return failure(422, 'invalid_artifact');
-        }
-        upload.status = 'delivered';
-        return new Response(null, { status: 204 });
-      }
+      // Like the real control plane, delivery is not served under the home.
+      if (method === 'PUT') return failure(404, 'not_found');
       return json(200, {
         schema: 'miakapp.component-upload-status/1',
         upload_id: upload.uploadId,
