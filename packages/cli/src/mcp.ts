@@ -315,13 +315,26 @@ export const TOOLS: readonly ToolDefinition[] = [
       + 'is safe to call when unsure. home and control_plane default to the selected or current '
       + 'context, so after miakapp_pair no identifier needs typing. kind defaults to app: a '
       + 'whole-house application you draw yourself (any DOM, CSS, framework) bundled as one IIFE. '
-      + 'Declares no requirements: grant them one at a time, as the interface earns them.',
+      + 'Declares no requirements: grant them one at a time, as the interface earns them. With '
+      + 'starter "app" it also writes a self-contained app to edit (app/main.ts, the app/miakapp.ts '
+      + 'bridge, package.json, tsconfig.json, app/README.md) that builds with Bun and needs no '
+      + 'other package; it refuses, writing nothing, if any of those files exists. The starter '
+      + 'shows only what the home shares and invents nothing: inventory the house and adapt it '
+      + 'before publishing.',
     args: [
       {
         name: 'kind',
         type: 'string',
         required: false,
         description: 'app (whole-house application, default) or component (semantic tree).',
+      },
+      {
+        name: 'starter',
+        type: 'string',
+        required: false,
+        description:
+          'app: also write the buildable app starter. Omit to write miakapp.yaml only. Not '
+          + 'combinable with kind component.',
       },
       {
         name: 'home',

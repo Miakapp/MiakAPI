@@ -30,10 +30,11 @@ Concretely:
 - **Ask once, at the start, and only for what you cannot find.** Access comes
   from pairing (§9), the existing installation from inventory (§3). Repeated
   permission questions in the middle of the work are a failure of the work.
-- **You need nothing from the platform's source.** This guide, the CLI, the
-  public packages and `templates/home` are the whole toolchain. Never edit or
-  redeploy the Miakapp platform to make one house work; if a capability is
-  missing, report it to the owner as missing instead of patching around it.
+- **You need nothing from the platform's source.** This guide and the published
+  CLI — including the app starter `miakapp init --starter app` writes — are the
+  whole toolchain for the interface. Never edit or redeploy the Miakapp
+  platform to make one house work; if a capability is missing, report it to the
+  owner as missing instead of patching around it.
 
 Two scopes must not be confused:
 
@@ -68,10 +69,26 @@ platform-untrusted but not blind: it terminates TLS, stores plaintext state and
 enforces routing, so self-hosting it does not give end-to-end confidentiality.
 Do not tell the owner otherwise.
 
-Start from `templates/home`. It is a complete working home — one lamp, one
-temperature — with the three files already in the right relationship, and its
-own `README.md` covering the mechanics of copying it out. This guide covers the
-judgment the template cannot.
+Start the interface with the starter the CLI ships, in an empty directory:
+
+```bash
+miakapp init --starter app        # home and issuer from the paired context
+bun run build && bun run check    # Bun >= 1.2.23 bundles; Node >= 22.9 runs the CLI
+```
+
+It writes `miakapp.yaml`, `app/main.ts` (the interface to edit),
+`app/miakapp.ts` (the bridge to the home, copied from this CLI release),
+`package.json`, `tsconfig.json` and `app/README.md`. It needs no source
+repository and no unpublished package, and it refuses — writing nothing — if
+any of those files already exists. As generated it shows only what the home
+shares, with an honest empty state; it is where your work starts, never what
+you publish. Without `--starter`, `init` writes `miakapp.yaml` alone.
+
+`templates/home` in the MiakAPI source repository is an optional developer
+example: a coordinator, an app and a component wired to the repository with
+`file:` dependencies, some unpublished. Read it for ideas if you have it;
+nothing in it is needed to build or publish a home. This guide covers the
+judgment no starter can.
 
 ### Leave the repository readable by the next agent
 
@@ -96,7 +113,7 @@ that contradicts the CLI installed beside it is worse than no guide.
 
 **The coordinator authorizes everything.** The relay proves *who* is calling and
 attaches non-spoofable caller metadata. Deciding whether that person *may* act is
-the coordinator's job and nobody else's. In the template that decision is the
+the coordinator's job and nobody else's. In the developer example that decision is the
 first line of the function body:
 
 ```ts
@@ -209,7 +226,8 @@ keyword list should make it for you.
 
 ## 4. The coordinator
 
-`templates/home/coordinator/home.ts` is the shape to copy: the configuration is a
+The developer example's `coordinator/home.ts` (in `templates/home` of the MiakAPI
+repository) shows the shape: the configuration is a
 **pure function of its options**, so it can be tested without a relay, a control
 plane or a network. `coordinator/main.ts` is the only file that touches the
 outside world. Keep that split. It is what makes `test/home.test.ts` possible,
@@ -258,11 +276,11 @@ house, you have taken a name another integration may need; scope what you own.
 
 ### A whole-house application (default)
 
-`miakapp init` writes an `app:` section; `templates/home/app/` is a working
-example. You own the document: build any DOM, ship your own CSS, route with
+`miakapp init --starter app` writes an `app:` section and a buildable app to
+edit. You own the document: build any DOM, ship your own CSS, route with
 `location.hash`, use React, Svelte, Vue, charts or WebAssembly — anything a
 bundler can inline. The deliverable is **one classic-script IIFE** of at most
-2 MiB, with no `import()` and no source map:
+2 MiB, with no `import()` and no source map; the starter's `bun run build` is:
 
 ```bash
 bun build app/main.ts --format=iife --minify --outfile dist/app.js
@@ -271,15 +289,19 @@ bun build app/main.ts --format=iife --minify --outfile dist/app.js
 Miakapp runs it in an isolated, opaque-origin frame below a permanent Miakapp
 bar, after the resident agreed to open the home. The frame has no network, no
 cookies or storage, no popups and no fullscreen; assets go in the bundle as
-`data:`/`blob:` URLs. Its only way to the home is `@miakapp/app`:
+`data:`/`blob:` URLs. Its only way to the home is `window.miakapp`, through the
+bridge the starter writes as `app/miakapp.ts` — the source of the `@miakapp/app`
+SDK, which is not on npm yet, so import the local file:
 
 ```ts
-import { callErrorCode, connect } from '@miakapp/app';
+import { callErrorCode, connect } from './miakapp.js';
 
 const home = connect();
 home.subscribe((state) => render(state));        // also called once immediately
 await home.call('lighting.set', { on: true });   // rejects with a closed code
 ```
+
+Do not edit the bridge; a newer CLI's starter carries any change to it.
 
 Declare every state path (exact or `prefix.*`) under `app.requires.state_read`
 and every function under `app.requires.call`. Events, media and `miakapp.*`
@@ -334,7 +356,7 @@ house. Show it. Per RFC 0002 §12.2 it is exposed, never hidden — a thermostat
 reading that is silently forty minutes old is worse than one labelled uncertain.
 
 **Staging.** `home.staging` is true while a release is staged: rendering works,
-calls and events do not. Disable the controls and say why, as the template does.
+calls and events do not. Disable the controls and say why.
 An interface that looks live and silently does nothing is the worst outcome
 available.
 
@@ -376,8 +398,8 @@ renders a hole — an empty card, a control that does nothing, a temperature tha
 is permanently unavailable. This is the single most common way a Miakapp home
 breaks, and it breaks quietly.
 
-So: assert the correspondence in a test. `templates/home/test/home.test.ts` does
-exactly this, and it is the reason a mismatch fails in CI rather than in
+So: assert the correspondence in a test. The developer example's
+`test/home.test.ts` does exactly this, and it is the reason a mismatch fails in CI rather than in
 someone's living room. When you add a path, change four things in one commit —
 the state declaration, the access pattern, the `requires` entry, and the test.
 
@@ -418,7 +440,7 @@ control-plane endpoint. The repository is the owner's.
 miakapp docs start                             # this guide, from the installed CLI
 miakapp pair                                   # once per home and machine (§9)
 miakapp agent-pack                             # once, per repository
-miakapp init                                   # app: by default; --kind component for a semantic tree
+miakapp init --starter app                     # manifest + buildable app; plain init writes the manifest only
 miakapp check
 miakapp status                                 # what is live now: generation, release, digest
 miakapp publish                                # upload, finalize, activate
@@ -531,7 +553,7 @@ refused before any request: a key can never publish into the wrong house.
 
 Prefer one key per agent or machine, so the owner can revoke one without
 breaking the others. A coordinator running on the owner's machine still reads
-its own key from its environment (`templates/home/README.md`).
+its own key from its environment (the developer example's `coordinator/main.ts`).
 
 If you are about to write a secret into `miakapp.yaml` or any file in the
 repository so something works, stop: that is the failure this design exists to
@@ -562,13 +584,14 @@ prevent.
 
 ## Where to read further
 
-Everything a home needs is above, in the CLI and in the template. The RFCs and
+Everything a home needs is above and in the CLI with its starter. The RFCs and
 platform paths below explain *why* the platform behaves as it does; you never
 need them, or the platform repository, to build and publish a home.
 
 - `packages/cli/README.md` — every command and every tool, including what the
   pack writes and what it refuses to overwrite.
-- `templates/home/README.md` — the mechanics of the template itself.
+- `templates/home/README.md` (MiakAPI repository, optional) — the developer
+  example: a coordinator and both interface kinds.
 - `docs/rfcs/0001` (Miakapp-V3) — wire protocol: ownership, collisions, `4409`.
 - `docs/rfcs/0002` — component runtime and the staleness rule. **The broker is
   the authority for the guest ABI, not the RFC**: `component-runtime/src/runtime-broker.ts`

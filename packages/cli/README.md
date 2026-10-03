@@ -13,17 +13,43 @@ object on stdout.
 
 ```bash
 printf '%s\n' "$CODE" | bunx @miakapp/cli pair --issuer "$MIAKAPP_ISSUER"
-bunx @miakapp/cli init                            # home and issuer from the paired context
-bunx @miakapp/cli check
+bunx @miakapp/cli init --starter app              # manifest + app to edit; home and issuer from the context
+bun run build && bun run check                    # after the inventory and adapting app/main.ts
 bunx @miakapp/cli publish
 bunx @miakapp/cli status                          # verify what is live
 ```
 
 Use the exact issuer command shown by your deployment's `/pair` page; do not
-guess a staging issuer. `init` writes the project manifest, not an application:
-build your house UI as one classic-script IIFE (the `@miakapp/app` SDK is
-optional), then run `check` and `publish`. Open and verify the returned
-`home_url` as a resident before handing it over.
+guess a staging issuer. Open and verify the returned `home_url` as a resident
+before handing it over.
+
+## The app starter
+
+`miakapp init --starter app` writes, beside `miakapp.yaml`, everything needed to
+build a whole-house application with nothing but this package and Bun:
+
+| File | |
+| --- | --- |
+| `app/main.ts` | the interface to edit: shows what the home shares, grouped, with stale and empty states |
+| `app/miakapp.ts` | the bridge to `window.miakapp` — byte for byte the `@miakapp/app` SDK source, which is not on npm yet |
+| `package.json` | `build` (Bun IIFE to the manifest's artifact), `typecheck`, `check`; pins this CLI and TypeScript |
+| `tsconfig.json` | strict TypeScript for `app/` |
+| `app/README.md` | the loop, the prerequisites and what to do before publishing |
+
+Prerequisites: Node.js ≥ 22.9 for the CLI, Bun ≥ 1.2.23 for `bun run build`
+(TypeScript, from `bun install`, only for `typecheck`). The starter accepts
+`--artifact` (a plain relative `.js` path), `--release`, `--home`,
+`--control-plane` and `--context`; it cannot be combined with
+`--kind component`.
+
+It never overwrites anything: every target is checked first, and if any one
+exists the command fails with exit 2 and writes nothing. Without `--starter`,
+`init` writes `miakapp.yaml` alone, as before.
+
+The starter invents no value and offers no control. `app.requires` starts
+empty, so a fresh build shows only an empty state: inventory the house, declare
+the paths and calls, give them resident-facing names and a real layout, then
+publish.
 
 ## The project file
 
@@ -66,7 +92,7 @@ duplicate keys — is rejected with the offending line rather than guessed at.
 | --- | --- |
 | `pair` | Redeems a one-time pairing code into a new stored context. |
 | `context list\|show\|use\|remove` | Manages stored contexts. Never prints a key. |
-| `init` | Writes `miakapp.yaml`. Never overwrites an existing one. |
+| `init` | Writes `miakapp.yaml`; with `--starter app`, also a buildable app. Never overwrites. |
 | `agent-pack` | Offline. Installs the guide and the MCP wiring into a repository. |
 | `discover` | Offline. Inventories a Node-RED installation from its flows export. |
 | `check` | Offline. Parses the project, verifies the artifact, prints the digest. |
@@ -159,7 +185,7 @@ tools over newline-delimited JSON-RPC on stdio.
 | `miakapp_check` | `check` | read-only, offline |
 | `miakapp_release` | `release` | read-only |
 | `miakapp_upload` | `upload` | read-only |
-| `miakapp_init` | `init` | writes `miakapp.yaml`, never overwrites |
+| `miakapp_init` | `init` | writes `miakapp.yaml` (and the app starter with `starter: "app"`), never overwrites |
 | `miakapp_agent_pack` | `agent-pack` | offline, writes the pack into a repository |
 | `miakapp_publish` | `publish` | **moves the pointer — needs `confirm: true`** |
 | `miakapp_activate` | `activate` | **moves the pointer — needs `confirm: true`** |
@@ -300,5 +326,6 @@ talks to is deployed; publishing it to npm is a deliberate, separate step.
 
 Run `miakapp help` or append `--help` / `-h` to any command, including
 `miakapp pair --help`. Help never prompts for a code or executes the command.
-`miakapp init` defaults to a whole-house app at `dist/app.js`; use
-`--kind component` for a semantic component at `dist/component.js`.
+`miakapp init` defaults to a whole-house app at `dist/app.js`; add
+`--starter app` for the buildable starter, or use `--kind component` for a
+semantic component at `dist/component.js`.
