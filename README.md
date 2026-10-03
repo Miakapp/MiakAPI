@@ -156,6 +156,18 @@ await coordinator.state.set([
 ]);
 ```
 
+Every declaration change — an ACL, event or function slice, or a reconnect —
+resends the complete state slice (RFC 0001 §7.5). It carries the value the relay
+last acknowledged for each path, not the configured one, so revoking one user
+never rolls the home back for the others. Only mutations confirmed by
+`STATE_SET_OK` are carried, including one whose caller aborted after handoff; a
+rejected mutation or one lost with its connection (`outcome_unknown`) is never
+replayed, and the last acknowledged value is resent instead. An explicit
+`state.declare` or `configure` replaces acknowledged values. `STATE_SYNC` cannot
+declare a path without a value, so an acknowledged deletion is staged with the
+declared value and then reapplied by one SDK-sent deletion right after the
+declaration activates; users may briefly see the declared value in between.
+
 Event publication returns a synchronous opaque ID and a transport-handoff
 promise. `sent` is not a delivery receipt; a later correlated relay rejection is
 reported through `coordinator.errors`.
