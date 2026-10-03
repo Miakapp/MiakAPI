@@ -1,6 +1,6 @@
 # @miakapp/cli
 
-Build, validate, publish and roll back one Miakapp home component.
+Pair, build, validate, publish and roll back independent Miakapp house applications.
 
 The CLI is the deployment mechanism, not the source of truth. **Git belongs to
 you**: this tool never commits, never rewrites sources it did not generate and
@@ -12,12 +12,18 @@ stable exit code and one stable failure kind, and `--json` prints exactly one
 object on stdout.
 
 ```bash
-printf '%s\n' "$CODE" | bunx @miakapp/cli pair   # code from https://miakapp.com/pair
+printf '%s\n' "$CODE" | bunx @miakapp/cli pair --issuer "$MIAKAPP_ISSUER"
 bunx @miakapp/cli init                            # home and issuer from the paired context
 bunx @miakapp/cli check
 bunx @miakapp/cli publish
 bunx @miakapp/cli status                          # verify what is live
 ```
+
+Use the exact issuer command shown by your deployment's `/pair` page; do not
+guess a staging issuer. `init` writes the project manifest, not an application:
+build your house UI as one classic-script IIFE (the `@miakapp/app` SDK is
+optional), then run `check` and `publish`. Open and verify the returned
+`home_url` as a resident before handing it over.
 
 ## The project file
 
@@ -26,23 +32,24 @@ bunx @miakapp/cli status                          # verify what is live
 ```yaml
 schema: miakapp.project/1
 home: my-home
-control_plane: https://control.miakapp.com
+control_plane: https://control.example.test
 
-component:
-  artifact: dist/component.js
-  release: 2026-09-13.1
+app:
+  artifact: dist/app.js
+  release: 2026-10-03.1
   requires:
     state_read:
       - climate.living_room.temperature
-    event_subscribe: []
-    event_publish: []
     call:
       - lighting.set
-    presentation: []
 
 coordinator:
   entry: coordinator/main.ts
 ```
+
+`app` declares only `state_read` and `call`; events, media and reserved
+`miakapp.*` calls are unavailable. Use `miakapp init --kind component` for the
+semantic component ABI instead. Choose exactly one of `app` and `component`.
 
 `requires` is the closed RFC 0002 capability object. Lists are de-duplicated and
 sorted before they are bound into an upload capability, so the value the CLI
@@ -116,9 +123,9 @@ place instead of appending another copy. `.mcp.json` is merged as a structure â€
 one key, by name â€” so every other server in it survives, and a file that does
 not parse is refused rather than replaced with a valid one.
 
-The server is registered as the bare `miakapp` command rather than an absolute
-path, because the file is committed and the next machine to check it out will
-not have this one's directory layout.
+The generated server entry uses `npx -y @miakapp/cli@<installed-version> mcp`,
+so a new machine gets the same executable as the bundled guide without relying
+on a global binary or this machine's directory layout.
 
 Run it again whenever the CLI is upgraded: an unchanged file is reported
 `unchanged`, and a guide that moved on is reported `updated`.
