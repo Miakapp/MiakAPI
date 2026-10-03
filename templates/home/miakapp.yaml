@@ -2,23 +2,23 @@ schema: miakapp.project/1
 home: my-home
 control_plane: https://control.miakapp.com
 
-component:
-  artifact: dist/component.js
+# The household's interface: a whole-house application (miakapp.app/1) built
+# from app/main.ts into one IIFE. Residents open it at the home_url that
+# `miakapp publish` prints. To publish the semantic component in component/
+# instead, replace this section with `component:` (artifact dist/component.js,
+# built by `bun run build:component`), which may also declare its event.
+app:
+  artifact: dist/app.js
   release: 0.1.0
-  # These lists are the component's request, not a grant. The effective grant is
-  # the intersection with what the coordinator declared in coordinator/home.ts,
-  # so every name here must also be covered there.
+  # A request, not a grant: the coordinator in coordinator/home.ts decides per
+  # resident, so every name here must also be covered there.
   requires:
     state_read:
       - climate.living_room.temperature
       - service.coordinator.health
       - zone.living_room.light.on
-    event_subscribe:
-      - zone.living_room.light.changed
-    event_publish: []
     call:
       - lighting.set
-    presentation: []
 
 coordinator:
   entry: coordinator/main.ts

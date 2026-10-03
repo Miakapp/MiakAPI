@@ -18,7 +18,7 @@ import { homedir, hostname } from 'node:os';
 import { installPack } from './agent-pack.js';
 import { CLI_VERSION } from './version.js';
 import { prepareArtifact, type Artifact } from './artifact.js';
-import { exchangePublisherToken, fetchDiscovery, homeKeyId } from './control-plane.js';
+import { exchangePublisherToken, fetchDiscovery, homeKeyId, homeUrl } from './control-plane.js';
 import {
   configDirectory,
   contextNameError,
@@ -221,7 +221,7 @@ export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   docs: [],
   pair: ['code', 'issuer', 'label', 'name'],
   context: [],
-  init: ['home', 'control-plane', 'artifact', 'release', 'context'],
+  init: ['home', 'control-plane', 'artifact', 'release', 'context', 'kind'],
   'agent-pack': ['dir'],
   discover: ['flows'],
   check: [],
@@ -535,7 +535,7 @@ async function publicationTarget(
   host: CliHost,
   invocation: Invocation,
   project: Project,
-): Promise<{ target: PublicationTarget; credential: Credential }> {
+): Promise<{ target: PublicationTarget; credential: Credential; homeUrl: string | null }> {
   const credential = await resolveCredential(host, invocation, project);
   const options = host.fetch === undefined ? {} : { fetch: host.fetch };
   const discovery = await fetchDiscovery({ issuer: project.issuer, ...options });
@@ -543,6 +543,7 @@ async function publicationTarget(
   return {
     target: { issuer: discovery.issuer, homeId: project.homeId, token: token.accessToken, ...options },
     credential,
+    homeUrl: homeUrl(discovery, project.homeId),
   };
 }
 
@@ -550,11 +551,18 @@ function requirementFields(requires: Requirements): readonly Field[] {
   return REQUIREMENT_KINDS.map((kind): Field => [`requires.${kind}`, requires[kind]]);
 }
 
+/**
+ * `home_url` is the link residents open — the trusted Miakapp shell for this
+ * home, from discovery — and the only link to hand a person. `url` stays the
+ * raw artifact the shell verifies and runs; it is printed as `artifact_url` so
+ * it is never mistaken for a page.
+ */
 function pointerResult(
   summary: string,
   pointer: ComponentPointer,
   credential: Credential,
   expectedGeneration: number | undefined,
+  residentUrl: string | null,
 ): CommandResult {
   return {
     summary,
@@ -564,15 +572,18 @@ function pointerResult(
         ? []
         : [['expected_generation', expectedGeneration] as Field]),
       ['home', pointer.homeId],
+      ['home_url', residentUrl ?? 'not advertised by this control plane'],
+      ['abi', pointer.abi],
       ['generation', pointer.generation],
       ['release', pointer.release],
       ['sha256', pointer.sha256],
       ['size', pointer.size],
-      ['url', pointer.url],
+      ['artifact_url', pointer.url],
       ...requirementFields(pointer.requires),
     ],
     json: {
       home_id: pointer.homeId,
+      home_url: residentUrl,
       generation: pointer.generation,
       release: pointer.release,
       abi: pointer.abi,
@@ -591,7 +602,25 @@ function projectTemplate(fields: {
   controlPlane: string;
   artifact: string;
   release: string;
+  kind: 'app' | 'component';
 }): string {
+  if (fields.kind === 'app') {
+    return `schema: ${PROJECT_SCHEMA}
+home: ${fields.home}
+control_plane: ${fields.controlPlane}
+
+# A whole-house application: one self-contained classic-script (IIFE) bundle
+# that draws its own interface in Miakapp's isolated frame. Every path read and
+# every function called must be declared; the coordinator still decides, per
+# resident, what each one may see and do.
+app:
+  artifact: ${fields.artifact}
+  release: ${fields.release}
+  requires:
+    state_read: []
+    call: []
+`;
+  }
   return `schema: ${PROJECT_SCHEMA}
 home: ${fields.home}
 control_plane: ${fields.controlPlane}
@@ -622,12 +651,17 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
   if (!isRelease(release)) {
     throw usageError('--release must be 1..64 UTF-8 bytes without control characters');
   }
+  const kind = invocation.options.get('kind') ?? 'app';
+  if (kind !== 'app' && kind !== 'component') {
+    throw usageError('--kind must be app (whole-house application, default) or component');
+  }
   const target = await initTarget(host, invocation);
   const source = projectTemplate({
     home: target.home,
     controlPlane: target.controlPlane,
-    artifact: invocation.options.get('artifact') ?? 'dist/component.js',
+    artifact: invocation.options.get('artifact') ?? (kind === 'app' ? 'dist/app.js' : 'dist/component.js'),
     release,
+    kind,
   });
   // Parsed before it is written, so init can never emit a file check rejects.
   parseProject(root, source);
@@ -643,6 +677,7 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
     json: {
       project: path,
       schema: PROJECT_SCHEMA,
+      kind,
       home_id: target.home,
       control_plane: target.controlPlane,
       context: target.context ?? null,
@@ -866,6 +901,7 @@ async function runCheck(host: CliHost, invocation: Invocation): Promise<CommandR
     fields: [
       ['home', project.homeId],
       ['control_plane', project.issuer],
+      ['abi', project.abi],
       ['release', project.release],
       ['artifact', project.artifactPath],
       ['sha256', artifact.sha256],
@@ -876,6 +912,7 @@ async function runCheck(host: CliHost, invocation: Invocation): Promise<CommandR
     json: {
       home_id: project.homeId,
       control_plane: project.issuer,
+      abi: project.abi,
       release: project.release,
       artifact: project.artifactPath,
       sha256: artifact.sha256,
@@ -894,10 +931,11 @@ async function runPublish(host: CliHost, invocation: Invocation): Promise<Comman
     throw usageError('--release must be 1..64 UTF-8 bytes without control characters');
   }
   const artifact = await loadArtifact(host, project);
-  const { target, credential } = await publicationTarget(host, invocation, project);
+  const { target, credential, homeUrl: residentUrl } = await publicationTarget(host, invocation, project);
   const { expectedGeneration, generation } = await resolveGenerations(target, plan);
   const { pointer } = await publish(target, artifact, {
     release,
+    abi: project.abi,
     requires: project.requires,
     expectedGeneration,
     generation,
@@ -907,6 +945,7 @@ async function runPublish(host: CliHost, invocation: Invocation): Promise<Comman
     pointer,
     credential,
     expectedGeneration,
+    residentUrl,
   );
 }
 
@@ -914,7 +953,7 @@ async function runActivate(host: CliHost, invocation: Invocation): Promise<Comma
   const sha256 = digestOption(invocation, 'sha256');
   const plan = generationPlan(invocation);
   const project = await loadProject(host, invocation);
-  const { target, credential } = await publicationTarget(host, invocation, project);
+  const { target, credential, homeUrl: residentUrl } = await publicationTarget(host, invocation, project);
   // Activation is checked against a readable finalized record first, so a typo
   // in a digest fails as an artifact error instead of spending a CAS attempt.
   const existing = await readRelease(target, sha256);
@@ -931,6 +970,7 @@ async function runActivate(host: CliHost, invocation: Invocation): Promise<Comma
     pointer,
     credential,
     expectedGeneration,
+    residentUrl,
   );
 }
 
@@ -997,13 +1037,24 @@ async function runUpload(host: CliHost, invocation: Invocation): Promise<Command
 
 async function runStatus(host: CliHost, invocation: Invocation): Promise<CommandResult> {
   const project = await loadProject(host, invocation);
-  const { target, credential } = await publicationTarget(host, invocation, project);
+  const { target, credential, homeUrl: residentUrl } = await publicationTarget(host, invocation, project);
   const { generation, pointer } = await readPointer(target);
   if (pointer === null) {
     return {
-      summary: `${project.homeId} has never activated a component (generation 0)`,
-      fields: [['home', project.homeId], ['generation', 0], ...credentialFields(credential)],
-      json: { home_id: project.homeId, generation, active: false, ...credentialJson(credential) },
+      summary: `${project.homeId} has never activated an interface (generation 0)`,
+      fields: [
+        ['home', project.homeId],
+        ['home_url', residentUrl ?? 'not advertised by this control plane'],
+        ['generation', 0],
+        ...credentialFields(credential),
+      ],
+      json: {
+        home_id: project.homeId,
+        home_url: residentUrl,
+        generation,
+        active: false,
+        ...credentialJson(credential),
+      },
     };
   }
   const result = pointerResult(
@@ -1011,6 +1062,7 @@ async function runStatus(host: CliHost, invocation: Invocation): Promise<Command
     pointer,
     credential,
     undefined,
+    residentUrl,
   );
   return { ...result, json: { ...result.json, active: true } };
 }

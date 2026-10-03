@@ -24,6 +24,7 @@ interface Upload {
   readonly uploadId: string;
   readonly token: string;
   readonly release: string;
+  readonly abi: string;
   readonly sha256: string;
   readonly size: number;
   readonly requires: unknown;
@@ -38,6 +39,8 @@ export interface FakeControlPlaneOptions {
   readonly fail?: ReadonlyMap<string, { status: number; code: string }>;
   /** Replaces the pairing redeem response, for contract-violation tests. */
   readonly pairingResponse?: (issued: { homeKey: string; homeId: string; keyId: string }) => Response;
+  /** Optional discovery members a newer control plane advertises. */
+  readonly discoveryExtras?: Readonly<Record<string, string>>;
 }
 
 export interface FakeControlPlane {
@@ -106,6 +109,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         user_relay_exchange_endpoint: `${ISSUER}/v1/user-relay-tokens:exchange`,
         push_audience: `${ISSUER}/v1/push`,
         components_audience: `${ISSUER}/v1/components`,
+        ...options.discoveryExtras,
       });
     }
 
@@ -151,6 +155,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
     if (method === 'POST' && local === '/component-uploads') {
       const body = JSON.parse(String(init.body)) as {
         release: string;
+        abi: string;
         sha256: string;
         size: number;
         requires: unknown;
@@ -160,6 +165,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         uploadId,
         token: randomSecret(),
         release: body.release,
+        abi: body.abi,
         sha256: body.sha256,
         size: body.size,
         requires: body.requires,
@@ -206,7 +212,7 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
         upload_id: upload.uploadId,
         status: upload.status,
         release: upload.release,
-        abi: COMPONENT_ABI,
+        abi: upload.abi,
         sha256: upload.sha256,
         size: upload.size,
         requires: upload.requires,
@@ -251,14 +257,14 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
 
   function pointerBody(
     generation: number,
-    record: { release: string; sha256: string; size: number; requires: unknown },
+    record: { release: string; sha256: string; size: number; requires: unknown; abi?: string },
   ): unknown {
     return {
       schema: 'miakapp.component-pointer/1',
       home_id: options.homeId,
       generation,
       release: record.release,
-      abi: COMPONENT_ABI,
+      abi: record.abi ?? COMPONENT_ABI,
       url: `${ISSUER}/v1/components/${record.sha256}.js`,
       sha256: record.sha256,
       size: record.size,
@@ -271,11 +277,12 @@ export function fakeControlPlane(options: FakeControlPlaneOptions): FakeControlP
     sha256: string;
     size: number;
     requires: unknown;
+    abi?: string;
   }): unknown {
     return {
       schema: 'miakapp.component-release/1',
       release: record.release,
-      abi: COMPONENT_ABI,
+      abi: record.abi ?? COMPONENT_ABI,
       sha256: record.sha256,
       size: record.size,
       requires: record.requires,

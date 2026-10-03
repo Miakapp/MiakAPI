@@ -1,7 +1,14 @@
 import { isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { projectError } from './errors.js';
 import { canonicalHttpsUrl } from './internal/http.js';
-import { isHomeId, isRelease, type Requirements } from './internal/names.js';
+import {
+  APP_ABI,
+  COMPONENT_ABI,
+  isHomeId,
+  isRelease,
+  type ReleaseAbi,
+  type Requirements,
+} from './internal/names.js';
 import { canonicalRequirements } from './internal/requirements.js';
 import { parseYaml, type YamlMapping, type YamlValue } from './internal/yaml.js';
 
@@ -10,6 +17,8 @@ export const PROJECT_SCHEMA = 'miakapp.project/1';
 
 export interface Project {
   readonly root: string;
+  /** `miakapp.app/1` for an `app:` section, `miakapp.component/1` for `component:`. */
+  readonly abi: ReleaseAbi;
   readonly homeId: string;
   readonly issuer: string;
   readonly artifactPath: string;
@@ -51,9 +60,30 @@ export function resolveProjectPath(root: string, declared: unknown, label: strin
   return join(root, normalized);
 }
 
+/**
+ * The trusted shell brokers only state reads and calls to a whole-house
+ * application, and never a protocol-reserved `miakapp.*` function. Declaring
+ * anything else would publish a manifest the shell silently narrows, so it is
+ * refused here instead.
+ */
+function assertAppCeiling(requires: Requirements): void {
+  for (const kind of ['event_subscribe', 'event_publish', 'presentation'] as const) {
+    if (requires[kind].length > 0) {
+      throw projectError(
+        `app.requires.${kind} must be empty: the house shell brokers only state_read and call`,
+        'Read state and call functions; render media and react to changes from state.',
+      );
+    }
+  }
+  const reserved = requires.call.find((name) => name === 'miakapp.*' || name.startsWith('miakapp.'));
+  if (reserved !== undefined) {
+    throw projectError(`app.requires.call names the protocol-reserved function ${reserved}`);
+  }
+}
+
 export function parseProject(root: string, source: string): Project {
   const document = parseYaml(source);
-  exactKeys(document, ['schema', 'home', 'control_plane', 'component', 'coordinator'], PROJECT_FILE);
+  exactKeys(document, ['schema', 'home', 'control_plane', 'app', 'component', 'coordinator'], PROJECT_FILE);
   if (document.schema !== PROJECT_SCHEMA) {
     throw projectError(
       `${PROJECT_FILE} must declare schema: ${PROJECT_SCHEMA}`,
@@ -68,14 +98,25 @@ export function parseProject(root: string, source: string): Project {
   const issuer = canonicalHttpsUrl(document.control_plane, 'control_plane');
   if (issuer.endsWith('/')) throw projectError('control_plane must not have a trailing slash');
 
-  const component = mapping(document.component, 'component');
-  exactKeys(component, ['artifact', 'release', 'requires'], 'component');
+  const hasApp = document.app !== undefined && document.app !== null;
+  const hasComponent = document.component !== undefined && document.component !== null;
+  if (hasApp === hasComponent) {
+    throw projectError(
+      `${PROJECT_FILE} must declare exactly one of app (a whole-house application) or component`,
+      'Use app: for a resident interface you draw yourself; component: for a semantic tree.',
+    );
+  }
+  const section = hasApp ? 'app' : 'component';
+  const abi: ReleaseAbi = hasApp ? APP_ABI : COMPONENT_ABI;
+  const component = mapping(document[section], section);
+  exactKeys(component, ['artifact', 'release', 'requires'], section);
   if (!isRelease(component.release)) {
-    throw projectError('component.release must be 1..64 UTF-8 bytes without control characters');
+    throw projectError(`${section}.release must be 1..64 UTF-8 bytes without control characters`);
   }
   const requires = canonicalRequirements(
     component.requires === undefined || component.requires === null ? {} : component.requires,
   );
+  if (hasApp) assertAppCeiling(requires);
 
   let coordinatorEntry: string | undefined;
   if (document.coordinator !== undefined && document.coordinator !== null) {
@@ -86,9 +127,10 @@ export function parseProject(root: string, source: string): Project {
 
   return Object.freeze({
     root,
+    abi,
     homeId: document.home,
     issuer,
-    artifactPath: resolveProjectPath(root, component.artifact, 'component.artifact'),
+    artifactPath: resolveProjectPath(root, component.artifact, `${section}.artifact`),
     release: component.release,
     requires,
     coordinatorEntry,

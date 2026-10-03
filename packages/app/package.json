@@ -1,0 +1,50 @@
+{
+  "name": "@miakapp/app",
+  "version": "4.0.0-alpha.0",
+  "description": "Typed SDK for Miakapp whole-house applications (miakapp.app/1): granted state, calls and preferences inside the isolated house frame",
+  "type": "module",
+  "engines": {
+    "bun": ">=1.2.23",
+    "node": ">=22.9"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "bun test test/",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run build && bun run typecheck && bun run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Miakapp/MiakAPI.git",
+    "directory": "packages/app"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "Miakapp",
+    "MiakAPI",
+    "app",
+    "smart-home",
+    "iframe"
+  ],
+  "author": "Mathieu Colmon",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/bun": "1.2.23",
+    "@types/node": "22.20.1",
+    "typescript": "7.0.2"
+  }
+}
