@@ -474,6 +474,45 @@ export async function readRelease(
 }
 
 /**
+ * Reads what is live: the generation the pointer holds and the release it
+ * points at, or generation 0 and no pointer for a home that never activated.
+ *
+ * RFC 0004 §13.2 serves this under the same publisher authorization as the
+ * other reads. It takes no lock, so the activation that follows remains a
+ * compare-and-set and a concurrent publisher still fails with
+ * `generation_conflict` instead of being overwritten.
+ */
+export async function readPointer(
+  target: PublicationTarget,
+): Promise<{ readonly generation: number; readonly pointer: ComponentPointer | null }> {
+  const { fetcher, signal, base } = client(target);
+  const response = await fetcher(
+    `${base}/component-pointer`,
+    jsonRequestInit('GET', target.token, undefined, signal),
+  );
+  if (response.status !== 200) {
+    throw failure('Pointer read', response.status, await readFailure(response), false);
+  }
+  const document = exactRecord(await readJsonBody(response), ['schema', 'generation', 'pointer']);
+  if (document.schema !== 'miakapp.component-pointer-state/1') {
+    throw contractError('Pointer state has an unsupported schema');
+  }
+  const generation = document.generation;
+  if (typeof generation !== 'number' || !Number.isSafeInteger(generation) || generation < 0) {
+    throw contractError('Pointer state generation is not a non-negative safe integer');
+  }
+  if (document.pointer === null) {
+    if (generation !== 0) throw contractError('Pointer state has a generation but no pointer');
+    return Object.freeze({ generation, pointer: null });
+  }
+  const pointer = decodePointer(document.pointer, target);
+  if (pointer.generation !== generation) {
+    throw contractError('Pointer state generation does not match its pointer');
+  }
+  return Object.freeze({ generation, pointer });
+}
+
+/**
  * Step 4: compare-and-set the home pointer to a strictly greater generation.
  *
  * Activation is one transaction and is never blindly retried: a stale

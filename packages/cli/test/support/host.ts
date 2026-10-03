@@ -72,12 +72,20 @@ export interface TestHost extends CliHost {
   json(): Record<string, unknown>;
 }
 
+/**
+ * Where `~/.miakapp` resolves for a test that names no store. It never exists,
+ * so no test can read or write the real account's credentials by accident.
+ */
+export const ABSENT_HOME = '/nonexistent/miakapp-test-home';
+
 export function testHost(options: {
   files?: FileSystem;
   fetch?: FetchLike;
   env?: Record<string, string>;
   cwd?: string;
   input?: AsyncIterable<Uint8Array>;
+  home?: string;
+  readSecret?: (prompt: string) => Promise<string>;
 } = {}): TestHost {
   const out: string[] = [];
   const err: string[] = [];
@@ -89,6 +97,9 @@ export function testHost(options: {
     writeError: (text) => void err.push(text),
     cwd: () => options.cwd ?? PROJECT_ROOT,
     env: (name) => environment[name],
+    homeDirectory: () => options.home ?? ABSENT_HOME,
+    hostname: () => 'test-machine',
+    ...(options.readSecret === undefined ? {} : { readSecret: options.readSecret }),
     ...(options.files === undefined ? {} : { files: options.files }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.input === undefined ? {} : { input: options.input }),
