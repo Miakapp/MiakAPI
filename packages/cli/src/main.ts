@@ -48,6 +48,13 @@ import {
   redeemPairingCode,
   validateLabel,
 } from './pairing.js';
+import {
+  STARTERS,
+  STARTER_FILES,
+  isStarter,
+  starterFiles,
+  validateStarterArtifact,
+} from './starter.js';
 import { PROJECT_FILE, PROJECT_SCHEMA, findProjectFile, parseProject, type Project } from './project.js';
 import {
   activateRelease,
@@ -141,7 +148,7 @@ Commands
   context show [name]     Show one context, the current one by default
   context use <name>      Make a context current
   context remove <name>   Delete a context and its stored key
-  init                    Write ${PROJECT_FILE} in the current directory
+  init                    Write ${PROJECT_FILE} (add --starter app for a buildable app)
   agent-pack              Install the guide and the MCP wiring into a repository
   discover                Inventory an existing Node-RED installation offline
   check                   Validate the project and the artifact offline
@@ -198,6 +205,12 @@ init options
   --artifact <path>           Built artifact path (default: dist/app.js for app,
                               dist/component.js for component)
   --release <name>            Initial release name (default: 0.1.0)
+  --starter app               Also write a self-contained app to edit: app/main.ts,
+                              the app/miakapp.ts bridge, package.json (build and
+                              check scripts), tsconfig.json and app/README.md.
+                              Needs Bun >= 1.2.23 to build. Refuses, writing
+                              nothing, if any of these files already exists.
+                              Without it, init writes ${PROJECT_FILE} only.
 
 Credentials, highest precedence first
   1. --context <name>       a context stored by miakapp pair
@@ -224,7 +237,7 @@ export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   docs: [],
   pair: ['code', 'issuer', 'label', 'name'],
   context: [],
-  init: ['home', 'control-plane', 'artifact', 'release', 'context', 'kind'],
+  init: ['home', 'control-plane', 'artifact', 'release', 'context', 'kind', 'starter'],
   'agent-pack': ['dir'],
   discover: ['flows'],
   check: [],
@@ -648,38 +661,86 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
   const filesystem = await files(host);
   const root = invocation.options.get('project') ?? host.cwd();
   const path = `${root}/${PROJECT_FILE}`;
-  if (await filesystem.exists(path)) {
-    throw projectError(
-      `${path} already exists`,
-      'The CLI never overwrites a project file; edit it or remove it first.',
-    );
-  }
   const release = invocation.options.get('release') ?? '0.1.0';
   if (!isRelease(release)) {
     throw usageError('--release must be 1..64 UTF-8 bytes without control characters');
+  }
+  const starter = invocation.options.get('starter');
+  if (starter !== undefined && !isStarter(starter)) {
+    throw usageError(`--starter must be ${STARTERS.join(' or ')}, received ${starter}`);
   }
   const kind = invocation.options.get('kind') ?? 'app';
   if (kind !== 'app' && kind !== 'component') {
     throw usageError('--kind must be app (whole-house application, default) or component');
   }
+  if (starter !== undefined && kind !== 'app') {
+    throw usageError('--starter app writes a whole-house application; it cannot be combined with --kind component');
+  }
+  const artifact = invocation.options.get('artifact') ?? (kind === 'app' ? 'dist/app.js' : 'dist/component.js');
+  if (starter !== undefined) validateStarterArtifact(artifact);
+
+  // Every collision is found before anything is written: a refused init leaves
+  // the directory exactly as it was, never half a project.
+  const planned = [PROJECT_FILE, ...(starter === undefined ? [] : STARTER_FILES)];
+  const collisions: string[] = [];
+  for (const relative of planned) {
+    if (await filesystem.exists(`${root}/${relative}`)) collisions.push(relative);
+  }
+  if (collisions.length > 0) {
+    throw projectError(
+      `${collisions.map((relative) => `${root}/${relative}`).join(', ')} already `
+      + `${collisions.length === 1 ? 'exists' : 'exist'}; nothing was written`,
+      'The CLI never overwrites a file. Run init in a new directory, or move these files aside.',
+    );
+  }
+
   const target = await initTarget(host, invocation);
   const source = projectTemplate({
     home: target.home,
     controlPlane: target.controlPlane,
-    artifact: invocation.options.get('artifact') ?? (kind === 'app' ? 'dist/app.js' : 'dist/component.js'),
+    artifact,
     release,
     kind,
   });
   // Parsed before it is written, so init can never emit a file check rejects.
   parseProject(root, source);
+
+  const written: string[] = [];
+  if (starter !== undefined) {
+    const starterSources = await starterFiles({ home: target.home, artifact });
+    try {
+      await filesystem.makeDirectory(`${root}/app`);
+      for (const [relative, bytes] of starterSources) {
+        await filesystem.write(`${root}/${relative}`, bytes);
+        written.push(relative);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'unknown failure';
+      throw projectError(
+        `The starter could not be written (${reason}); ${PROJECT_FILE} was not written`
+        + (written.length === 0 ? '' : ` and these files were: ${written.join(', ')}`),
+        'Remove the files listed, fix the directory, and run init again.',
+      );
+    }
+  }
+  // The manifest goes last: a directory holding it always holds the whole starter.
   await filesystem.write(path, new TextEncoder().encode(source));
+  written.push(PROJECT_FILE);
+
   return {
-    summary: `Wrote ${path}`,
+    summary: starter === undefined
+      ? `Wrote ${path}`
+      : `Wrote an app starter in ${root}: inventory the house, declare app.requires, then build`,
     fields: [
       ['project', path],
       ['home', target.home],
       ['control_plane', target.controlPlane],
       ...(target.context === undefined ? [] : [['context', target.context] as Field]),
+      ...(starter === undefined ? [] : [
+        ['starter', starter] as Field,
+        ['files', written] as Field,
+        ['next', 'read app/README.md; bun run build; bun run check'] as Field,
+      ]),
     ],
     json: {
       project: path,
@@ -688,6 +749,10 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
       home_id: target.home,
       control_plane: target.controlPlane,
       context: target.context ?? null,
+      artifact,
+      release,
+      starter: starter ?? null,
+      files: written,
     },
   };
 }
