@@ -24,6 +24,38 @@ export interface Discovery {
   readonly userRelayExchangeEndpoint: string;
   readonly pushAudience: string;
   readonly componentsAudience: string;
+  /**
+   * `https://<trusted web origin>/app?home={home_id}` when the deployment
+   * declares where residents open homes. The only source of a `home_url`; the
+   * artifact `url` is never a resident link.
+   */
+  readonly homeUrlTemplate?: string;
+}
+
+const HOME_URL_SUFFIX = '/app?home={home_id}';
+
+/**
+ * Accepts exactly `<canonical https origin>/app?home={home_id}`: no path, no
+ * credentials, no port games, nothing a server could use to point residents
+ * somewhere else under a plausible-looking link.
+ */
+export function parseHomeUrlTemplate(value: unknown): string {
+  if (typeof value !== 'string' || !value.endsWith(HOME_URL_SUFFIX)) {
+    throw contractError('home_url_template is not <origin>/app?home={home_id}');
+  }
+  const origin = value.slice(0, -HOME_URL_SUFFIX.length);
+  canonicalHttpsUrl(origin, 'home_url_template origin');
+  if (new URL(origin).origin !== origin) {
+    throw contractError('home_url_template must be rooted at a bare origin');
+  }
+  return value;
+}
+
+/** The trusted resident link for a home, or null when discovery names none. */
+export function homeUrl(discovery: Pick<Discovery, 'homeUrlTemplate'>, homeId: string): string | null {
+  return discovery.homeUrlTemplate === undefined
+    ? null
+    : discovery.homeUrlTemplate.replace('{home_id}', encodeURIComponent(homeId));
 }
 
 export interface PublisherToken {
@@ -77,12 +109,18 @@ export async function fetchDiscovery(options: ControlPlaneOptions): Promise<Disc
     'user_relay_exchange_endpoint',
     'push_audience',
     'components_audience',
-  ]);
+  ], ['runtime_diagnostics_endpoint', 'home_url_template']);
   if (document.schema !== 'miakapp.control-plane-discovery/1') {
     throw contractError('Discovery document has an unsupported schema');
   }
   if (document.issuer !== issuer) {
     throw contractError('Discovery document advertises a different issuer');
+  }
+  // Optional, but never unchecked: it is still a location under this issuer.
+  if (document.runtime_diagnostics_endpoint !== undefined
+    && canonicalHttpsUrl(document.runtime_diagnostics_endpoint, 'runtime_diagnostics_endpoint')
+      !== `${issuer}/v1/runtime-diagnostics`) {
+    throw contractError('runtime_diagnostics_endpoint is not under this issuer');
   }
   return Object.freeze({
     issuer,
@@ -94,6 +132,9 @@ export async function fetchDiscovery(options: ControlPlaneOptions): Promise<Disc
     ),
     pushAudience: canonicalHttpsUrl(document.push_audience, 'push_audience'),
     componentsAudience: canonicalHttpsUrl(document.components_audience, 'components_audience'),
+    ...(document.home_url_template === undefined
+      ? {}
+      : { homeUrlTemplate: parseHomeUrlTemplate(document.home_url_template) }),
   });
 }
 

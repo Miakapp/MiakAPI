@@ -21,11 +21,12 @@ Concretely:
   prototype kept offline or a screenshot is an intermediate result, never the
   deliverable. Do not stop to show one and ask whether to continue: the owner
   asked for the home, and publication is reversible in one command (§8).
-- **Hand over a link that works.** Give the owner the Miakapp app address where
-  the home appears for its members, and say what you verified there. The `url`
-  that `miakapp publish` prints is the raw component bytes, not an interface:
-  never send it as "the link". If you cannot open the app yourself, say exactly
-  that, and what `miakapp status` proved instead.
+- **Hand over a link that works.** Give the owner the `home_url` that
+  `miakapp publish` and `miakapp status` print — the Miakapp address where the
+  home opens for its members — and say what you verified there. The
+  `artifact_url` (JSON `url`) is the raw bundle, not an interface: never send it
+  as "the link". If the control plane advertises no `home_url`, say so instead of
+  inventing one, and say what `miakapp status` proved.
 - **Ask once, at the start, and only for what you cannot find.** Access comes
   from pairing (§9), the existing installation from inventory (§3). Repeated
   permission questions in the middle of the work are a failure of the work.
@@ -53,10 +54,16 @@ Three artifacts, and no more:
 | Artifact | Where it runs | What it owns |
 | --- | --- | --- |
 | Coordinator | the owner's machine, under Bun | state, events, functions, **authorization** |
-| Component | a sandboxed Worker in the household's browser | the interface |
-| `miakapp.yaml` | neither; it is the contract | what the component may ask for |
+| Interface | an isolated frame (app) or sandboxed Worker (component) in the household's browser | what residents see and touch |
+| `miakapp.yaml` | neither; it is the contract | what the interface may ask for |
 
-The coordinator is trusted. The component is not. The relay between them is
+The interface is, by default, a **whole-house application** (`app:` in
+`miakapp.yaml`, ABI `miakapp.app/1`): your own layout, styles, navigation and
+libraries, bundled into one file. A semantic **component** (`component:`,
+`miakapp.component/1`) is still supported for a minimal tree Miakapp draws for
+you. §5 covers both.
+
+The coordinator is trusted. The interface is not. The relay between them is
 platform-untrusted but not blind: it terminates TLS, stores plaintext state and
 enforces routing, so self-hosting it does not give end-to-end confidentiality.
 Do not tell the owner otherwise.
@@ -247,7 +254,43 @@ The relay keeps ownership tables for topics, state paths and functions, detects
 collisions and rejects with `4409`. If you claim `lighting.set` for the whole
 house, you have taken a name another integration may need; scope what you own.
 
-## 5. The component
+## 5. The interface
+
+### A whole-house application (default)
+
+`miakapp init` writes an `app:` section; `templates/home/app/` is a working
+example. You own the document: build any DOM, ship your own CSS, route with
+`location.hash`, use React, Svelte, Vue, charts or WebAssembly — anything a
+bundler can inline. The deliverable is **one classic-script IIFE** of at most
+2 MiB, with no `import()` and no source map:
+
+```bash
+bun build app/main.ts --format=iife --minify --outfile dist/app.js
+```
+
+Miakapp runs it in an isolated, opaque-origin frame below a permanent Miakapp
+bar, after the resident agreed to open the home. The frame has no network, no
+cookies or storage, no popups and no fullscreen; assets go in the bundle as
+`data:`/`blob:` URLs. Its only way to the home is `@miakapp/app`:
+
+```ts
+import { callErrorCode, connect } from '@miakapp/app';
+
+const home = connect();
+home.subscribe((state) => render(state));        // also called once immediately
+await home.call('lighting.set', { on: true });   // rejects with a closed code
+```
+
+Declare every state path (exact or `prefix.*`) under `app.requires.state_read`
+and every function under `app.requires.call`. Events, media and `miakapp.*`
+functions are refused by `miakapp check`. Show `state.stale`, disable controls
+while it is true, and handle `outcome_unknown` exactly as below.
+
+**The bundle is not private.** Any signed-in user who learns its digest can
+fetch it. Put no household data in it — no names, rooms, devices or accounts —
+and read everything from state, which the coordinator filters per resident.
+
+### A semantic component (compatible)
 
 Import from `@miakapp/component`. The whole public surface is one module, and the
 whole rendering vocabulary is `ui.*`:
@@ -375,7 +418,7 @@ control-plane endpoint. The repository is the owner's.
 miakapp docs start                             # this guide, from the installed CLI
 miakapp pair                                   # once per home and machine (§9)
 miakapp agent-pack                             # once, per repository
-miakapp init                                   # home and issuer come from the paired context
+miakapp init                                   # app: by default; --kind component for a semantic tree
 miakapp check
 miakapp status                                 # what is live now: generation, release, digest
 miakapp publish                                # upload, finalize, activate
@@ -398,7 +441,8 @@ more than an incident you can explain.
 
 `miakapp status` after `publish` is the minimum verification: the live `sha256`
 must be the one you just built. It proves what the home runs, not that the
-interface is right — open it as a member would before telling the owner it works.
+interface is right — open its `home_url` as a member would before telling the
+owner it works.
 
 ### Driving the CLI as a program
 

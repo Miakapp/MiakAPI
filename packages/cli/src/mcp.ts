@@ -313,9 +313,16 @@ export const TOOLS: readonly ToolDefinition[] = [
     description:
       'Write miakapp.yaml in the project directory. Refuses to overwrite an existing one, so it '
       + 'is safe to call when unsure. home and control_plane default to the selected or current '
-      + 'context, so after miakapp_pair no identifier needs typing. Declares no requirements: '
-      + 'grant them one at a time, as the component earns them.',
+      + 'context, so after miakapp_pair no identifier needs typing. kind defaults to app: a '
+      + 'whole-house application you draw yourself (any DOM, CSS, framework) bundled as one IIFE. '
+      + 'Declares no requirements: grant them one at a time, as the interface earns them.',
     args: [
+      {
+        name: 'kind',
+        type: 'string',
+        required: false,
+        description: 'app (whole-house application, default) or component (semantic tree).',
+      },
       {
         name: 'home',
         type: 'string',
@@ -332,7 +339,7 @@ export const TOOLS: readonly ToolDefinition[] = [
         name: 'artifact',
         type: 'string',
         required: false,
-        description: 'Built artifact path. Defaults to dist/component.js.',
+        description: 'Built artifact path. Defaults to dist/app.js (app) or dist/component.js.',
       },
       {
         name: 'release',

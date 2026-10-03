@@ -235,7 +235,9 @@ describe('the block tells an agent what it must not get wrong', () => {
     expect(block).toContain('miakapp pair');
     expect(block).toContain('https://miakapp.com/pair');
     expect(block).toContain('miakapp status');
-    expect(block).toContain('never a screenshot');
+    expect(block).toContain('home_url');
+    expect(block).toContain('never the artifact URL');
+    expect(block).toContain('screenshot');
   });
 
   test('each instruction file names the client that reads it', () => {

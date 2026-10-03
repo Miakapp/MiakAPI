@@ -5,7 +5,8 @@
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "lib": [
-      "ES2022"
+      "ES2022",
+      "DOM"
     ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
@@ -27,6 +28,7 @@
   },
   "include": [
     "coordinator/**/*.ts",
+    "app/**/*.ts",
     "component/**/*.ts",
     "test/**/*.ts"
   ]

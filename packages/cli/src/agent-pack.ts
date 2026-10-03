@@ -107,8 +107,9 @@ export function instructionBlock(client: string): string {
 ## Miakapp
 
 This repository is a Miakapp home: a coordinator that runs on the owner's
-machine and owns state, events and authorization, and a component that runs
-sandboxed in the household's browser and owns nothing but the interface.
+machine and owns state, events and authorization, and an interface — by default
+a whole-house application bundled as one IIFE — that runs isolated in the
+household's browser and owns nothing but what residents see.
 
 **Read \`${GUIDE_FILE}\` before writing or publishing anything here.** It is the
 full guide, copied into this repository so it is readable offline, and it is the
@@ -124,7 +125,8 @@ is expensive:
 
 - Done means published and verified: inventory the house first, publish a V1
   that covers the real data, check \`${SERVER_NAME} status\`, open it as a member
-  would, and hand the owner a working link — never a screenshot or a mockup.
+  would, and hand the owner the printed \`home_url\` — never the artifact URL, a
+  screenshot or a mockup.
 - \`publish\`, \`activate\` and \`rollback\` change what every device in the home
   runs. Over MCP they refuse to act without \`confirm: true\`. Set it when the
   owner asked for that publication, never to get past an error.
