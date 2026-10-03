@@ -334,7 +334,10 @@ async function ensureDirectory(directory: string): Promise<void> {
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const status = await fs.lstat(directory);
   if (!status.isDirectory()) {
-    throw authorizationError(`${directory} is not a directory`, 'Move it aside and run the command again.');
+    throw authorizationError(
+      `${directory} is not a directory (symbolic links are refused)`,
+      `Move it aside, or point ${CONFIG_DIRECTORY_VARIABLE} at the real directory.`,
+    );
   }
   if (enforcesModes()) {
     const uid = process.getuid?.();
