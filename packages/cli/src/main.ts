@@ -143,6 +143,7 @@ Usage
 
 Commands
   docs start              Print the complete agent guide bundled with this CLI
+  docs design             Print the design guide: tokens, themes, recipes, examples
   pair                    Redeem a one-time pairing code into a stored context
   context list            List stored contexts (never prints a key)
   context show [name]     Show one context, the current one by default
@@ -817,20 +818,28 @@ export async function guideAssetPath(): Promise<string> {
   return fileURLToPath(new URL('../assets/agent-guide.md', import.meta.url));
 }
 
+/** Directory of the design files (`tokens.css`, `gallery.html`…), resolved like the guide. */
+export async function designAssetDirectory(): Promise<string> {
+  const { fileURLToPath } = await import('node:url');
+  return fileURLToPath(new URL('../assets/design/', import.meta.url));
+}
+
 /**
  * Gives an agent its complete starting contract without requiring a repository,
  * a network request or an MCP client. The onboarding page can therefore hand a
  * person one stable command and the installed CLI remains the source of truth.
  */
 async function runDocs(host: CliHost, invocation: Invocation): Promise<CommandResult> {
-  if (invocation.positional.length !== 1 || invocation.positional[0] !== 'start') {
+  const topic = invocation.positional.length === 1 ? invocation.positional[0] : undefined;
+  if (topic !== 'start' && topic !== 'design') {
     throw usageError(
-      'docs requires the topic start',
-      'Run miakapp docs start to print the complete agent guide.',
+      'docs requires the topic start or design',
+      'Run miakapp docs start to print the complete agent guide, miakapp docs design for the design guide.',
     );
   }
 
-  const path = await guideAssetPath();
+  const directory = topic === 'design' ? await designAssetDirectory() : undefined;
+  const path = directory === undefined ? await guideAssetPath() : `${directory}guide.md`;
   let guide: string;
   try {
     const filesystem = await files(host);
@@ -842,11 +851,15 @@ async function runDocs(host: CliHost, invocation: Invocation): Promise<CommandRe
     );
   }
 
+  if (!guide.endsWith('\n')) guide = `${guide}\n`;
+  if (directory === undefined) {
+    return { summary: 'Miakapp agent guide', fields: [], json: { topic, guide }, text: guide };
+  }
   return {
-    summary: 'Miakapp agent guide',
+    summary: 'Miakapp design guide',
     fields: [],
-    json: { topic: 'start', guide },
-    text: guide.endsWith('\n') ? guide : `${guide}\n`,
+    json: { topic, guide, directory },
+    text: `${guide}\nDesign directory: ${directory}\n`,
   };
 }
 

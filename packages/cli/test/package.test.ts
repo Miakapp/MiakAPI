@@ -34,11 +34,14 @@ describe('the published package', () => {
     const results = JSON.parse(packed.stdout.toString()) as PackResult[];
     const files = results[0]?.files.map(({ path }) => path).sort() ?? [];
     expect(files).toContain('assets/agent-guide.md');
+    for (const asset of ['guide.md', 'tokens.css', 'components.css', 'fonts.css', 'gallery.html', 'OFL-Manrope.txt']) {
+      expect(files).toContain(`assets/design/${asset}`);
+    }
     expect(files).toContain('bin/miakapp.js');
     expect(files).toContain('dist/main.js');
     // The app starter is copied out of the installed package, so every file it
     // writes must ship in the tarball.
-    for (const asset of ['tsconfig.json', 'app/main.ts', 'app/miakapp.ts', 'app/README.md']) {
+    for (const asset of ['tsconfig.json', 'app/main.ts', 'app/miakapp.ts', 'app/theme.ts', 'app/README.md']) {
       expect(files).toContain(`assets/starter/app/${asset}`);
     }
     expect(files).toContain('dist/starter.js');
