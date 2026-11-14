@@ -185,7 +185,7 @@ export const TOOLS: readonly ToolDefinition[] = [
         name: 'issuer',
         type: 'string',
         required: false,
-        description: 'Control plane to redeem at. Defaults to https://control.miakapp.com.',
+        description: 'Control plane to redeem at. Defaults to https://api.miakapp.com.',
       },
       {
         name: 'label',
@@ -330,7 +330,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     description:
       'Write miakapp.yaml in the project directory. Refuses to overwrite an existing one, so it '
       + 'is safe to call when unsure. home and control_plane default to the selected or current '
-      + 'context, so after miakapp_pair no identifier needs typing. kind defaults to app: a '
+      + 'context, so after miakapp_pair no identifier needs typing. It declares a '
       + 'whole-house application you draw yourself (any DOM, CSS, framework) bundled as one IIFE. '
       + 'Declares no requirements: grant them one at a time, as the interface earns them. With '
       + 'starter "app" it also writes a self-contained app to edit (app/main.ts, the app/miakapp.ts '
@@ -340,18 +340,11 @@ export const TOOLS: readonly ToolDefinition[] = [
       + 'before publishing.',
     args: [
       {
-        name: 'kind',
-        type: 'string',
-        required: false,
-        description: 'app (whole-house application, default) or component (semantic tree).',
-      },
-      {
         name: 'starter',
         type: 'string',
         required: false,
         description:
-          'app: also write the buildable app starter. Omit to write miakapp.yaml only. Not '
-          + 'combinable with kind component.',
+          'app: also write the buildable app starter. Omit to write miakapp.yaml only.',
       },
       {
         name: 'home',
@@ -369,7 +362,7 @@ export const TOOLS: readonly ToolDefinition[] = [
         name: 'artifact',
         type: 'string',
         required: false,
-        description: 'Built artifact path. Defaults to dist/app.js (app) or dist/component.js.',
+        description: 'Built artifact path. Defaults to dist/app.js.',
       },
       {
         name: 'release',
@@ -443,7 +436,7 @@ export const TOOLS: readonly ToolDefinition[] = [
         name: 'release',
         type: 'string',
         required: false,
-        description: 'Release name for this publication. Defaults to component.release.',
+        description: 'Release name for this publication. Defaults to app.release.',
       },
       PROJECT_ARGUMENT,
       CONTEXT_ARGUMENT,

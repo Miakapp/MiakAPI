@@ -52,7 +52,7 @@ if (homeKey === undefined) throw new Error('MIAKAPP_HOME_KEY is required');
 const coordinator = createCoordinator({
   name: 'home-assistant',
   accessTokenProvider: createHomeKeyAccessTokenProvider({
-    exchangeEndpoint: 'https://control.miakapp.com/v1/access-tokens:exchange',
+    exchangeEndpoint: 'https://api.miakapp.com/v1/access-tokens:exchange',
     homeKey,
   }),
 });

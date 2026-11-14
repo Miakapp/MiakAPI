@@ -9,17 +9,14 @@ export const PROJECT_YAML = `schema: miakapp.project/1
 home: test-home
 control_plane: https://control.example.test/api
 
-component:
-  artifact: dist/component.js
+app:
+  artifact: dist/app.js
   release: 2026-09-13.1
   requires:
     state_read:
       - climate.living_room.temperature
-    event_subscribe: []
-    event_publish: []
     call:
       - lighting.set
-    presentation: []
 `;
 
 export class MemoryFiles implements FileSystem {
@@ -113,6 +110,6 @@ export function testHost(options: {
 export function standardProject(artifact = ARTIFACT_SOURCE): MemoryFiles {
   return new MemoryFiles({
     [`${PROJECT_ROOT}/miakapp.yaml`]: PROJECT_YAML,
-    [`${PROJECT_ROOT}/dist/component.js`]: artifact,
+    [`${PROJECT_ROOT}/dist/app.js`]: artifact,
   });
 }
