@@ -1,7 +1,7 @@
 # Designing a Miakapp home
 
 Miakapp gives you a starting point, not a framework: design tokens, four
-themes, a handful of CSS recipes and example screens. Take what helps, change
+themes, a handful of CSS recipes, line icons and example screens. Take what helps, change
 anything, or make the home's own look with its residents. Nothing here is
 required by `miakapp check` or by the frame.
 
@@ -11,13 +11,16 @@ The files sit next to this guide, in the design directory printed at the end:
 
 | File | What it is |
 |---|---|
-| `tokens.css` | `--mk-*` variables (color, glass, radius, type, space, motion) for four themes |
-| `components.css` | Recipes on top of the tokens: glass, entry tile, state header, action button, device tile, scene, switch, level slider, stale banner |
+| `tokens.css` | `--mk-*` variables (color, glass, radius, type, space, motion, a hue per place) for four themes |
+| `components.css` | Recipes on top of the tokens: screen, headline, entry tiles, orb, state header, held and primary actions, device tile, scene, switch, level slider, stale banner |
+| `icons.svg` | Line icons (gate, door, garage, sofa, bed, light, shutter, lock, unlock…), 24 × 24, as an SVG sprite |
 | `fonts.css` | Manrope as a `data:` URL, ready for the frame, which has no network (OFL, see `OFL-Manrope.txt`) |
 | `gallery.html` | Example screens built only with the files above: home, a device page, a room, energy, wall tablet. Open it in a browser, switch themes, read its source |
 
 `miakapp init --starter app` writes all three stylesheets into `app/theme.ts`
-(`THEME_CSS`) and already uses them, so the first build looks like Miakapp.
+(`THEME_CSS`), with the icons (`ICONS`, `icon('gate')` as `<svg>` markup) and
+`holdToConfirm()`, and already uses them, so the first build looks like
+Miakapp.
 
 ## Themes
 
@@ -25,18 +28,83 @@ Set `data-theme` on `<html>` (or on any element, to theme one part):
 
 | Theme | Use |
 |---|---|
-| `minuit` | Night blue and gold from the Miakapp logo. Dark mode, wall tablets after dark. The house favourite. |
-| `lumiere` | Day. White glass over peach, mint and lilac. Light mode and the default. |
+| `minuit` | A living night: blue and violet aurora, a golden glow, gold accents from the Miakapp logo. The house favourite and the starter's default. |
+| `lumiere` | Day. White glass over peach, mint and lilac. For residents who prefer light. |
 | `miel` | Warm honey. Cosy, evening homes. |
 | `craie` | Flat, no blur, high contrast. Old or slow tablets, low vision. |
 
 Follow the resident: `home.theme()` is `light`, `dark` or `system`, and
-`home.onThemeChange()` tells you when it changes. The starter maps dark to
-Minuit and light to Lumière; a wall tablet may stay on Minuit.
+`home.onThemeChange()` tells you when it changes. The starter uses Minuit and
+switches to Lumière only for a light preference; a wall tablet may stay on
+Minuit.
 
 A home's own theme is one more `[data-theme="…"]` block redefining the same
 variables. Keep text contrast at 4.5:1 or more, including secondary text on
 glass; check dark themes twice (dark blue on darker blue is easy to miss).
+
+## Make it beautiful
+
+A home app must look as good as www.miakapp.com. What makes the difference is
+not more decoration but these six things; the gallery's first three phones
+show all of them.
+
+1. **A living background.** Put `.mk-app` on `<body>`: it paints the theme's
+   halos (`--mk-bg-art`). Never replace them with a flat colour: glass only
+   shines with light behind it.
+2. **A headline, not a title.** An eyebrow (`.mk-eyebrow`: the date) and a
+   two-line `.mk-headline` that says how the home is, with one word in the
+   accent gradient: "Good evening. All `<em>closed</em>`." When something needs
+   attention it says so: "Gate `<em class="is-alert">open</em>`."
+3. **One featured tile, then varied sizes.** The tile people reach for most
+   (the gate, the front door) is `.mk-entry.is-featured`: first, wide, gold,
+   with its state in big type. The others vary: `.is-tall` for a tile about
+   one big number (`.big`: 71°), regular tiles, `.is-wide` to close the grid.
+   Six identical squares look like a spreadsheet.
+4. **The screen is full.** `.mk-screen` fills the phone down to the Miakapp
+   bar and `.mk-entries` stretches its rows to fill it. Never leave the bottom
+   two thirds empty; with few tiles, make them bigger.
+5. **A hue per place, gold for the star.** Give each tile a discreet hue
+   (`.mk-tint-lilac`, `-sky`, `-peach`, `-rose`, `-mint`, `-honey`): it tints
+   the icon and a glow in the corner, so tiles are told apart at a glance.
+   One hue per tile; keep gold for the featured tile and for what is on.
+6. **Line icons, never emoji.** Emoji bring their own colours and styles and
+   clash with every palette. Use the shipped icons: `icon('gate')` in the
+   starter, or the `icons.svg` sprite. Labels are bold (`.name`, 800), left
+   aligned, with at most a discreet `.hint` under them.
+
+```html
+<body class="mk-app">
+  <main class="mk-screen">
+    <div><div class="mk-eyebrow">Friday, November 14</div>
+      <h1 class="mk-headline">Good evening.<br>All <em>closed</em>.</h1></div>
+    <div class="mk-entries">
+      <button class="mk-entry is-featured">
+        <span class="mk-icon"><!-- icon('gate') --></span>
+        <span class="grow"><span class="hint">Gate</span><span class="now">Closed</span></span>
+      </button>
+      <button class="mk-entry is-tall mk-tint-peach">
+        <span class="mk-icon"><!-- icon('sofa') --></span>
+        <span><span class="big">21°</span><span class="name">Living room</span></span>
+      </button>
+      <button class="mk-entry mk-tint-lilac">
+        <span class="mk-icon"><!-- icon('door') --></span>
+        <span><span class="name">Front door</span><span class="hint">Locked</span></span>
+      </button>
+      <!-- … -->
+    </div>
+  </main>
+</body>
+```
+
+A tile with a shortcut cannot be a `<button>` holding another button: make it
+`<div class="mk-entry is-featured has-attention" role="group">` with a
+stretched `<button class="mk-open">` and a `<button class="mk-shortcut">`.
+
+A device page is the same idea, vertical: `.mk-topbar` (round `.mk-back` and
+the name), the device big in `.mk-orb` (its halo turns warm with `.is-open`),
+the state in huge type (`.mk-state .now`, a live dot with `.since.is-live`),
+then the actions at the bottom, under the thumb (`.mk-actions` pushes them
+down), then the rare ones (`.mk-rare`).
 
 ## How a home app works
 
@@ -55,25 +123,36 @@ and close it. Lay it out that way.
    "Shutters" are both fine entries; a "Rooms" section next to a "Temperatures"
    section that repeats the same rooms is not.
 4. **Open, see, do: never mixed.** A tile opens a page. On that page, the
-   state comes first and big (`.mk-state`: "Gate closed"), then the actions as
+   state comes first and big (`.mk-state`: "Closed"), then the actions as
    large buttons (`.mk-action`: Open, Pedestrian, Close), then, separately and
    lower, the rare ones (adjust the recorded state, calibration). A value is
    not a button and a button is not a value.
-5. **Actions that make no sense are disabled.** "Close" is greyed while the
-   gate is closed. While a command runs, its button shows `is-pending` until
-   the next state confirms it.
-6. **Upkeep stays off the main path.** A dead battery, a sensor silent for
+5. **Opening must never happen by accident; closing must never be
+   forgotten.** For anything that opens, unlocks or starts (gate, garage door,
+   lock, alarm off), the risky actions sit together on the first row and are
+   held to confirm (`.mk-action.is-hold` with `holdToConfirm()`: a gauge fills
+   for 0.6 s, letting go cancels). The safe action (Close, Lock) sits alone on
+   the row below and takes one tap. While the thing is open, Close becomes
+   `.is-primary` (gold, full width), the home tile turns warm
+   (`.has-attention`) and may carry a one-tap `.mk-shortcut` to close it.
+   Never offer the risky direction from the home screen.
+6. **Buttons never move.** Open or closed, every button keeps its place; only
+   its emphasis changes (disabled, primary). Actions that make no sense are
+   disabled: "Close" is greyed while the gate is closed. While a command runs,
+   its button shows `is-pending` until the next state confirms it.
+7. **Upkeep stays off the main path.** A dead battery, a sensor silent for
    months, a device that never answered: send a notification or put it in an
    "Upkeep" page. Never next to the living-room temperature, and never as a
    value of the room it belongs to.
-7. **Hierarchy, not repetition.** On each page one thing stands out (the
-   state, a big number); everything else is smaller and calmer. Use colour for
-   meaning (on, open, alert), not to decorate. If every block has the same size
+8. **Hierarchy, not repetition.** On each page one thing stands out (the
+   state, a big number); everything else is smaller and calmer. Colour carries
+   meaning (on, open, alert) or identity (one discreet hue per place), never
+   decoration. If every block has the same size
    and colour, the page has no hierarchy.
-8. **Phone first.** Design at 360 px wide with the thumb at the bottom; then
+9. **Phone first.** Design at 360 px wide with the thumb at the bottom; then
    check a wall tablet and a desktop. Do not line up six cards because the
    desktop is wide.
-9. **Each resident gets their own home screen.** A guest allowed only the
+10. **Each resident gets their own home screen.** A guest allowed only the
    gate sees one tile, or lands straight on the gate page.
 
 An entry tile may tell, discreetly, the state of the one thing it opens

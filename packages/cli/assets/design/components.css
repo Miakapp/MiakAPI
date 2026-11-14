@@ -10,6 +10,7 @@
   color: var(--mk-ink);
   background: var(--mk-bg-art), var(--mk-bg);
   background-attachment: fixed;
+  margin: 0;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
 }
@@ -58,58 +59,168 @@
   font-size: var(--mk-text-sm); font-weight: 600; white-space: nowrap;
 }
 
-/* Entry tile: the home screen opens pages, it does not show values */
+/* Icons: line icons from icons.svg / ICONS, never emoji (they clash with every palette) */
+.mk-i { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Screen: a home screen or a page fills the phone down to the Miakapp bar */
+.mk-screen {
+  box-sizing: border-box; min-height: 100vh; min-height: 100dvh;
+  max-width: 560px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: var(--mk-4);
+  padding: var(--mk-6) var(--mk-4) 112px;
+  container-type: inline-size;
+}
+.mk-eyebrow { font-size: var(--mk-text-xs); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mk-ink-3); }
+.mk-headline { margin: 0; font-size: var(--mk-display); font-weight: 800; letter-spacing: -.045em; line-height: 1.02; }
+.mk-headline em { font-style: normal; background: var(--mk-accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.mk-headline em.is-alert { background: linear-gradient(110deg, color-mix(in srgb, var(--mk-warn) 70%, #fff), var(--mk-warn) 55%, var(--mk-heat)); -webkit-background-clip: text; background-clip: text; }
+
+/* Entry tile: the home screen opens pages. Tiles of different sizes fill the screen */
+.mk-entries { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(108px, 1fr); gap: var(--mk-3); }
+@container (min-width: 600px) { .mk-entries { grid-template-columns: repeat(3, 1fr); } }
 .mk-entry {
-  position: relative; display: grid; place-items: center; align-content: center; gap: var(--mk-2);
-  min-height: 132px; padding: var(--mk-4);
-  border-radius: var(--mk-radius); border: 1px solid var(--mk-rim);
-  background: var(--mk-surface); box-shadow: var(--mk-shadow);
+  position: relative; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; gap: var(--mk-3);
+  min-height: 108px; padding: var(--mk-4); box-sizing: border-box;
+  border-radius: var(--mk-radius-lg);
+  border: 1px solid color-mix(in srgb, var(--tint, var(--mk-accent)) calc(var(--glow, 0%) + 4%), var(--mk-rim));
+  background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--tint, var(--mk-accent)) var(--glow, 0%), transparent), transparent 65%), var(--mk-surface);
+  box-shadow: var(--mk-shadow);
   -webkit-backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
   backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
-  color: inherit; font: 700 var(--mk-text-lg)/1.15 var(--mk-font); text-align: center; cursor: pointer;
+  color: inherit; font: inherit; text-align: start; cursor: pointer;
   transition: transform var(--mk-fast) var(--mk-spring);
 }
-.mk-entry:active { transform: scale(.96); }
-.mk-entry .glyph { font-size: 40px; line-height: 1; }
-.mk-entry.is-wide { grid-column: 1 / -1; min-height: 104px; }
-.mk-entry .hint { margin-top: -2px; font-size: var(--mk-text-xs); font-weight: 600; color: var(--mk-ink-3); }
-.mk-entry.has-attention .hint { color: var(--mk-warn); }
-/* One small signal when something needs attention, never a full value */
-.mk-entry.has-attention::after {
-  content: ""; position: absolute; top: 14px; right: 14px; width: 12px; height: 12px; border-radius: 50%;
-  background: var(--mk-warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-warn) 30%, transparent);
+.mk-entry:active { transform: scale(.97); }
+.mk-entry .mk-icon {
+  width: 46px; height: 46px; border-radius: 16px; display: grid; place-items: center;
+  color: var(--tint, var(--mk-accent));
+  background: color-mix(in srgb, var(--tint, var(--mk-accent)) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tint, var(--mk-accent)) 40%, transparent);
 }
-.mk-entries { display: grid; grid-template-columns: 1fr 1fr; gap: var(--mk-3); }
-@media (min-width: 720px) { .mk-entries { grid-template-columns: repeat(3, 1fr); } }
+.mk-entry .name { display: block; font-size: 20px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+/* The discreet state of the one thing a tile opens: a word or two, never a reading */
+.mk-entry .hint { display: block; margin-top: 3px; font-size: var(--mk-text-sm); font-weight: 600; color: var(--mk-ink-2); }
+/* One big number a tile is about (the living-room temperature), in the tile's hue */
+.mk-entry .big { display: block; font-size: 48px; font-weight: 800; letter-spacing: -.05em; line-height: 1; color: var(--tint, var(--mk-accent)); }
+.mk-entry.is-wide { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: var(--mk-4); }
+.mk-entry.is-tall { grid-row: span 2; }
+/* The featured tile: the one most reached for (the gate, the front door). Gold, wide, first */
+.mk-entry.is-featured {
+  grid-column: 1 / -1; flex-direction: row; align-items: center; gap: var(--mk-4); padding: var(--mk-5);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--mk-accent) 26%, transparent), color-mix(in srgb, var(--mk-accent) 8%, transparent) 45%, transparent), var(--mk-surface);
+  border-color: color-mix(in srgb, var(--mk-accent) 38%, transparent);
+}
+.mk-entry.is-featured .mk-icon { width: 64px; height: 64px; border-radius: 22px; border: 0; background: var(--mk-on); color: var(--mk-on-ink); box-shadow: var(--mk-on-glow); }
+.mk-entry.is-featured .mk-icon .mk-i { width: 32px; height: 32px; stroke-width: 2; }
+.mk-entry.is-featured .hint { font-size: var(--mk-text); font-weight: 700; margin: 0 0 2px; }
+.mk-entry.is-featured .now { display: block; font-size: 34px; font-weight: 800; letter-spacing: -.04em; line-height: 1.05; }
+.mk-entry .grow { flex: 1; min-width: 0; }
+.mk-entry .name, .mk-entry .hint, .mk-entry .now { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* Something needs looking at (the gate is open): one small dot, or the featured tile turns warm */
+.mk-entry.has-attention::after {
+  content: ""; position: absolute; top: 16px; right: 16px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--mk-warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-warn) 28%, transparent);
+}
+.mk-entry.is-featured.has-attention::after { content: none; }
+.mk-entry.is-featured.has-attention {
+  background: linear-gradient(140deg, color-mix(in srgb, var(--mk-heat) 48%, transparent), color-mix(in srgb, var(--mk-warn) 14%, transparent) 50%, transparent), var(--mk-surface);
+  border-color: color-mix(in srgb, var(--mk-heat) 55%, transparent);
+}
+.mk-entry.is-featured.has-attention .mk-icon { background: linear-gradient(150deg, var(--mk-warn), var(--mk-heat)); }
+.mk-entry.is-featured.has-attention .now, .mk-entry.has-attention .hint { color: var(--mk-warn); }
+/* A tile that carries a safe shortcut (Close) is a group: a stretched link plus the shortcut */
+.mk-entry .mk-open { all: unset; position: absolute; inset: 0; border-radius: inherit; cursor: pointer; }
+.mk-entry .mk-open:focus-visible { outline: 3px solid var(--mk-accent); outline-offset: 2px; }
+.mk-shortcut {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; height: 46px; padding: 0 16px;
+  border: 0; border-radius: var(--mk-pill); background: var(--mk-on); color: var(--mk-on-ink); box-shadow: var(--mk-on-glow);
+  font: 800 var(--mk-text)/1 var(--mk-font); cursor: pointer;
+}
+.mk-shortcut .mk-i { width: 18px; height: 18px; stroke-width: 2.2; }
+
+/* Page header: a round back button and the page's name */
+.mk-topbar { display: flex; align-items: center; gap: var(--mk-3); font-size: var(--mk-text-lg); font-weight: 800; }
+.mk-back {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; padding: 0; color: inherit; cursor: pointer;
+  background: var(--mk-surface); border: 1px solid var(--mk-rim); box-shadow: var(--mk-shadow);
+  -webkit-backdrop-filter: blur(var(--mk-blur)); backdrop-filter: blur(var(--mk-blur));
+}
+
+/* The orb: the device, big, in a halo. Gold when calm, warm when it needs attention */
+.mk-orb {
+  --tint: var(--mk-accent);
+  position: relative; flex: none; width: 220px; height: 220px; margin: var(--mk-5) auto var(--mk-3); border-radius: 50%; display: grid; place-items: center;
+  color: var(--tint);
+  background: radial-gradient(circle at 50% 35%, var(--mk-surface-strong), transparent 72%);
+  border: 1px solid var(--mk-rim);
+  box-shadow: inset 0 1px 0 var(--mk-rim),
+    0 0 0 14px color-mix(in srgb, var(--tint) 6%, transparent),
+    0 0 0 28px color-mix(in srgb, var(--tint) 3%, transparent),
+    0 30px 80px -20px color-mix(in srgb, var(--tint) 40%, transparent);
+}
+.mk-orb::after {
+  content: ""; position: absolute; inset: -2px; border-radius: 50%; padding: 2px;
+  background: conic-gradient(from 200deg, transparent, var(--tint) 30%, color-mix(in srgb, var(--tint) 60%, var(--mk-heat)) 50%, transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.mk-orb .mk-i { width: 112px; height: 112px; stroke-width: 1.4; filter: drop-shadow(0 0 18px color-mix(in srgb, var(--tint) 55%, transparent)); }
+.mk-orb.is-open, .mk-orb.is-alert { --tint: var(--mk-warn); }
+
+/* A hue for a place or a kind of device, on a tile or an orb */
+.mk-tint-lilac { --tint: var(--mk-lilac); --glow: 34%; }
+.mk-tint-sky { --tint: var(--mk-sky); --glow: 34%; }
+.mk-tint-peach { --tint: var(--mk-peach); --glow: 34%; }
+.mk-tint-rose { --tint: var(--mk-rose); --glow: 34%; }
+.mk-tint-mint { --tint: var(--mk-mint); --glow: 34%; }
+.mk-tint-honey { --tint: var(--mk-honey); --glow: 34%; }
 
 /* State header: see first, big, then act */
-.mk-state { display: grid; gap: var(--mk-1); padding: var(--mk-5) var(--mk-2) var(--mk-4); text-align: center; }
-.mk-state .now { font-size: var(--mk-display); font-weight: 800; letter-spacing: var(--mk-tight); line-height: 1; }
-.mk-state .since { font-size: var(--mk-text-sm); color: var(--mk-ink-2); }
+.mk-state { display: grid; gap: var(--mk-2); padding: var(--mk-2) var(--mk-2) var(--mk-4); text-align: center; }
+.mk-state .now { font-size: 56px; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
+.mk-state .since { display: inline-flex; justify-content: center; align-items: center; gap: var(--mk-2); font-size: var(--mk-text-sm); font-weight: 600; color: var(--mk-ink-2); }
+.mk-state .since.is-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mk-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-ok) 22%, transparent); }
 .mk-state.is-open .now, .mk-state.is-alert .now { color: var(--mk-warn); }
 
-/* Action button: do. Disabled when it makes no sense, pending until confirmed */
-.mk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--mk-3); }
+/* Actions: under the thumb, at the bottom. Risky direction first and held; safe direction alone below */
+.mk-actions { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: var(--mk-3); }
 .mk-action {
-  position: relative; display: grid; place-items: center; gap: var(--mk-2);
-  min-height: 112px; padding: var(--mk-4);
-  border: 0; border-radius: var(--mk-radius);
-  background: var(--mk-button); color: var(--mk-button-ink);
-  font: 800 var(--mk-text-lg)/1 var(--mk-font); cursor: pointer;
+  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: var(--mk-3);
+  min-height: 68px; padding: 0 var(--mk-4);
+  border-radius: 22px; border: 1px solid var(--mk-rim);
+  background: var(--mk-surface); box-shadow: var(--mk-shadow); color: var(--mk-ink);
+  -webkit-backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  font: 800 var(--mk-text-lg)/1.1 var(--mk-font); cursor: pointer;
   transition: transform var(--mk-fast) var(--mk-spring), opacity var(--mk-slow) var(--mk-ease);
 }
-.mk-action .glyph { font-size: 30px; }
-.mk-action:active { transform: scale(.96); }
+.mk-action > .mk-i { color: var(--mk-accent); }
+.mk-action .how { display: block; margin-top: 3px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mk-ink-3); }
+.mk-action:active { transform: scale(.97); }
 .mk-action.is-wide { grid-column: 1 / -1; }
-.mk-action:disabled { opacity: .35; cursor: default; transform: none; }
+/* The one action that matters now (Close while the gate is open): gold, full width */
+.mk-action.is-primary {
+  grid-column: 1 / -1; min-height: 72px; border: 0;
+  background: var(--mk-button); color: var(--mk-button-ink);
+  box-shadow: 0 18px 40px -14px color-mix(in srgb, var(--mk-accent) 70%, transparent), inset 0 1px 0 rgb(255 255 255 / .5);
+}
+.mk-action.is-primary > .mk-i { color: inherit; }
+/* Hold to confirm: for actions nobody should trigger by accident (open the gate). --hold goes 0 → 1 */
+.mk-action.is-hold { justify-content: flex-start; text-align: start; min-height: 76px; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.mk-action.is-hold::before {
+  content: ""; position: absolute; inset: 0; transform-origin: left; transform: scaleX(var(--hold, 0));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mk-accent) 10%, transparent), color-mix(in srgb, var(--mk-accent) 34%, transparent));
+  border-right: 2px solid var(--mk-accent); pointer-events: none;
+}
+.mk-action:disabled { opacity: .38; cursor: default; transform: none; }
+.mk-action:disabled::before { content: none; }
 .mk-action.is-pending { opacity: .7; }
 .mk-action.is-pending::after {
   content: ""; position: absolute; top: 14px; right: 14px; width: 16px; height: 16px; border-radius: 50%;
-  border: 2px solid rgb(255 255 255 / .35); border-top-color: currentColor; animation: mk-spin .8s linear infinite;
+  border: 2px solid var(--mk-hairline); border-top-color: currentColor; animation: mk-spin .8s linear infinite;
 }
 /* Rare actions live apart, lower and quieter */
-.mk-rare { margin-top: var(--mk-6); padding: var(--mk-4); display: grid; gap: var(--mk-3); }
-.mk-rare h2 { margin: 0; font-size: var(--mk-text); font-weight: 700; color: var(--mk-ink-2); }
+.mk-rare { margin-top: var(--mk-2); text-align: center; }
+.mk-rare button, .mk-rare a { all: unset; cursor: pointer; padding: var(--mk-2) var(--mk-3); font-size: var(--mk-text-sm); font-weight: 700; color: var(--mk-ink-3); }
 
 /* Device tile: off, on, pending, stale */
 .mk-tile {
