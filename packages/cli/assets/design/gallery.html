@@ -141,8 +141,8 @@
   --mk-button-ink: #0a1024;
   --mk-heat: #ff9a5c;
   --mk-cool: #7ea2ff;
-  --mk-ok: #4fd39a;
-  --mk-warn: #ffbf47;
+  --mk-ok: #5fd6a0;
+  --mk-warn: #ff9f43; /* orange, kept apart from the gold of what is on */
   --mk-alert: #ff6b6f;
   --mk-lilac: #b9a6ff;
   --mk-sky: #8fb4ff;
@@ -239,7 +239,21 @@
   margin: 0;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
+  /* An app, not a page: no text selection or callout on a long press, except where residents type */
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
+.mk-app :is(input, textarea, select, [contenteditable]) { -webkit-user-select: text; user-select: text; }
+
+/* Pages (createNav): one layer per page, each scrolls on its own; the top one follows the finger on a swipe back */
+.mk-pages { position: fixed; inset: 0; overflow: hidden; isolation: isolate; }
+.mk-page {
+  position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  touch-action: pan-y; background: var(--mk-bg-art), var(--mk-bg);
+}
+.mk-page.is-moving { z-index: 2; box-shadow: -18px 0 40px -12px rgb(0 0 0 / .45); will-change: transform; }
+.mk-pages-shade { position: absolute; inset: 0; z-index: 1; background: #000; opacity: 0; pointer-events: none; }
 
 /* Glass: the one surface. Stack at most two levels. */
 .mk-glass {
@@ -299,7 +313,7 @@
 .mk-eyebrow { font-size: var(--mk-text-xs); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mk-ink-3); }
 .mk-headline { margin: 0; font-size: var(--mk-display); font-weight: 800; letter-spacing: -.045em; line-height: 1.02; }
 .mk-headline em { font-style: normal; background: var(--mk-accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.mk-headline em.is-alert { background: linear-gradient(110deg, color-mix(in srgb, var(--mk-warn) 70%, #fff), var(--mk-warn) 55%, var(--mk-heat)); -webkit-background-clip: text; background-clip: text; }
+.mk-headline em.is-warn, .mk-headline em.is-alert { background: linear-gradient(110deg, color-mix(in srgb, var(--mk-warn) 70%, #fff), var(--mk-warn) 55%, var(--mk-heat)); -webkit-background-clip: text; background-clip: text; }
 
 /* Entry tile: the home screen opens pages. Tiles of different sizes fill the screen */
 .mk-entries { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(108px, 1fr); gap: var(--mk-3); }
@@ -390,7 +404,8 @@
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
 }
 .mk-orb .mk-i { width: 112px; height: 112px; stroke-width: 1.4; filter: drop-shadow(0 0 18px color-mix(in srgb, var(--tint) 55%, transparent)); }
-.mk-orb.is-open, .mk-orb.is-alert { --tint: var(--mk-warn); }
+.mk-orb.is-open, .mk-orb.is-warn { --tint: var(--mk-warn); }
+.mk-orb.is-alert { --tint: var(--mk-alert); }
 
 /* A hue for a place or a kind of device, on a tile or an orb */
 .mk-tint-lilac { --tint: var(--mk-lilac); --glow: 34%; }
@@ -405,7 +420,11 @@
 .mk-state .now { font-size: 56px; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
 .mk-state .since { display: inline-flex; justify-content: center; align-items: center; gap: var(--mk-2); font-size: var(--mk-text-sm); font-weight: 600; color: var(--mk-ink-2); }
 .mk-state .since.is-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mk-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-ok) 22%, transparent); }
-.mk-state.is-open .now, .mk-state.is-alert .now { color: var(--mk-warn); }
+/* The state word carries its meaning (see .mk-status): green and calm when safe, orange to look at, gold when on, red only for an alarm or a failure */
+.mk-state.is-ok .now { color: color-mix(in srgb, var(--mk-ok) 80%, var(--mk-ink)); }
+.mk-state.is-open .now, .mk-state.is-warn .now { color: var(--mk-warn); }
+.mk-state.is-on .now { color: var(--mk-honey); }
+.mk-state.is-alert .now { color: var(--mk-alert); }
 
 /* Actions: under the thumb, at the bottom. Risky direction first and held; safe direction alone below */
 .mk-actions { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: var(--mk-3); }
@@ -509,14 +528,35 @@
 .mk-level::-webkit-slider-thumb { appearance: none; width: 4px; height: 44px; background: transparent; }
 .mk-level::-moz-range-thumb { width: 4px; height: 44px; border: 0; background: transparent; }
 
-/* The home is not answering: say it, never hide it */
-.mk-stale-banner {
-  display: flex; align-items: center; gap: var(--mk-2);
-  padding: 10px 14px; border-radius: var(--mk-pill);
-  background: color-mix(in srgb, var(--mk-warn) 18%, var(--mk-surface-strong));
-  color: var(--mk-ink); font-size: var(--mk-text-sm); font-weight: 600;
+/*
+ * Status: a word and a small dot, never a big coloured block. Always a word, so
+ * colour is never the only signal (colour blindness).
+ *   is-ok     normal and safe: closed, locked, armed (a discreet green)
+ *   is-warn   to look at: open, moving, low battery (orange)
+ *   is-on     on or running: a light, heating (gold)
+ *   is-alert  an alarm or a failure, nothing else (red)
+ */
+.mk-status { display: inline-flex; align-items: center; gap: .5em; font-weight: 700; }
+.mk-status::before {
+  content: ""; flex: none; width: .5em; height: .5em; border-radius: 50%; background: currentColor;
+  box-shadow: 0 0 0 .22em color-mix(in srgb, currentColor 22%, transparent);
 }
-.mk-stale-banner::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mk-warn); }
+.mk-status.is-ok { color: color-mix(in srgb, var(--mk-ok) 85%, var(--mk-ink)); }
+.mk-status.is-warn { color: var(--mk-warn); }
+.mk-status.is-on { color: var(--mk-honey); }
+.mk-status.is-alert { color: var(--mk-alert); }
+.mk-entry .mk-status, .mk-state .mk-status { display: flex; padding-left: .25em; }
+
+/*
+ * Old values. The Miakapp bar already says when the home is (re)connecting:
+ * never add a banner of your own. Put .is-stale on .mk-app while state.stale is
+ * true and the values dim; disable the controls. .mk-stale dims one value
+ * (a sensor silent for a while).
+ */
+.mk-app.is-stale :is(.now, .big, .hint, .value, .mk-status, .mk-orb), .mk-stale {
+  opacity: .45; filter: saturate(.2);
+  transition: opacity var(--mk-slow) var(--mk-ease), filter var(--mk-slow) var(--mk-ease);
+}
 
 :focus-visible { outline: 3px solid var(--mk-accent); outline-offset: 2px; }
 
@@ -549,6 +589,10 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; colo
 .screen .status { position: absolute; top: 0; left: 0; right: 0; height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 6px 26px 0; font-size: 13px; font-weight: 700; z-index: 3; }
 .screen .mk-screen { position: absolute; inset: 0; overflow: auto; min-height: 0; padding: 50px 14px 96px; gap: 14px; scrollbar-width: none; }
 .screen .mk-headline { font-size: 34px; }
+.screen .mk-pages { position: absolute; }
+.statuses { display: flex; flex-wrap: wrap; gap: 12px; padding: 18px; border-radius: 28px; background: var(--mk-bg-art), var(--mk-bg); color: var(--mk-ink); }
+.statuses .mk-glass { flex: 1 1 200px; padding: 16px; display: grid; gap: 6px; }
+.statuses .mk-status { font-size: 20px; }
 .screen .tabdock { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 3; }
 .caption { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--mk-ink-2); }
 .tablet { width: 860px; max-width: 100%; aspect-ratio: 16 / 9.4; border-radius: 34px; padding: 12px; background: #0b0b0f; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .45); }
@@ -697,7 +741,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
           <div class="mk-entries">
             <button class="mk-entry is-featured">
               <span class="mk-icon"><svg class="mk-i"><use href="#gate"/></svg></span>
-              <span class="grow"><span class="hint">Gate</span><span class="now">Closed</span></span>
+              <span class="grow"><span class="hint">Gate</span><span class="now">Closed</span><span class="hint mk-status is-ok">Live</span></span>
               <svg class="mk-i" style="opacity:.55"><use href="#chevron"/></svg>
             </button>
             <button class="mk-entry is-tall mk-tint-peach">
@@ -706,7 +750,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             </button>
             <button class="mk-entry mk-tint-lilac">
               <span class="mk-icon"><svg class="mk-i"><use href="#door"/></svg></span>
-              <span><span class="name">Front door</span><span class="hint">Locked</span></span>
+              <span><span class="name">Front door</span><span class="hint mk-status is-ok">Locked</span></span>
             </button>
             <button class="mk-entry mk-tint-sky">
               <span class="mk-icon"><svg class="mk-i"><use href="#shutter"/></svg></span>
@@ -733,7 +777,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
         <div class="mk-screen">
           <div class="mk-topbar"><button class="mk-back" aria-label="Back"><svg class="mk-i"><use href="#back"/></svg></button>Gate</div>
           <div class="mk-orb" id="gate-orb"><svg class="mk-i"><use href="#gate"/></svg></div>
-          <div class="mk-state" id="gate-state"><div class="now">Closed</div><div class="since is-live">Live</div></div>
+          <div class="mk-state is-ok" id="gate-state"><div class="now">Closed</div><div class="since is-live">Live</div></div>
           <div class="mk-actions">
             <button class="mk-action is-hold" data-gate="open"><svg class="mk-i"><use href="#unlock"/></svg><span>Open<span class="how">Hold</span></span></button>
             <button class="mk-action is-hold" data-gate="walk"><svg class="mk-i"><use href="#walk"/></svg><span>Pedestrian<span class="how">Hold</span></span></button>
@@ -744,6 +788,14 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
         <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
       </div></div>
       <div class="caption">A device page · hold “Open”, then tap “Close”</div>
+    </div>
+    <!-- 1d. Pages with createNav(): a tile slides its page in; swipe from the left edge (or drag with the mouse) to go back -->
+    <div>
+      <div class="phone"><div class="screen" id="nav-demo">
+        <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
+        <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
+      </div></div>
+      <div class="caption">Pages · tap a tile, then swipe back from the left edge</div>
     </div>
     <!-- 1c. The same home while the gate is open: the featured tile turns warm and offers the safe shortcut -->
     <div>
@@ -758,7 +810,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             <div class="mk-entry is-featured has-attention" role="group">
               <button class="mk-open" aria-label="Gate"></button>
               <span class="mk-icon"><svg class="mk-i"><use href="#gate"/></svg></span>
-              <span class="grow"><span class="hint">Gate</span><span class="now">Open</span><span class="hint">for 4 min</span></span>
+              <span class="grow"><span class="hint">Gate</span><span class="now">Open</span><span class="hint mk-status is-warn">for 4 min</span></span>
               <button class="mk-shortcut"><svg class="mk-i"><use href="#lock"/></svg>Close</button>
             </div>
             <button class="mk-entry is-tall mk-tint-peach">
@@ -767,7 +819,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             </button>
             <button class="mk-entry mk-tint-lilac">
               <span class="mk-icon"><svg class="mk-i"><use href="#door"/></svg></span>
-              <span><span class="name">Front door</span><span class="hint">Locked</span></span>
+              <span><span class="name">Front door</span><span class="hint mk-status is-ok">Locked</span></span>
             </button>
             <button class="mk-entry mk-tint-sky">
               <span class="mk-icon"><svg class="mk-i"><use href="#shutter"/></svg></span>
@@ -831,8 +883,8 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
         <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
         <div class="scroll">
           <div class="mk-label" style="margin:10px 2px 0">Today</div>
-          <div class="mk-hero" style="margin:4px 0 2px"><span class="mk-gradient-text">8.4</span><span style="font-size:24px;letter-spacing:0"> kWh</span></div>
-          <div class="mk-label" style="margin:0 2px 14px">≈ $1.72 · 12 % less than a usual Friday</div>
+          <div class="mk-hero mk-stale" style="margin:4px 0 2px"><span class="mk-gradient-text">8.4</span><span style="font-size:24px;letter-spacing:0"> kWh</span></div>
+          <div class="mk-label" style="margin:0 2px 14px">≈ $1.72 · meter last heard 6 min ago</div>
           <div class="mk-glass" style="padding:14px">
             <div class="row between"><b>Hour by hour</b><span class="mk-meta">peak at 7 pm</span></div>
             <div class="bars" id="bars"></div>
@@ -845,11 +897,10 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             <div class="consumer"><span>Heaters</span><b>1.6 kWh</b><div class="meter"><i style="width:52%"></i></div></div>
             <div class="consumer"><span>Everything else</span><b>1.9 kWh</b><div class="meter"><i style="width:61%"></i></div></div>
           </div>
-          <div class="mk-stale-banner" style="margin-top:14px">Meter silent for 6 min · last known values</div>
         </div>
         <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a aria-current="page" href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
       </div></div>
-      <div class="caption">Energy</div>
+      <div class="caption">Energy · an old value is dimmed, never bannered</div>
     </div>
 
     <!-- 4. Tablette murale -->
@@ -910,6 +961,14 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
     <div><button class="mk-tile is-stale" style="width:100%" disabled><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Lamp</div><div class="value">On 6 min ago</div></span></button><div class="lbl">Stale value</div></div>
   </div>
 
+  <h2 class="sec">Colours mean something · always with a word</h2>
+  <div class="statuses" id="statuses" data-theme="minuit">
+    <div class="mk-glass"><span class="mk-status is-ok">Closed</span><span class="mk-meta">Normal and safe: closed, locked, armed. A discreet green word and dot, never a green block.</span></div>
+    <div class="mk-glass"><span class="mk-status is-warn">Open</span><span class="mk-meta">To look at: open, moving, battery low.</span></div>
+    <div class="mk-glass"><span class="mk-status is-on">On</span><span class="mk-meta">On or running: a light, the heating. Gold, like the lit tiles.</span></div>
+    <div class="mk-glass"><span class="mk-status is-alert">Alarm</span><span class="mk-meta">Only an alarm or a failure. Red everywhere else teaches people to ignore it.</span></div>
+  </div>
+
   <h2 class="sec">Principles</h2>
   <div class="rules">
     <div class="mk-glass"><b>A remote, not a dashboard</b>The home screen opens pages and fills one screen, no more. One page per thing. Upkeep (batteries, silent sensors) goes elsewhere.</div>
@@ -920,17 +979,421 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
     <div class="mk-glass"><b>Open: never by accident</b>Actions that open, unlock or start sit together on the first row and are <em>held</em> to confirm. Never from the home screen.</div>
     <div class="mk-glass"><b>Close: never forgotten</b>Alone on its row, one tap. While something is open it becomes the gold button, and the home tile turns warm with a Close shortcut.</div>
     <div class="mk-glass"><b>Buttons never move</b>Open or closed, each button keeps its place; only its emphasis changes. The thumb learns where to tap.</div>
-    <div class="mk-glass"><b>Say when the home goes quiet</b>Dim stale values, show an honest banner, disable controls. Never a fake “up to date”.</div>
+    <div class="mk-glass"><b>Old values are dimmed, not bannered</b>The Miakapp bar already says “Connecting…”. Your app only dims the values that may be old and disables the controls. Never a banner of your own, never a fake “up to date”.</div>
+    <div class="mk-glass"><b>An app, not a web page</b>Pages slide in and have a history entry each; a swipe from the left edge goes back. Text is not selectable, except in fields.</div>
   </div>
 </div>
 </div>
 
 <script>
+const reduceMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let iosSwitch;
+function haptic(pattern = 12) {
+  try {
+    if (typeof navigator.vibrate === "function") {
+      navigator.vibrate(typeof pattern === "number" ? pattern : [...pattern]);
+      return;
+    }
+    if (iosSwitch === undefined) {
+      iosSwitch = document.createElement("label");
+      iosSwitch.ariaHidden = "true";
+      iosSwitch.style.cssText = "position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.setAttribute("switch", "");
+      input.tabIndex = -1;
+      iosSwitch.append(input);
+      iosSwitch.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+      document.body.append(iosSwitch);
+    }
+    iosSwitch.click();
+  } catch {}
+}
+function holdToConfirm(button, run, ms = 300) {
+  const ease = (t) => 1 - (1 - t) ** 3;
+  const unease = (g) => 1 - (1 - g) ** (1 / 3);
+  let holding = false;
+  let started = 0;
+  let shown = 0;
+  let frame = 0;
+  const show = (gauge) => {
+    shown = gauge;
+    button.style.setProperty("--hold", gauge.toFixed(3));
+  };
+  const drain = () => {
+    cancelAnimationFrame(frame);
+    const from = shown;
+    if (from <= 0 || reduceMotion()) {
+      show(0);
+      return;
+    }
+    const begin = performance.now();
+    const duration = 120 + 220 * from;
+    const step = (now) => {
+      if (holding)
+        return;
+      const t = Math.min(1, (now - begin) / duration);
+      show(from * (1 - t * t * (3 - 2 * t)));
+      if (t < 1)
+        frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+  };
+  const stop = () => {
+    if (!holding)
+      return;
+    holding = false;
+    drain();
+  };
+  const tick = (now) => {
+    if (!holding)
+      return;
+    const t = Math.min(1, (now - started) / ms);
+    show(ease(t));
+    if (t < 1) {
+      frame = requestAnimationFrame(tick);
+      return;
+    }
+    holding = false;
+    haptic([18, 40, 26]);
+    run();
+    setTimeout(() => {
+      if (!holding)
+        drain();
+    }, 260);
+  };
+  const begin = (event) => {
+    if (holding || button.disabled)
+      return;
+    event.preventDefault();
+    cancelAnimationFrame(frame);
+    holding = true;
+    started = performance.now() - unease(shown) * ms;
+    haptic(8);
+    frame = requestAnimationFrame(tick);
+  };
+  const isPress = (event) => event.key === "Enter" || event.key === " ";
+  const keydown = (event) => {
+    if (isPress(event) && !event.repeat)
+      begin(event);
+  };
+  const keyup = (event) => {
+    if (isPress(event))
+      stop();
+  };
+  const noMenu = (event) => {
+    event.preventDefault();
+  };
+  const cancels = ["pointerup", "pointerleave", "pointercancel", "blur"];
+  button.addEventListener("pointerdown", begin);
+  for (const type of cancels)
+    button.addEventListener(type, stop);
+  button.addEventListener("keydown", keydown);
+  button.addEventListener("keyup", keyup);
+  button.addEventListener("contextmenu", noMenu);
+  return () => {
+    holding = false;
+    cancelAnimationFrame(frame);
+    show(0);
+    button.removeEventListener("pointerdown", begin);
+    for (const type of cancels)
+      button.removeEventListener(type, stop);
+    button.removeEventListener("keydown", keydown);
+    button.removeEventListener("keyup", keyup);
+    button.removeEventListener("contextmenu", noMenu);
+  };
+}
+function createNav(options) {
+  const root = options.root ?? document.body;
+  const edge = options.edge ?? 28;
+  const container = document.createElement("div");
+  container.className = "mk-pages";
+  const shade = document.createElement("div");
+  shade.className = "mk-pages-shade";
+  container.append(shade);
+  root.append(container);
+  const stack = [];
+  const listeners = new Set;
+  const ease = "cubic-bezier(.2, .8, .2, 1)";
+  let busy = Promise.resolve();
+  let ignorePops = 0;
+  let nativeSwipeAt = -1 / 0;
+  const width = () => container.clientWidth || innerWidth;
+  const top = () => stack[stack.length - 1];
+  const below = () => stack[stack.length - 2];
+  const paint = (layer) => {
+    const scroll = layer.element.scrollTop;
+    layer.element.replaceChildren(options.render(layer.route));
+    layer.element.scrollTop = scroll;
+    layer.dirty = false;
+  };
+  const place = (layer, x, visible) => {
+    if (layer === undefined)
+      return;
+    layer.element.hidden = !visible;
+    layer.element.style.transform = x === 0 ? "" : `translate3d(${x}px,0,0)`;
+  };
+  const settle = () => {
+    for (const [index, layer] of stack.entries()) {
+      const current = index === stack.length - 1;
+      layer.element.hidden = !current;
+      layer.element.inert = !current;
+      layer.element.style.transform = "";
+      layer.element.classList.remove("is-moving");
+    }
+    shade.style.opacity = "0";
+    shade.hidden = true;
+  };
+  const announce = () => {
+    const route = top().route;
+    for (const listener of listeners)
+      listener(route);
+  };
+  const layerFor = (route) => {
+    const element = document.createElement("div");
+    element.className = "mk-page";
+    const layer = { route, element, dirty: true };
+    container.append(element);
+    paint(layer);
+    return layer;
+  };
+  const slide = (from, to, duration) => {
+    const upper = top().element;
+    const lower = below()?.element;
+    const w = width();
+    const under = (x) => `translate3d(${-0.3 * (w - x)}px,0,0)`;
+    const dim = (x) => String(0.32 * (1 - x / w));
+    upper.classList.add("is-moving");
+    shade.hidden = false;
+    if (lower !== undefined)
+      lower.hidden = false;
+    if (reduceMotion() || duration <= 0)
+      return Promise.resolve();
+    const options = { duration, easing: ease, fill: "forwards" };
+    const animations = [
+      upper.animate([{ transform: `translate3d(${from}px,0,0)` }, { transform: `translate3d(${to}px,0,0)` }], options),
+      shade.animate([{ opacity: dim(from) }, { opacity: dim(to) }], options)
+    ];
+    if (lower !== undefined)
+      animations.push(lower.animate([{ transform: under(from) }, { transform: under(to) }], options));
+    return Promise.all(animations.map((animation) => animation.finished.catch(() => {
+      return;
+    }))).then(() => {
+      for (const animation of animations)
+        animation.cancel();
+    });
+  };
+  const push = (route, animate) => {
+    const layer = layerFor(route);
+    stack.push(layer);
+    announce();
+    if (!animate) {
+      settle();
+      return Promise.resolve();
+    }
+    place(layer, width(), true);
+    return slide(width(), 0, 340).then(settle);
+  };
+  const pop = (count, animate, from = 0) => {
+    if (stack.length <= 1 || count <= 0)
+      return Promise.resolve();
+    while (count > 1 && stack.length > 2) {
+      stack.splice(stack.length - 2, 1)[0].element.remove();
+      count -= 1;
+    }
+    const lower = below();
+    if (lower.dirty)
+      paint(lower);
+    const finish = () => {
+      stack.pop().element.remove();
+      settle();
+      announce();
+    };
+    if (!animate) {
+      finish();
+      return Promise.resolve();
+    }
+    return slide(from, width(), Math.round(260 * (1 - from / width())) + 60).then(finish);
+  };
+  const queue = (work) => {
+    busy = busy.then(work, work);
+  };
+  const depthOf = (state) => {
+    const value = state?.mkNav;
+    return typeof value === "number" ? value : 0;
+  };
+  try {
+    history.replaceState({ ...history.state ?? {}, mkNav: 0, mkRoute: options.home ?? "" }, "");
+  } catch {}
+  addEventListener("popstate", (event) => {
+    if (ignorePops > 0) {
+      ignorePops -= 1;
+      return;
+    }
+    const target = depthOf(event.state);
+    const depth = stack.length - 1;
+    const animate = performance.now() - nativeSwipeAt > 900;
+    if (target < depth)
+      queue(() => pop(depth - target, animate));
+    else if (target > depth) {
+      const route = event.state?.mkRoute;
+      if (typeof route === "string")
+        queue(() => push(route, animate));
+    }
+  });
+  let drag;
+  container.addEventListener("pointerdown", (event) => {
+    if (stack.length <= 1 || drag !== undefined || event.pointerType === "mouse" && event.button !== 0)
+      return;
+    const x = event.clientX - container.getBoundingClientRect().left;
+    if (x > edge)
+      return;
+    drag = { id: event.pointerId, x0: event.clientX, y0: event.clientY, started: false, samples: [[event.timeStamp, 0]] };
+  });
+  container.addEventListener("pointermove", (event) => {
+    if (drag === undefined || event.pointerId !== drag.id)
+      return;
+    const dx = Math.max(0, event.clientX - drag.x0);
+    const dy = event.clientY - drag.y0;
+    if (!drag.started) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > dx) {
+        drag = undefined;
+        return;
+      }
+      if (dx < 10)
+        return;
+      drag.started = true;
+      try {
+        container.setPointerCapture(event.pointerId);
+      } catch {}
+      const lower = below();
+      if (lower.dirty)
+        paint(lower);
+      top().element.classList.add("is-moving");
+      shade.hidden = false;
+      lower.element.hidden = false;
+    }
+    event.preventDefault();
+    drag.samples.push([event.timeStamp, dx]);
+    if (drag.samples.length > 5)
+      drag.samples.shift();
+    const w = width();
+    place(top(), dx, true);
+    place(below(), -0.3 * (w - dx), true);
+    shade.style.opacity = String(0.32 * (1 - dx / w));
+  });
+  container.addEventListener("touchmove", (event) => {
+    const touch = event.touches[0];
+    if (drag === undefined || touch === undefined || !event.cancelable)
+      return;
+    const dx = touch.clientX - drag.x0;
+    if (drag.started || dx > Math.abs(touch.clientY - drag.y0))
+      event.preventDefault();
+  }, { passive: false });
+  const release = (event, cancelled) => {
+    if (drag === undefined || event.pointerId !== drag.id)
+      return;
+    const current = drag;
+    drag = undefined;
+    if (!current.started) {
+      if (cancelled)
+        nativeSwipeAt = performance.now();
+      return;
+    }
+    const swallow = (click) => {
+      click.stopPropagation();
+      click.preventDefault();
+    };
+    addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => {
+      removeEventListener("click", swallow, { capture: true });
+    }, 400);
+    const [t1, x1] = current.samples[current.samples.length - 1];
+    const [t0, x0] = current.samples.find(([t]) => t >= t1 - 100) ?? current.samples[0];
+    const velocity = (x1 - x0) / Math.max(16, t1 - t0);
+    const dx = x1;
+    const w = width();
+    const commit = !cancelled && (velocity > 0.35 || dx > w * 0.4 && velocity > -0.15);
+    if (commit) {
+      ignorePops += 1;
+      setTimeout(() => {
+        ignorePops = 0;
+      }, 800);
+      queue(() => pop(1, true, dx));
+      try {
+        history.back();
+      } catch {
+        ignorePops = 0;
+      }
+      return;
+    }
+    queue(() => slide(dx, 0, Math.round(220 * (dx / w)) + 120).then(settle));
+  };
+  container.addEventListener("pointerup", (event) => {
+    release(event, false);
+  });
+  container.addEventListener("pointercancel", (event) => {
+    release(event, true);
+  });
+  stack.push(layerFor(options.home ?? ""));
+  settle();
+  return {
+    get route() {
+      return top().route;
+    },
+    get depth() {
+      return stack.length - 1;
+    },
+    go(route) {
+      queue(() => {
+        try {
+          history.pushState({ mkNav: stack.length, mkRoute: route }, "");
+        } catch {}
+        return push(route, true);
+      });
+    },
+    back() {
+      if (stack.length <= 1)
+        return;
+      try {
+        history.back();
+      } catch {
+        queue(() => pop(1, true));
+      }
+    },
+    home() {
+      const depth = stack.length - 1;
+      if (depth === 0)
+        return;
+      try {
+        history.go(-depth);
+      } catch {
+        queue(() => pop(depth, true));
+      }
+    },
+    refresh() {
+      for (const layer of stack)
+        layer.dirty = true;
+      paint(top());
+    },
+    onChange(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    }
+  };
+}
+
+</script>
+<script>
   const stage = document.getElementById('stage');
   const states = document.getElementById('states');
   const buttons = document.querySelectorAll('.switch-themes button');
   function pick(t) {
-    stage.dataset.theme = t; states.dataset.theme = t;
+    stage.dataset.theme = t; states.dataset.theme = t; document.getElementById('statuses').dataset.theme = t;
     buttons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t)));
   }
   buttons.forEach(b => b.addEventListener('click', () => pick(b.dataset.t)));
@@ -949,6 +1412,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   function setGate(open) {
     const st = document.getElementById('gate-state');
     st.classList.toggle('is-open', open);
+    st.classList.toggle('is-ok', !open);
     document.getElementById('gate-orb').classList.toggle('is-open', open);
     st.querySelector('.now').textContent = open ? 'Open' : 'Closed';
     st.querySelector('.since').textContent = open ? 'Open just now' : 'Live';
@@ -964,19 +1428,40 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   }
   gateButtons.forEach(b => {
     if (b.dataset.gate === 'close') { b.addEventListener('click', () => { if (!b.disabled) act(b, false); }); return; }
-    let t0 = 0, raf = 0;
-    const stop = () => { t0 = 0; cancelAnimationFrame(raf); b.style.setProperty('--hold', 0); };
-    const tick = now => {
-      if (!t0) return;
-      const p = Math.min(1, (now - t0) / 600);
-      b.style.setProperty('--hold', p);
-      if (p < 1) raf = requestAnimationFrame(tick); else { stop(); act(b, true); }
-    };
-    b.addEventListener('pointerdown', e => { if (b.disabled) return; e.preventDefault(); t0 = performance.now(); raf = requestAnimationFrame(tick); });
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stop));
-    b.addEventListener('contextmenu', e => e.preventDefault());
+    holdToConfirm(b, () => act(b, true));
   });
   document.querySelectorAll('.mk-level').forEach(r => r.addEventListener('input', () => r.style.setProperty('--level', r.value + '%')));
+  // Pages: the real createNav() from the starter's theme.ts, rooted in the demo phone.
+  const navTiles = [
+    { id: 'gate', label: 'Gate', icon: 'gate', hint: 'Closed', featured: true },
+    { id: 'living', label: 'Living room', icon: 'sofa', tint: 'peach', big: '71°' },
+    { id: 'door', label: 'Front door', icon: 'door', tint: 'lilac', hint: 'Locked' },
+    { id: 'garden', label: 'Garden', icon: 'tree', tint: 'mint', hint: 'Sprinklers off' },
+  ];
+  const svg = (name, cls = 'mk-i') => `<svg class="${cls}"><use href="#${name}"/></svg>`;
+  const demoNav = createNav({
+    root: document.getElementById('nav-demo'),
+    render(route) {
+      const screen = document.createElement('main');
+      screen.className = 'mk-screen';
+      const tile = navTiles.find((t) => t.id === route);
+      if (tile === undefined) {
+        screen.innerHTML = `<div><div class="mk-eyebrow">Friday, November 14</div><h1 class="mk-headline">Good evening.<br>All <em>closed</em>.</h1></div>
+          <div class="mk-entries">${navTiles.map((t) => `<button class="mk-entry ${t.featured ? 'is-featured' : `mk-tint-${t.tint}`}${t.big ? ' is-tall' : ''}" data-go="${t.id}">
+            <span class="mk-icon">${svg(t.icon)}</span>
+            <span class="${t.featured ? 'grow' : ''}">${t.featured ? `<span class="hint">${t.label}</span><span class="now">${t.hint}</span>`
+              : `${t.big ? `<span class="big">${t.big}</span>` : ''}<span class="name">${t.label}</span>${t.hint ? `<span class="hint">${t.hint}</span>` : ''}`}</span></button>`).join('')}</div>`;
+        screen.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => demoNav.go(b.dataset.go)));
+        return screen;
+      }
+      screen.innerHTML = `<div class="mk-topbar"><button class="mk-back" aria-label="Back">${svg('back')}</button>${tile.label}</div>
+        <div class="mk-orb${tile.tint ? ` mk-tint-${tile.tint}` : ''}">${svg(tile.icon)}</div>
+        <div class="mk-state${tile.hint === 'Closed' || tile.hint === 'Locked' ? ' is-ok' : ''}"><div class="now">${tile.big ?? tile.hint}</div><div class="since is-live">Live</div></div>
+        <p class="mk-meta" style="text-align:center">Swipe from the left edge to go back:<br>slowly, then let go halfway, or with a quick flick.</p>`;
+      screen.querySelector('.mk-back').addEventListener('click', () => demoNav.back());
+      return screen;
+    },
+  });
   const kwh = [.18,.15,.14,.13,.14,.16,.32,.48,.36,.22,.2,.24,.38,.3,.22,.2,.26,.42,.62,.71,.55];
   const max = Math.max(...kwh), bars = document.getElementById('bars'), now = kwh.length - 1;
   kwh.forEach((v, i) => { const s = document.createElement('span'); s.style.height = (v / max * 100) + '%'; if (i === now) s.className = 'now'; else if (v > .5) s.className = 'peak'; bars.append(s); });

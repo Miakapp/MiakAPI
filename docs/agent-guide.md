@@ -29,8 +29,16 @@ Concretely:
   as "the link". If the control plane advertises no `home_url`, say so instead of
   inventing one, and say what `miakapp status` proved.
 - **Ask once, at the start, and only for what you cannot find.** Access comes
-  from pairing (§9), the existing installation from inventory (§3). Repeated
-  permission questions in the middle of the work are a failure of the work.
+  from pairing (§9), the existing installation from inventory (§3), and the
+  right to wire physical controls from one question at the start of the
+  step-by-step journey (below). Repeated permission questions in the middle of
+  the work are a failure of the work.
+- **Get it right the first time.** The owner should never have to ask you to
+  remove something you added or to fix how it looks or feels. Before you
+  publish, read `miakapp docs design` and follow it to the letter, check the
+  app on a phone (§5, "Check it on a phone"), and remove anything the guides
+  tell you not to add (a connection banner, your own bottom bar, a value
+  nobody asked for).
 - **You need nothing from the platform's source.** This guide and the published
   CLI — including the app starter `miakapp init --starter app` writes — are the
   whole toolchain for the interface. Never edit or redeploy the Miakapp
@@ -54,7 +62,14 @@ A first session usually goes like this:
    find a way to control them from Miakapp."*
 2. The owner lists devices ("I have Hue lamps…"). Ask only for what you need
    to reach them: the credentials of the brand's account, or whether there is a
-   Raspberry Pi or a small PC that can run 24/7 in the house.
+   Raspberry Pi or a small PC that can run 24/7 in the house. In the same
+   message, ask **once** for the green light on physical controls: *"As we go,
+   I'll add the buttons that act on the house (lights, shutters, gate,
+   heating…), each one reserved to the people you choose. OK for you?"* That
+   answer covers every control of the journey: do not ask again device by
+   device. You still never trigger something that opens, unlocks or heats on
+   the real hardware yourself: when such a control is ready, tell the owner it
+   is ready to try.
 3. Connect them, publish, check, then: *"I've just added your lamps! Do you want
    me to group them by room? Otherwise we can start adding people to the home:
    family members, guests or friends?"*
@@ -71,10 +86,11 @@ Rules for every checkpoint:
 
 Two scopes must not be confused:
 
-| In scope by default | Needs the owner's explicit, separate request |
+| In scope by default | Needs the owner's explicit request |
 | --- | --- |
-| reading the existing installation (§3) | changing flows, automations, brokers or devices that already run the house |
-| writing and testing a coordinator and an app | granting a physical action (heat, lock, unlock, open, close) that the owner has not named |
+| reading the existing installation (§3) | changing flows, automations or devices that already run the house |
+| giving the coordinator its own access to devices (its own broker user, token, GPIO) | removing or replacing the existing hub (the switch-over) |
+| writing and testing a coordinator and an app | physical controls, until the owner answered the one question above |
 | publishing, verifying and rolling back the V4 interface | anything on the owner's own machines beyond the coordinator you were asked to run |
 
 Caution about the second column is not a reason to withhold the first. A new V4
@@ -183,6 +199,26 @@ Write down what you found before you write the configuration. The state paths yo
 choose become a disclosure boundary and a public interface at the same time, and
 renaming one after the household has used it is not free.
 
+### Talk to the devices, not to the old hub
+
+Read the existing hub to learn the house, never to depend on it. The
+coordinator talks **directly** to the devices: MQTT and Zigbee2MQTT topics, the
+Pi's GPIO for relays, the local HTTP or UDP API of a device, an RF or IR
+transmitter. Owners move to Miakapp to get rid of the old stack (Node-RED, Home
+Assistant, a vendor bridge), and a home that still needs it is not finished.
+
+- Give the coordinator its own access: its own MQTT user on the broker, its own
+  token. Do not reuse the hub's credentials, and do not call the hub's API
+  (Node-RED HTTP endpoints, its context files, a Home Assistant REST call) for
+  something the device itself can tell you or do.
+- When a direct path is not ready yet, the hub may serve as a **temporary
+  bridge** for that one datum or action: mark it `bridge: <hub>` in
+  `docs/inventory.md`, keep it behind one function you can swap, and tell the
+  owner what is left before the hub can be switched off.
+- Two masters on the same relay or device disagree about its state. While the
+  old hub still drives something, keep your direct driver ready but off, and
+  switch over in one step with the owner.
+
 ### The inventory comes before the design
 
 Commit the inventory as `docs/inventory.md` in the home repository, one line per
@@ -195,6 +231,7 @@ datum or action, before you design a single screen:
 | how fresh | reports every ~60 s; last seen 2 min ago |
 | who may read it | every member / owner only |
 | command | none — a measurement, not a control |
+| path | direct (MQTT) / bridge: Node-RED until the switch-over |
 
 Then design **from** it: the V1 shows every datum the household would care
 about and every action that is both technically possible and authorized,
@@ -321,10 +358,11 @@ house, you have taken a name another integration may need; scope what you own.
 ### A whole-house application (default)
 
 `miakapp init --starter app` writes an `app:` section and a buildable app to
-edit. You own the document: build any DOM, ship your own CSS, route with
-`location.hash`, use React, Svelte, Vue, charts or WebAssembly — anything a
-bundler can inline. The deliverable is **one classic-script IIFE** of at most
-2 MiB, with no `import()` and no source map; the starter's `bun run build` is:
+edit. You own the document: build any DOM, ship your own CSS, use React,
+Svelte, Vue, charts or WebAssembly — anything a bundler can inline. Navigate
+with the starter's `createNav()`, which gives every page a history entry and a
+swipe back. The deliverable is **one classic-script IIFE** of at most 2 MiB,
+with no `import()` and no source map; the starter's `bun run build` is:
 
 ```bash
 bun build app/main.ts --format=iife --minify --outfile dist/app.js
@@ -369,6 +407,11 @@ and read everything from state, which the coordinator filters per resident.
 **Staleness.** `home.state.stale` means the snapshot may no longer reflect the
 house. Show it. Per RFC 0002 §12.2 it is exposed, never hidden — a thermostat
 reading that is silently forty minutes old is worse than one labelled uncertain.
+Showing it is the Miakapp bar's job and yours together: the bar says
+"Connecting…" or "Reconnecting…", and your app **dims** the values that may be
+old (`.is-stale` on `.mk-app`) and disables the controls. Never add a banner,
+toast or strip of your own for it ("The home is not answering"): it repeats the
+bar, and every resident sees it each time the app opens.
 
 **Staging.** `home.staging` is true while a release is staged: rendering works,
 calls and events do not. Disable the controls and say why.
@@ -394,6 +437,86 @@ precisely to name the case where the effect is undetermined, and the physical
 world does not have a rollback. Surface it, let the next state snapshot settle
 it, and let the person decide. The same principle has a CLI counterpart: exit
 code 7.
+
+### Check it on a phone
+
+Residents use the app on a phone, installed on the home screen. Look at every
+page at phone size, with touch, before you tell the owner it is done: the home
+screen fits without scrolling, nothing overflows, held actions fill and fire,
+and a swipe from the left edge goes back.
+
+Use the browser you already have; **never install one** (`playwright
+install`, Chromium, a headless shell): on Molted and on most agent machines it
+is forbidden, and it is never needed. `playwright-core` is the client alone and
+downloads no browser; on a Molted machine it drives the cloud browser through
+`$AGENT_BROWSER_BASIC_CDP`.
+
+**Do not trust viewport emulation.** A remote or shared browser often ignores
+it: on Molted's cloud browser, `newContext({ viewport, isMobile })`,
+`Emulation.setDeviceMetricsOverride` and `agent-browser set viewport` all leave
+the page at desktop width. Get the phone size from a frame instead, and measure
+`innerWidth` inside the app before you trust a screenshot.
+
+1. Build, then serve a local preview next to `dist/`: `phone.html` holds the
+   app in a 390 × 844 frame, `frame.html` stands in for Miakapp's bridge with
+   the real values you read from the house.
+
+   ```html
+   <!-- phone.html -->
+   <body style="margin:0"><iframe src="frame.html" style="width:390px;height:844px;border:0"></iframe></body>
+
+   <!-- frame.html: a stand-in for window.miakapp, then the bundle you publish -->
+   <script>
+     const values = { /* the real state, read from the house */ };
+     const listeners = [];
+     window.miakapp = {
+       abi: 'miakapp.app/1', release: 'preview', home: { id: 'preview', name: 'Home' },
+       locale: 'en', theme: 'dark', onThemeChange: () => () => {},
+       state: { get: (p) => values[p], values: () => values, revision: 1, stale: false,
+                subscribe: (l) => { listeners.push(l); return () => {}; } },
+       can: { read: () => true, call: () => true },
+       call: async (name, args) => { console.log('call', name, args); return {}; },
+       ready: () => {}, bar: { setButtons: () => {}, onSelect: () => () => {} },
+     };
+   </script>
+   <style>html,body{overscroll-behavior:none;user-select:none}</style>
+   <script src="dist/app.js"></script>
+   ```
+
+   Serve it where the browser can reach it (on Molted: a port exposed with a
+   public URL). A preview call never reaches the house.
+
+2. Drive it with touch. Taps work with `page.touchscreen.tap`; a swipe is a
+   sequence of CDP touch events:
+
+   ```js
+   import { chromium } from 'playwright-core';   // npm i playwright-core, in a scratch directory
+
+   const browser = await chromium.connectOverCDP(process.env.AGENT_BROWSER_BASIC_CDP);
+   const context = await browser.newContext({ hasTouch: true });
+   const page = await context.newPage();
+   await page.goto(PREVIEW_URL + '/phone.html', { waitUntil: 'commit' });
+   const app = page.frameLocator('iframe');
+   await app.locator('.mk-entry').first().waitFor();
+   console.log(await page.frames()[1].evaluate(() => innerWidth));   // must print 390
+   await page.screenshot({ path: 'home.png', clip: { x: 0, y: 0, width: 390, height: 844 } });
+
+   const cdp = await context.newCDPSession(page);
+   const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent',
+     { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+   await touch('touchStart', 6, 400);                                  // the left edge
+   for (let x = 46; x <= 286; x += 40) await touch('touchMove', x, 400);
+   await touch('touchEnd', 286, 400);                                  // should go back one page
+
+   await page.close();                                                 // your page only, never browser.close()
+   ```
+
+   Remote control adds latency between touch events, so a "flick" sent this
+   way arrives slowly; test speed with a long swipe, not a flick.
+
+3. Then open the published `home_url` if your browser is signed in as a
+   member, and say plainly what you could not check. A desktop-width
+   screenshot is never a phone check.
 
 ## 6. The intersection rule
 
@@ -627,7 +750,15 @@ prevent.
       line, and a test proves an unauthorized caller is refused.
 - [ ] Every name in `miakapp.yaml` is covered by the coordinator, and a test
       asserts the correspondence.
-- [ ] `home.state.stale` and `home.staging` are visible in the interface.
+- [ ] `home.state.stale` dims the values and disables the controls, with no
+      banner of your own; `home.staging` is visible.
+- [ ] You looked at every page at 390 × 844 with a touch pointer (§5); pages
+      slide, the system back and the left-edge swipe go back, held actions fire
+      after 0.3 s.
+- [ ] States use the four colours of `miakapp docs design` (green safe,
+      orange to look at, gold on, red alarm only), always with a word.
+- [ ] The coordinator talks to the devices directly; any hub left is a
+      `bridge:` line in the inventory with what remains to switch it off.
 - [ ] No call path retries an unknown outcome.
 - [ ] State is written before its event is published.
 - [ ] `bun run check` is green, and CI ran it — not just you.

@@ -12,15 +12,17 @@ The files sit next to this guide, in the design directory printed at the end:
 | File | What it is |
 |---|---|
 | `tokens.css` | `--mk-*` variables (color, glass, radius, type, space, motion, a hue per place) for four themes |
-| `components.css` | Recipes on top of the tokens: screen, headline, entry tiles, orb, state header, held and primary actions, device tile, scene, switch, level slider, stale banner |
+| `components.css` | Recipes on top of the tokens: screen, headline, entry tiles, orb, state header, held and primary actions, status words, pages, device tile, scene, switch, level slider, dimmed old values |
 | `icons.svg` | Line icons (gate, door, garage, sofa, bed, light, shutter, lock, unlock…), 24 × 24, as an SVG sprite |
 | `fonts.css` | Manrope as a `data:` URL, ready for the frame, which has no network (OFL, see `OFL-Manrope.txt`) |
 | `gallery.html` | Example screens built only with the files above: home, a device page, a room, energy, wall tablet. Open it in a browser, switch themes, read its source |
 
 `miakapp init --starter app` writes all three stylesheets into `app/theme.ts`
-(`THEME_CSS`), with the icons (`ICONS`, `icon('gate')` as `<svg>` markup) and
-`holdToConfirm()`, and already uses them, so the first build looks like
-Miakapp.
+(`THEME_CSS`), with the icons (`ICONS`, `icon('gate')` as `<svg>` markup),
+`holdToConfirm()`, `haptic()` and `createNav()` (pages that slide, with a
+swipe back), and already uses them, so the first build looks and feels like
+Miakapp. To bring an existing home up to date, run `miakapp init --starter app`
+in an empty directory and copy its `app/theme.ts` over yours.
 
 ## Themes
 
@@ -130,8 +132,10 @@ and close it. Lay it out that way.
 5. **Opening must never happen by accident; closing must never be
    forgotten.** For anything that opens, unlocks or starts (gate, garage door,
    lock, alarm off), the risky actions sit together on the first row and are
-   held to confirm (`.mk-action.is-hold` with `holdToConfirm()`: a gauge fills
-   for 0.6 s, letting go cancels). The safe action (Close, Lock) sits alone on
+   held to confirm (`.mk-action.is-hold` with `holdToConfirm()`: 0.3 s by
+   default; the gauge fills fast, then slows down; letting go early cancels and
+   the gauge drains back smoothly; the phone vibrates when it fires, where it
+   can). Keep the default unless the owner asks otherwise. The safe action (Close, Lock) sits alone on
    the row below and takes one tap. While the thing is open, Close becomes
    `.is-primary` (gold, full width), the home tile turns warm
    (`.has-attention`) and may carry a one-tap `.mk-shortcut` to close it.
@@ -146,8 +150,8 @@ and close it. Lay it out that way.
    value of the room it belongs to.
 8. **Hierarchy, not repetition.** On each page one thing stands out (the
    state, a big number); everything else is smaller and calmer. Colour carries
-   meaning (on, open, alert) or identity (one discreet hue per place), never
-   decoration. If every block has the same size
+   meaning (see "Colours mean something") or identity (one discreet hue per
+   place), never decoration. If every block has the same size
    and colour, the page has no hierarchy.
 9. **Phone first.** Design at 360 px wide with the thumb at the bottom; then
    check a wall tablet and a desktop. Do not line up six cards because the
@@ -162,6 +166,56 @@ a single device, and add the attention dot (`.mk-entry.has-attention`) when
 that state needs looking at (the gate is open). Never a full value, a number
 list or a reading of several sensors.
 
+## Colours mean something
+
+Every state has a colour, and always a word with it: colour alone fails people
+who do not see it. Use `.mk-status` (a word and a small dot) on hints and
+values, and the same modifier on `.mk-state` for a page's big state word.
+
+| Meaning | Examples | Class | Colour |
+|---|---|---|---|
+| Normal and safe | closed, locked, armed | `is-ok` | a discreet green: the word and a small dot, **never a big green block** |
+| To look at | open, moving, battery low, silent for a day | `is-warn` | orange |
+| On, running | a light, the heating, a scene | `is-on` | gold, like the lit tiles (`--mk-on`) |
+| Alarm or failure | the alarm rings, a leak, a device in error | `is-alert` | red, and for nothing else |
+
+```html
+<span class="hint mk-status is-ok">Locked</span>
+<div class="mk-state is-ok"><div class="now">Closed</div>…</div>
+<div class="mk-state is-open"><div class="now">Open</div>…</div>
+```
+
+Red everywhere teaches people to ignore red: an open gate is orange, not red.
+
+## Feel like an app, not a web page
+
+Residents install the home on their phone's home screen. It must behave like a
+native app from the first build:
+
+- **Pages slide, and back works everywhere.** Use `createNav()` from
+  `theme.ts`: `nav.go('gate')` slides a page in, `nav.back()` goes back, and
+  `nav.refresh()` (from `home.subscribe`) rebuilds the page on screen. Each
+  page gets its own history entry, so Android's back button and Safari's swipe
+  in a tab go back one page. The app installed on an iPhone has no back gesture
+  at all: `createNav()` adds one, a swipe from the left edge that follows the
+  finger with the previous page visible behind, and goes back or springs back
+  depending on distance and speed. Never route with a `location.hash` you
+  manage by hand, and never ship a page that only a back button can leave.
+
+  ```ts
+  const nav = createNav({ render: (route) => route === '' ? homeScreen() : page(route) });
+  home.subscribe((state) => { last = state; nav.refresh(); });
+  ```
+
+- **Text is not selectable.** Miakapp's frame already turns selection off on
+  `html, body` (and `.mk-app` does too); fields stay selectable. Do not turn it
+  back on for labels or values.
+- **Touch, not click.** Big targets (44 px at least), a press state
+  (`:active` scales down), `haptic()` for a meaningful moment (a hold that
+  fires); never on every tap.
+- **No chrome of your own.** No bottom tab bar, no connection banner, no
+  "Loading…" page: the Miakapp bar does all three.
+
 ## Principles
 
 1. **The home first, not the devices.** Organize by room or by type of
@@ -172,8 +226,12 @@ list or a reading of several sensors.
    glow of a light, plug or scene that is on. Everything else stays calm.
 3. **One gradient per screen.** `--mk-accent-gradient` is a signature for one
    title or one key number, not for every heading.
-4. **Say when the home goes quiet.** A stale value is dimmed (`is-stale`), a
-   banner says since when, controls are disabled. A command in flight shows
+4. **Old values are dimmed, never bannered.** The Miakapp bar already shows
+   "Connecting…" or "Reconnecting…" while the home is not live: never add a
+   banner, a toast or a warning strip of your own for it. While `state.stale`
+   is true, put `.is-stale` on `.mk-app`: values dim, and you disable the
+   controls. A single value whose sensor has been silent for a while gets
+   `.mk-stale` and a quiet "last heard 2 h ago". A command in flight shows
    `is-pending` until the next state confirms it; an `outcome_unknown` call is
    never retried.
 5. **Big fingers, little text.** 44 px targets at least, tabular digits, three
