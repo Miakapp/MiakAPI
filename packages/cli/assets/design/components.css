@@ -72,6 +72,8 @@
 .mk-entry:active { transform: scale(.96); }
 .mk-entry .glyph { font-size: 40px; line-height: 1; }
 .mk-entry.is-wide { grid-column: 1 / -1; min-height: 104px; }
+.mk-entry .hint { margin-top: -2px; font-size: var(--mk-text-xs); font-weight: 600; color: var(--mk-ink-3); }
+.mk-entry.has-attention .hint { color: var(--mk-warn); }
 /* One small signal when something needs attention, never a full value */
 .mk-entry.has-attention::after {
   content: ""; position: absolute; top: 14px; right: 14px; width: 12px; height: 12px; border-radius: 50%;
