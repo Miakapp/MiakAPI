@@ -1,0 +1,139 @@
+/*
+ * Miakapp component recipes. Plain CSS on top of tokens.css: take what you
+ * need, rewrite the rest. No class here is required by Miakapp.
+ */
+
+.mk-app {
+  min-height: 100%;
+  font-family: var(--mk-font);
+  font-size: var(--mk-text);
+  color: var(--mk-ink);
+  background: var(--mk-bg-art), var(--mk-bg);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Glass: the one surface. Stack at most two levels. */
+.mk-glass {
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-rim);
+  border-radius: var(--mk-radius);
+  box-shadow: var(--mk-shadow);
+  -webkit-backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+}
+@supports (corner-shape: squircle) {
+  .mk-glass, .mk-tile, .mk-scene { corner-shape: squircle; border-radius: calc(var(--mk-radius) * 1.6); }
+}
+
+/* Type */
+.mk-hero { font-size: var(--mk-hero); font-weight: 800; letter-spacing: var(--mk-tight); line-height: .95; }
+.mk-display { font-size: var(--mk-display); font-weight: 800; letter-spacing: var(--mk-tight); line-height: 1; }
+.mk-title { font-size: var(--mk-title); font-weight: 800; letter-spacing: -0.02em; }
+.mk-label { font-size: var(--mk-text-sm); font-weight: 600; color: var(--mk-ink-2); }
+.mk-meta { font-size: var(--mk-text-xs); color: var(--mk-ink-3); }
+.mk-gradient-text {
+  background: var(--mk-accent-gradient);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+
+/* Buttons */
+.mk-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--mk-2);
+  min-height: 44px; padding: 0 var(--mk-5);
+  border: 0; border-radius: var(--mk-pill);
+  background: var(--mk-button); color: var(--mk-button-ink);
+  font: 700 var(--mk-text)/1 var(--mk-font);
+  cursor: pointer;
+  transition: transform var(--mk-fast) var(--mk-spring);
+}
+.mk-button:active { transform: scale(.96); }
+.mk-button.is-quiet { background: var(--mk-surface-sunken); color: var(--mk-ink); }
+.mk-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: var(--mk-pill);
+  background: var(--mk-surface-strong); border: 1px solid var(--mk-rim);
+  font-size: var(--mk-text-sm); font-weight: 600; white-space: nowrap;
+}
+
+/* Device tile: off, on, pending, stale */
+.mk-tile {
+  position: relative; display: grid; gap: var(--mk-1); align-content: space-between;
+  min-height: 112px; padding: var(--mk-4);
+  border-radius: var(--mk-radius);
+  background: var(--mk-surface); border: 1px solid var(--mk-rim); box-shadow: var(--mk-shadow);
+  -webkit-backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  text-align: start; color: inherit; font: inherit; cursor: pointer;
+  transition: transform var(--mk-fast) var(--mk-spring), background var(--mk-slow) var(--mk-ease);
+}
+.mk-tile:active { transform: scale(.97); }
+.mk-tile .mk-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--mk-surface-sunken); }
+.mk-tile .name { font-weight: 700; }
+.mk-tile .value { font-size: var(--mk-text-sm); color: var(--mk-ink-2); }
+.mk-tile.is-on { background: var(--mk-on); color: var(--mk-on-ink); box-shadow: var(--mk-on-glow); border-color: transparent; }
+.mk-tile.is-on .value { color: inherit; opacity: .75; }
+.mk-tile.is-on .mk-icon { background: rgb(255 255 255 / .45); }
+.mk-tile.is-pending::after {
+  content: ""; position: absolute; top: 14px; right: 14px; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--mk-hairline); border-top-color: var(--mk-accent);
+  animation: mk-spin .8s linear infinite;
+}
+.mk-tile.is-stale { opacity: .55; filter: saturate(.3); cursor: default; }
+@keyframes mk-spin { to { transform: rotate(360deg); } }
+
+/* Scene button */
+.mk-scene {
+  display: grid; gap: 6px; justify-items: start;
+  padding: var(--mk-3) var(--mk-4); min-width: 104px;
+  border-radius: var(--mk-radius); border: 1px solid var(--mk-rim);
+  background: var(--mk-surface); box-shadow: var(--mk-shadow);
+  font-weight: 700; color: inherit; cursor: pointer;
+}
+.mk-scene .emoji { font-size: 22px; }
+
+/* Switch */
+.mk-switch {
+  appearance: none; width: 50px; height: 30px; border-radius: var(--mk-pill);
+  background: var(--mk-surface-sunken); position: relative; cursor: pointer;
+  transition: background var(--mk-slow) var(--mk-ease);
+}
+.mk-switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgb(0 0 0 / .2);
+  transition: transform var(--mk-slow) var(--mk-spring);
+}
+.mk-switch:checked { background: var(--mk-on); }
+.mk-switch:checked::after { transform: translateX(20px); }
+
+/* Level slider (dimmer, shutter) */
+.mk-level {
+  appearance: none; width: 100%; height: 44px; border-radius: 14px; margin: 0;
+  background:
+    linear-gradient(90deg, var(--mk-ink) 0 0) 0 0 / var(--level, 50%) 100% no-repeat,
+    var(--mk-surface-sunken);
+  cursor: pointer; overflow: hidden;
+}
+.mk-level::-webkit-slider-thumb { appearance: none; width: 4px; height: 44px; background: transparent; }
+.mk-level::-moz-range-thumb { width: 4px; height: 44px; border: 0; background: transparent; }
+
+/* The home is not answering: say it, never hide it */
+.mk-stale-banner {
+  display: flex; align-items: center; gap: var(--mk-2);
+  padding: 10px 14px; border-radius: var(--mk-pill);
+  background: color-mix(in srgb, var(--mk-warn) 18%, var(--mk-surface-strong));
+  color: var(--mk-ink); font-size: var(--mk-text-sm); font-weight: 600;
+}
+.mk-stale-banner::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mk-warn); }
+
+/* Bottom navigation */
+.mk-tabbar {
+  display: flex; justify-content: space-around; padding: 8px;
+  border-radius: var(--mk-pill);
+}
+.mk-tabbar a { padding: 8px 14px; border-radius: var(--mk-pill); color: var(--mk-ink-2); text-decoration: none; font-size: var(--mk-text-xs); font-weight: 700; display: grid; justify-items: center; gap: 2px; }
+.mk-tabbar a[aria-current] { background: var(--mk-selected); color: var(--mk-ink); }
+
+:focus-visible { outline: 3px solid var(--mk-accent); outline-offset: 2px; }

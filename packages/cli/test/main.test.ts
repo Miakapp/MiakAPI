@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { EXIT_CODE } from '../src/errors.js';
-import { COMMAND_OPTIONS, HOME_KEY_VARIABLE, guideAssetPath, parseArguments, run } from '../src/main.js';
+import { COMMAND_OPTIONS, HOME_KEY_VARIABLE, designAssetDirectory, guideAssetPath, parseArguments, run } from '../src/main.js';
 import { CLI_VERSION } from '../src/version.js';
 import { digestOf, fakeControlPlane, homeKey } from './support/control-plane.js';
 import {
@@ -88,6 +90,33 @@ describe('offline commands', () => {
     expect(await run(['docs', 'start'], host)).toBe(EXIT_CODE.success);
     expect(host.stdout()).toBe('# Miakapp agent guide\n\nStart here.\n');
     expect(host.stderr()).toBe('');
+  });
+
+  test('docs design prints the design guide and where its files are', async () => {
+    const directory = await designAssetDirectory();
+    const files = new MemoryFiles({ [`${directory}guide.md`]: '# Designing a Miakapp home\n' });
+    const host = testHost({ files, fetch: async () => { throw new Error('network used'); } });
+
+    expect(await run(['docs', 'design'], host)).toBe(EXIT_CODE.success);
+    expect(host.stdout()).toBe(`# Designing a Miakapp home\n\nDesign directory: ${directory}\n`);
+  });
+
+  test('the shipped design guide names every design file and they exist', async () => {
+    const directory = await designAssetDirectory();
+    const guide = await readFile(join(directory, 'guide.md'), 'utf8');
+    for (const name of ['tokens.css', 'components.css', 'fonts.css', 'gallery.html', 'OFL-Manrope.txt']) {
+      expect([name, guide.includes(name)]).toEqual([name, true]);
+      expect((await stat(join(directory, name))).size).toBeGreaterThan(0);
+    }
+  });
+
+  test('the generated design files are up to date with their sources', () => {
+    const result = Bun.spawnSync(['bun', 'design/build.ts', '--check'], {
+      cwd: join(import.meta.dir, '..'), stdout: 'pipe', stderr: 'pipe',
+    });
+    // If this fails, run `bun design/build.ts` in packages/cli and commit the result.
+    expect(result.stderr.toString()).toBe('');
+    expect(result.exitCode).toBe(0);
   });
 
   test('docs rejects an unknown topic instead of printing the wrong contract', async () => {

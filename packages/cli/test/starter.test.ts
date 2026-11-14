@@ -229,6 +229,7 @@ function frame(values: Record<string, unknown>, options: { stale?: boolean; loca
     ready: () => { readyCalls += 1; },
   };
   const document = {
+    documentElement: { dataset: {} as Record<string, string> },
     head: new FakeElement('head'),
     body: new FakeElement('body'),
     createElement: (tag: string) => new FakeElement(tag),
@@ -236,6 +237,7 @@ function frame(values: Record<string, unknown>, options: { stale?: boolean; loca
   return {
     context: { miakapp: host, document },
     body: document.body,
+    theme: () => document.documentElement.dataset['theme'],
     readyCalls: () => readyCalls,
     push(next: Record<string, unknown>, stale = false) {
       current = { values: next, stale, revision: current.revision + 1 };
@@ -298,6 +300,15 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
     expect(fixture.readyCalls()).toBe(1);
   });
 
+  test('it dresses itself with the Miakapp tokens and follows the theme', () => {
+    const fixture = frame({});
+    runInNewContext(bundle, fixture.context);
+    expect(fixture.theme()).toBe('lumiere');
+    expect(fixture.body.className).toBe('mk-app');
+    expect(bundle).toContain('--mk-ink');
+    expect(bundle).toContain('font/woff2');
+  });
+
   test('it shows exactly the shared values, grouped, and marks a stale view', () => {
     const fixture = frame({
       'climate.salon.temperature': 25.3,
@@ -311,7 +322,7 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
     fixture.push({ 'climate.salon.temperature': 24.1 }, true);
     expect(fixture.body.textContent).toContain('Dernières valeurs connues ; en attente de la maison.');
     expect(fixture.body.find('dd').map((node) => node.textContent)).toEqual(['24,1']);
-    expect(fixture.body.find('section')[0]?.className).toBe('stale');
+    expect(fixture.body.find('section')[0]?.className).toBe('mk-glass is-stale');
   });
 
   test('outside a Miakapp frame it fails loudly instead of rendering an empty home', () => {
