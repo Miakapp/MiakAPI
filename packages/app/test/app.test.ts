@@ -102,3 +102,33 @@ describe('@miakapp/app', () => {
     expect(fake.readyCount()).toBe(1);
   });
 });
+
+describe('the Miakapp bar', () => {
+  test('passes the home’s buttons to the shell and hands back taps', () => {
+    const { host } = fakeHost({});
+    const sent: unknown[] = [];
+    let tap: ((id: string | null) => void) | undefined;
+    const home = connect({
+      miakapp: {
+        ...host,
+        bar: {
+          setButtons: (buttons: unknown) => { sent.push(buttons); },
+          onSelect: (listener: (id: string | null) => void) => { tap = listener; return () => undefined; },
+        },
+      },
+    });
+    home.bar.setButtons([{ id: 'rooms', label: 'Pièces', icon: 'grid', active: true }]);
+    expect(sent).toEqual([[{ id: 'rooms', label: 'Pièces', icon: 'grid', active: true }]]);
+    const taps: Array<string | null> = [];
+    home.bar.onSelect((id) => taps.push(id));
+    tap?.('rooms');
+    tap?.(null);
+    expect(taps).toEqual(['rooms', null]);
+  });
+
+  test('does nothing on a shell without the bar', () => {
+    const home = connect({ miakapp: fakeHost({}).host });
+    expect(() => home.bar.setButtons([])).not.toThrow();
+    expect(typeof home.bar.onSelect(() => undefined)).toBe('function');
+  });
+});

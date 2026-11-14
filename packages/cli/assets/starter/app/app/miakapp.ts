@@ -32,6 +32,23 @@ export type CallErrorCode = (typeof CALL_ERROR_CODES)[number];
 
 export type Theme = 'system' | 'light' | 'dark';
 
+/** Icons a home may give its buttons in the Miakapp bar; Miakapp draws them. */
+export const BAR_ICONS = [
+  'grid', 'bolt', 'light', 'thermometer', 'camera', 'lock', 'list', 'chart', 'leaf', 'star',
+] as const;
+export type BarIcon = (typeof BAR_ICONS)[number];
+
+/** One of the home's (at most two) buttons in the Miakapp bar. */
+export interface BarButton {
+  /** `[a-z0-9-]`, at most 32 characters. */
+  readonly id: string;
+  /** At most 16 characters. */
+  readonly label: string;
+  readonly icon: BarIcon;
+  /** The screen shown now; at most one button. */
+  readonly active?: boolean;
+}
+
 export interface HomeState {
   readonly values: Readonly<Record<string, unknown>>;
   readonly revision: number;
@@ -57,6 +74,11 @@ export interface MiakappHost {
   readonly can: { read(path: string): boolean; call(name: string): boolean };
   call(name: string, args?: unknown, options?: { timeoutMs?: number }): Promise<unknown>;
   ready(): void;
+  /** Absent on shells older than the bottom bar. */
+  readonly bar?: {
+    setButtons(buttons: readonly BarButton[]): void;
+    onSelect(listener: (id: string | null) => void): () => void;
+  };
 }
 
 export class MiakappUnavailableError extends Error {
@@ -90,6 +112,15 @@ export interface Home {
   call<T = unknown>(name: string, args?: unknown, options?: { timeoutMs?: number }): Promise<T>;
   /** Lifts the shell's loading screen before the script finishes, if you want. */
   ready(): void;
+  /**
+   * The home's own buttons in the Miakapp bar, between the home tab and « Me ».
+   * Miakapp keeps the last list for the next visit; set it on every start.
+   * `onSelect` gets the tapped button's id, or `null` for the home tab.
+   */
+  readonly bar: {
+    setButtons(buttons: readonly BarButton[]): void;
+    onSelect(listener: (id: string | null) => void): () => void;
+  };
 }
 
 function theme(value: string): Theme {
@@ -145,6 +176,10 @@ export function connect(scope: { readonly miakapp?: unknown } = globalThis as { 
       await host.call(name, args ?? null, options ?? {}) as T
     ),
     ready: () => host.ready(),
+    bar: Object.freeze({
+      setButtons: (buttons: readonly BarButton[]) => host.bar?.setButtons(buttons),
+      onSelect: (listener: (id: string | null) => void) => host.bar?.onSelect(listener) ?? (() => undefined),
+    }),
   });
 }
 
