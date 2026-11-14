@@ -54,7 +54,8 @@ function element(tag: string, text?: string, className?: string): HTMLElement {
 
 const style = document.createElement('style');
 style.textContent = `${THEME_CSS}
-  body { margin: 0; min-height: 100vh; }
+  /* The Miakapp bar floats over the bottom of the frame: keep that strip free. */
+  body { margin: 0; min-height: 100vh; padding-bottom: 96px; box-sizing: border-box; }
   h1 { margin: 0; padding: 28px 20px 4px; }
   main { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 16px; }
   section { padding: 18px; }
