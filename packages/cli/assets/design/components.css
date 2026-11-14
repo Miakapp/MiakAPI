@@ -128,12 +128,4 @@
 }
 .mk-stale-banner::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mk-warn); }
 
-/* Bottom navigation */
-.mk-tabbar {
-  display: flex; justify-content: space-around; padding: 8px;
-  border-radius: var(--mk-pill);
-}
-.mk-tabbar a { padding: 8px 14px; border-radius: var(--mk-pill); color: var(--mk-ink-2); text-decoration: none; font-size: var(--mk-text-xs); font-weight: 700; display: grid; justify-items: center; gap: 2px; }
-.mk-tabbar a[aria-current] { background: var(--mk-selected); color: var(--mk-ink); }
-
 :focus-visible { outline: 3px solid var(--mk-accent); outline-offset: 2px; }
