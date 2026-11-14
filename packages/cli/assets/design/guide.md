@@ -76,8 +76,12 @@ and close it. Lay it out that way.
 9. **Each resident gets their own home screen.** A guest allowed only the
    gate sees one tile, or lands straight on the gate page.
 
-An entry tile may carry one small signal when something needs attention
-(`.mk-entry.has-attention`, e.g. the gate is open): never a full value.
+An entry tile may tell, discreetly, the state of the one thing it opens
+(`.mk-entry .hint`: "Closed" under "Gate"), so residents know without
+opening it. Keep it to a word or two in small, calm text, only for tiles about
+a single device, and add the attention dot (`.mk-entry.has-attention`) when
+that state needs looking at (the gate is open). Never a full value, a number
+list or a reading of several sensors.
 
 ## Principles
 
