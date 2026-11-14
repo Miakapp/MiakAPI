@@ -284,6 +284,19 @@ describe('control-plane browser relay credential provider', () => {
     }
   });
 
+  test('reports a refusal that asking again cannot change as permanent', async () => {
+    for (const status of [400, 403, 404]) {
+      const provider = createControlPlaneBrowserRelayCredentialProvider(options(
+        async () => new Response('{"error":{"code":"home_not_found","retryable":false}}', {
+          status,
+          headers: successHeaders(),
+        }),
+      ));
+      const failure = await provider.getCredential(request()).catch((error: unknown) => error);
+      expect(failure).toMatchObject({ kind: 'authorization', retryable: false, code: status });
+    }
+  });
+
   test('coalesces only identical in-flight requests', async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => { release = resolve; });

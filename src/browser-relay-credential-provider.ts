@@ -13,6 +13,14 @@ import {
   parseResponseJson,
   type JsonValue,
 } from './internal/control-plane-response.js';
+import { BrowserClientError } from './internal/browser-errors.js';
+
+/**
+ * Statuses the control plane uses for answers that will not change by asking
+ * again: a home that does not exist (404), an account that may not open it
+ * (403), a request it cannot accept (400). Retrying them only burns quota.
+ */
+const PERMANENT_REFUSALS = new Set([400, 403, 404]);
 
 const HOME_ID = /^[a-z][a-z0-9-]{1,61}[a-z0-9]$/;
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
@@ -201,6 +209,15 @@ async function exchangeCredential(
       signal: request.signal,
     } as RequestInit), request.signal);
     if (request.signal.aborted) throw abortReason(request.signal);
+    if (PERMANENT_REFUSALS.has(response.status)) {
+      cancelResponseBody(response);
+      throw new BrowserClientError(
+        'authorization',
+        'not_dispatched',
+        `The control plane refused to open this home (HTTP ${response.status})`,
+        { code: response.status, retryable: false },
+      );
+    }
     if (response.status !== 200 || response.redirected || response.type === 'opaqueredirect') {
       cancelResponseBody(response);
       return exchangeFailure();
@@ -215,11 +232,12 @@ async function exchangeCredential(
     const body = await withAbort(boundedResponseBody(response, request.signal), request.signal);
     if (request.signal.aborted) throw abortReason(request.signal);
     return credentialResponse(parseResponseJson(body), firebaseIdToken, appCheckToken, Date.now());
-  } catch {
+  } catch (error) {
     if (request.signal.aborted) {
       cancelResponseBody(response);
       throw abortReason(request.signal);
     }
+    if (error instanceof BrowserClientError && !error.retryable) throw error;
     return exchangeFailure();
   }
 }
