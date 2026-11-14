@@ -31,7 +31,7 @@ import { boundedString, exactRecord, parseJson } from './internal/json.js';
 import { isHomeId } from './internal/names.js';
 
 export const PAIRING_PATH = '/v1/pairing/redeem';
-export const DEFAULT_ISSUER = 'https://control.miakapp.com';
+export const DEFAULT_ISSUER = 'https://api.miakapp.com';
 export const PAIRING_PAGE = 'https://miakapp.com/pair';
 
 const HOME_KEY = /^mhk1_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]{43})$/;

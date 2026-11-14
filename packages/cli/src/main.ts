@@ -182,7 +182,7 @@ pair options
 publish options
   --expected-generation <n>   Generation the pointer holds (default: read live)
   --generation <n>            Generation to publish (default: expected + 1)
-  --release <name>            Override app.release or component.release from ${PROJECT_FILE}
+  --release <name>            Override app.release from ${PROJECT_FILE}
 
 activate / rollback options
   --sha256 <digest>           Finalized artifact digest (required)
@@ -203,9 +203,7 @@ agent-pack options
 init options
   --home <homeId>             Home ID (default: from the selected context)
   --control-plane <https url> Control-plane issuer (default: from the context)
-  --kind <app|component>      Interface kind (default: app)
-  --artifact <path>           Built artifact path (default: dist/app.js for app,
-                              dist/component.js for component)
+  --artifact <path>           Built artifact path (default: dist/app.js)
   --release <name>            Initial release name (default: 0.1.0)
   --starter app               Also write a self-contained app to edit: app/main.ts,
                               the app/miakapp.ts bridge, package.json (build and
@@ -239,7 +237,7 @@ export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   docs: [],
   pair: ['code', 'issuer', 'label', 'name'],
   context: [],
-  init: ['home', 'control-plane', 'artifact', 'release', 'context', 'kind', 'starter'],
+  init: ['home', 'control-plane', 'artifact', 'release', 'context', 'starter'],
   'agent-pack': ['dir'],
   discover: ['flows'],
   check: [],
@@ -625,10 +623,8 @@ function projectTemplate(fields: {
   controlPlane: string;
   artifact: string;
   release: string;
-  kind: 'app' | 'component';
 }): string {
-  if (fields.kind === 'app') {
-    return `schema: ${PROJECT_SCHEMA}
+  return `schema: ${PROJECT_SCHEMA}
 home: ${fields.home}
 control_plane: ${fields.controlPlane}
 
@@ -642,21 +638,6 @@ app:
   requires:
     state_read: []
     call: []
-`;
-  }
-  return `schema: ${PROJECT_SCHEMA}
-home: ${fields.home}
-control_plane: ${fields.controlPlane}
-
-component:
-  artifact: ${fields.artifact}
-  release: ${fields.release}
-  requires:
-    state_read: []
-    event_subscribe: []
-    event_publish: []
-    call: []
-    presentation: []
 `;
 }
 
@@ -672,14 +653,7 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
   if (starter !== undefined && !isStarter(starter)) {
     throw usageError(`--starter must be ${STARTERS.join(' or ')}, received ${starter}`);
   }
-  const kind = invocation.options.get('kind') ?? 'app';
-  if (kind !== 'app' && kind !== 'component') {
-    throw usageError('--kind must be app (whole-house application, default) or component');
-  }
-  if (starter !== undefined && kind !== 'app') {
-    throw usageError('--starter app writes a whole-house application; it cannot be combined with --kind component');
-  }
-  const artifact = invocation.options.get('artifact') ?? (kind === 'app' ? 'dist/app.js' : 'dist/component.js');
+  const artifact = invocation.options.get('artifact') ?? 'dist/app.js';
   if (starter !== undefined) validateStarterArtifact(artifact);
 
   // Every collision is found before anything is written: a refused init leaves
@@ -703,7 +677,6 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
     controlPlane: target.controlPlane,
     artifact,
     release,
-    kind,
   });
   // Parsed before it is written, so init can never emit a file check rejects.
   parseProject(root, source);
@@ -748,7 +721,6 @@ async function runInit(host: CliHost, invocation: Invocation): Promise<CommandRe
     json: {
       project: path,
       schema: PROJECT_SCHEMA,
-      kind,
       home_id: target.home,
       control_plane: target.controlPlane,
       context: target.context ?? null,

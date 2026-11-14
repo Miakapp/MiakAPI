@@ -40,8 +40,7 @@ build a whole-house application with nothing but this package and Bun:
 Prerequisites: Node.js ≥ 22.9 for the CLI, Bun ≥ 1.2.23 for `bun run build`
 (TypeScript, from `bun install`, only for `typecheck`). The starter accepts
 `--artifact` (a plain relative `.js` path), `--release`, `--home`,
-`--control-plane` and `--context`; it cannot be combined with
-`--kind component`.
+`--control-plane` and `--context`.
 
 It never overwrites anything: every target is checked first, and if any one
 exists the command fails with exit 2 and writes nothing. Without `--starter`,
@@ -89,8 +88,7 @@ coordinator:
 ```
 
 `app` declares only `state_read` and `call`; events, media and reserved
-`miakapp.*` calls are unavailable. Use `miakapp init --kind component` for the
-semantic component ABI instead. Choose exactly one of `app` and `component`.
+`miakapp.*` calls are unavailable.
 
 `requires` is the closed RFC 0002 capability object. Lists are de-duplicated and
 sorted before they are bound into an upload capability, so the value the CLI
@@ -237,7 +235,7 @@ miakapp pair --code "$CODE"               # allowed, but lands in shell history
 
 | Option | Default |
 | --- | --- |
-| `--issuer <https url>` | `https://control.miakapp.com` |
+| `--issuer <https url>` | `https://api.miakapp.com` |
 | `--label <label>` | `miakapp-cli@<host name>`, shown in the owner's key list |
 | `--name <context>` | the paired home ID (`-2`, `-3`… if taken) |
 
@@ -341,6 +339,5 @@ talks to is deployed; publishing it to npm is a deliberate, separate step.
 
 Run `miakapp help` or append `--help` / `-h` to any command, including
 `miakapp pair --help`. Help never prompts for a code or executes the command.
-`miakapp init` defaults to a whole-house app at `dist/app.js`; add
-`--starter app` for the buildable starter, or use `--kind component` for a
-semantic component at `dist/component.js`.
+`miakapp init` writes a whole-house app at `dist/app.js`; add
+`--starter app` for the buildable starter.
