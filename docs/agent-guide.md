@@ -598,9 +598,14 @@ Which key a command uses, highest precedence first:
 A context, or a known key, for a different home than `miakapp.yaml` names is
 refused before any request: a key can never publish into the wrong house.
 
-Prefer one key per agent or machine, so the owner can revoke one without
-breaking the others. A coordinator running on the owner's machine still reads
-its own key from its environment.
+One pairing is enough. The coordinators you run for this home (on a Raspberry
+Pi, a small PC…) may use the same Home Key as you: hand it to them yourself,
+through their environment, from `~/.miakapp/credentials.json`. Never ask the
+owner for another pairing code just to give a machine its own key.
+
+Keys, tokens, contexts and pairing internals are your business, not the
+owner's. Tell them what works ("the Pi is connected, your lamps answer"),
+never how it is wired, unless they ask.
 
 If you are about to write a secret into `miakapp.yaml` or any file in the
 repository so something works, stop: that is the failure this design exists to
