@@ -56,8 +56,13 @@ describe('app manifest', () => {
 });
 
 describe('discovery home link', () => {
-  test('accepts exactly <origin>/app?home={home_id}', () => {
+  test('accepts exactly <origin>/app/{home_id}, /h/{home_id} or the legacy ?home=', () => {
     expect(parseHomeUrlTemplate(TEMPLATE)).toBe(TEMPLATE);
+    for (const current of ['https://app.example.test/app/{home_id}', 'https://app.example.test/h/{home_id}']) {
+      expect(parseHomeUrlTemplate(current)).toBe(current);
+    }
+    expect(homeUrl({ homeUrlTemplate: 'https://app.example.test/app/{home_id}' }, 'maison-a'))
+      .toBe('https://app.example.test/app/maison-a');
     expect(homeUrl({ homeUrlTemplate: TEMPLATE }, 'maison-a')).toBe('https://app.example.test/app?home=maison-a');
     expect(homeUrl({}, 'maison-a')).toBeNull();
     for (const bad of [
@@ -67,6 +72,8 @@ describe('discovery home link', () => {
       'https://app.example.test/app?home={home_id}&next=https://evil.example',
       'https://app.example.test/v1/components/{home_id}.js',
       'https://app.example.test/app?home=fixed',
+      'https://app.example.test/x/app/{home_id}',
+      'https://app.example.test/app/{home_id}/extra',
     ]) {
       expect(() => parseHomeUrlTemplate(bad)).toThrow();
     }
