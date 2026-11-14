@@ -348,9 +348,10 @@ await home.call('lighting.set', { on: true });   // rejects with a closed code
 Do not edit the bridge; a newer CLI's starter carries any change to it.
 
 **Make it beautiful from the first build.** Run `miakapp docs design` before you
-draw anything: Miakapp ships design tokens, four themes (Minuit, Lumière, Miel,
-Craie), CSS recipes, an embedded font and example screens. The starter's
-`app/theme.ts` already uses them. They are a starting point you may change
+draw anything, and follow its "Make it beautiful" recipe: Miakapp ships design
+tokens, four themes (Minuit, Lumière, Miel, Craie), CSS recipes, line icons, an
+embedded font and example screens. The starter's `app/theme.ts` already uses
+them. They are a starting point you may change
 entirely; the Miakapp bar at the bottom, outside your frame, is not yours to
 redraw, but `home.bar.setButtons()` can add one or two of your own screens to it.
 

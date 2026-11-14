@@ -5,7 +5,7 @@
  * same variable names, so a screen written once works in all of them.
  *   <html data-theme="lumiere">   day, glass on peach, mint and lilac (default)
  *   <html data-theme="miel">      warm honey, cosy evenings
- *   <html data-theme="minuit">    night blue and gold, wall tablets after dark
+ *   <html data-theme="minuit">    living night blue and gold: the house favourite, dark mode
  *   <html data-theme="craie">     flat and high-contrast, no blur: old tablets, accessibility
  *
  * The frame has no network: no web font is fetched. "Manrope" is used when the
@@ -59,6 +59,14 @@
   --mk-ok: #23a26d;
   --mk-warn: #e58a12;
   --mk-alert: #e5484d;
+
+  /* One hue per place or kind of device: a discreet way to tell tiles apart */
+  --mk-lilac: #7a5cff;
+  --mk-sky: #2f6bff;
+  --mk-peach: #f0612a;
+  --mk-rose: #d6407f;
+  --mk-mint: #179a62;
+  --mk-honey: #c98400;
 }
 
 [data-theme="miel"] {
@@ -88,22 +96,25 @@
 
 [data-theme="minuit"] {
   color-scheme: dark;
-  --mk-bg: #0a1024;
+  /* A living night: blue and violet aurora above, a warm golden glow below */
+  --mk-bg: #070b1c;
   --mk-bg-art:
-    radial-gradient(70% 50% at 50% -10%, rgb(76 107 214 / .55) 0%, transparent 70%),
-    radial-gradient(50% 40% at 100% 100%, rgb(29 43 87 / .9) 0%, transparent 70%),
-    radial-gradient(40% 35% at 0% 80%, rgb(255 166 59 / .10) 0%, transparent 70%);
+    radial-gradient(90% 55% at 10% -5%, rgb(82 112 235 / .75), transparent 62%),
+    radial-gradient(70% 45% at 105% 35%, rgb(122 92 255 / .42), transparent 65%),
+    radial-gradient(80% 50% at 30% 108%, rgb(255 166 59 / .34), transparent 62%),
+    radial-gradient(50% 30% at 95% 95%, rgb(255 110 140 / .22), transparent 70%),
+    linear-gradient(180deg, #121c44, #070b1c 70%);
   --mk-ink: #f4f1e8;
   --mk-ink-2: rgb(244 241 232 / .76);
   --mk-ink-3: rgb(244 241 232 / .58);
   --mk-hairline: rgb(255 255 255 / .14);
-  --mk-surface: linear-gradient(160deg, rgb(255 255 255 / .16), rgb(255 255 255 / .07));
+  --mk-surface: linear-gradient(155deg, rgb(255 255 255 / .17), rgb(255 255 255 / .05) 60%);
   --mk-surface-strong: rgb(255 255 255 / .16);
   --mk-surface-sunken: rgb(255 255 255 / .11);
   --mk-selected: rgb(255 255 255 / .2);
   --mk-rim: rgb(255 255 255 / .22);
-  --mk-saturate: 1.4;
-  --mk-shadow: 0 1px 0 rgb(255 255 255 / .12) inset, 0 20px 50px -20px rgb(0 0 0 / .7);
+  --mk-saturate: 1.6;
+  --mk-shadow: 0 1px 0 rgb(255 255 255 / .22) inset, 0 24px 50px -26px rgb(0 0 0 / .75);
   --mk-accent: #ffdd6e;
   --mk-accent-gradient: linear-gradient(110deg, #fff1b8, #ffdd6e 40%, #ffa63b);
   --mk-on: linear-gradient(150deg, #ffe48a, #ffa63b);
@@ -116,6 +127,12 @@
   --mk-ok: #4fd39a;
   --mk-warn: #ffbf47;
   --mk-alert: #ff6b6f;
+  --mk-lilac: #b9a6ff;
+  --mk-sky: #8fb4ff;
+  --mk-peach: #ffb38a;
+  --mk-rose: #ff9cc8;
+  --mk-mint: #8fe3b8;
+  --mk-honey: #ffd56a;
 }
 
 [data-theme="craie"] {
@@ -144,6 +161,12 @@
   --mk-ok: #12804f;
   --mk-warn: #a85d00;
   --mk-alert: #c4282d;
+  --mk-lilac: #5b3fd9;
+  --mk-sky: #1d4fd6;
+  --mk-peach: #c44a12;
+  --mk-rose: #b42a63;
+  --mk-mint: #0f7a4b;
+  --mk-honey: #946200;
 }
 
 :root {
