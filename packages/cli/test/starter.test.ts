@@ -195,6 +195,13 @@ class FakeElement {
   replaceChildren(...nodes: Array<FakeElement | string>): void {
     this.children = [...nodes];
   }
+  readonly listeners: Array<() => void> = [];
+  addEventListener(type: string, listener: () => void): void {
+    if (type === 'click') this.listeners.push(listener);
+  }
+  click(): void {
+    for (const listener of this.listeners) listener();
+  }
   find(tag: string): FakeElement[] {
     return this.children.flatMap((child) => (typeof child === 'string'
       ? []
@@ -308,15 +315,20 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
     expect(bundle).toContain('font/woff2');
   });
 
-  test('it shows exactly the shared values, grouped, and marks a stale view', () => {
+  test('its home screen opens one page per group, which shows exactly the shared values and marks a stale view', () => {
     const fixture = frame({
       'climate.salon.temperature': 25.3,
       'climate.entree.temperature': null,
       'zone.salon.light.on': true,
     }, { locale: 'fr' });
     runInNewContext(bundle, fixture.context);
-    expect(fixture.body.find('h2').map((node) => node.textContent)).toEqual(['climate', 'zone']);
-    expect(fixture.body.find('dd').map((node) => node.textContent)).toEqual(['—', '25,3', 'Oui']);
+    // The home screen opens pages; it shows no value.
+    const entries = fixture.body.find('button').filter((node) => node.className === 'mk-entry');
+    expect(entries.map((node) => node.textContent)).toEqual(['•climate', '•zone']);
+    expect(fixture.body.find('dd')).toEqual([]);
+
+    entries[0]?.click();
+    expect(fixture.body.find('dd').map((node) => node.textContent)).toEqual(['—', '25,3']);
 
     fixture.push({ 'climate.salon.temperature': 24.1 }, true);
     expect(fixture.body.textContent).toContain('Dernières valeurs connues ; en attente de la maison.');
