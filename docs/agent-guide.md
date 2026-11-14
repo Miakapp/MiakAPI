@@ -482,6 +482,29 @@ Reaches every device where someone opened the home and turned notifications on
 file. If it reports that no device is reached, ask the owner to turn
 notifications on; on iPhone they first add Miakapp to the Home Screen.
 
+### Working without the internet: the local mode
+
+When the home's internet link or the relay is down, the app can still run from
+the coordinator, on the local network:
+
+```ts
+import { serveLocal } from 'miakapi/local';
+
+const local = await serveLocal({
+  home: { id: 'my-home', name: 'Maison' },
+  artifact: 'dist/app.js',            // the same bundle you publish
+  state: { 'lamp.on': false },        // mirror what you give state.set
+  functions: { 'lamp.toggle': toggle }, // the same handlers
+});
+console.log(local.urls);              // http://192.168.1.20:8787/ ...
+local.set({ 'lamp.on': true });       // push changes to open pages
+```
+
+The page installs the same `window.miakapp` as the Miakapp shell, so the app
+needs no change. It is plain HTTP on the LAN: anyone on the network can use it
+unless you pass `token` (then open `/?key=<token>`). Give the owner the address
+to bookmark for when the cloud is unreachable.
+
 ## 9. Access: pairing and contexts
 
 You never sign in as the owner and never ask for a password, a Google login or
