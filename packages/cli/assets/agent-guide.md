@@ -465,6 +465,17 @@ Three differences are worth knowing before you call anything:
 `packages/cli/README.md` lists the tools. The exit codes above are the
 `exit_code` field in every result, so branch on the same table either way.
 
+### Notifying the people of the home
+
+```sh
+miakapp notify --title "Front door" --body "Open for 10 minutes"
+```
+
+Reaches every device where someone opened the home and turned notifications on
+(Settings → Notifications). It needs only the paired context, not a project
+file. If it reports that no device is reached, ask the owner to turn
+notifications on; on iPhone they first add Miakapp to the Home Screen.
+
 ## 9. Access: pairing and contexts
 
 You never sign in as the owner and never ask for a password, a Google login or
