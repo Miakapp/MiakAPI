@@ -3,7 +3,6 @@ import { projectError } from './errors.js';
 import { canonicalHttpsUrl } from './internal/http.js';
 import {
   APP_ABI,
-  COMPONENT_ABI,
   isHomeId,
   isRelease,
   type ReleaseAbi,
@@ -98,16 +97,18 @@ export function parseProject(root: string, source: string): Project {
   const issuer = canonicalHttpsUrl(document.control_plane, 'control_plane');
   if (issuer.endsWith('/')) throw projectError('control_plane must not have a trailing slash');
 
-  const hasApp = document.app !== undefined && document.app !== null;
-  const hasComponent = document.component !== undefined && document.component !== null;
-  if (hasApp === hasComponent) {
+  if (document.component !== undefined && document.component !== null) {
     throw projectError(
-      `${PROJECT_FILE} must declare exactly one of app (a whole-house application) or component`,
-      'Use app: for a resident interface you draw yourself; component: for a semantic tree.',
+      `${PROJECT_FILE} declares component:, which Miakapp no longer displays`,
+      'Rename the section to app: and build a whole-house application (miakapp docs start).',
     );
   }
-  const section = hasApp ? 'app' : 'component';
-  const abi: ReleaseAbi = hasApp ? APP_ABI : COMPONENT_ABI;
+  if (document.app === undefined || document.app === null) {
+    throw projectError(`${PROJECT_FILE} must declare app: (a whole-house application)`);
+  }
+  const hasApp = true;
+  const section = 'app';
+  const abi: ReleaseAbi = APP_ABI;
   const component = mapping(document[section], section);
   exactKeys(component, ['artifact', 'release', 'requires'], section);
   if (!isRelease(component.release)) {

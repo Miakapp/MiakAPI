@@ -57,8 +57,8 @@ describe('offline commands', () => {
           ...host,
           readSecret: async () => { secretReads += 1; throw new Error('secret prompt used'); },
         })).toBe(EXIT_CODE.success);
-        expect(host.json()['usage']).toContain('--kind <app|component>');
-        expect(host.json()['usage']).toContain('default: dist/app.js for app');
+        expect(host.json()['usage']).not.toContain('--kind');
+        expect(host.json()['usage']).toContain('default: dist/app.js)');
         expect(host.stderr()).toBe('');
         expect(secretReads).toBe(0);
         expect(files.entries.size).toBe(0);
@@ -168,7 +168,7 @@ describe('offline commands', () => {
 
   test('a missing artifact is an artifact failure', async () => {
     const files = standardProject();
-    files.entries.delete(`${PROJECT_ROOT}/dist/component.js`);
+    files.entries.delete(`${PROJECT_ROOT}/dist/app.js`);
     const host = testHost({ files });
     expect(await run(['check'], host)).toBe(EXIT_CODE.artifact);
   });
@@ -203,21 +203,6 @@ describe('offline commands', () => {
     const second = testHost({ files });
     expect(await run(['check', '--json'], second)).toBe(EXIT_CODE.success);
     expect(JSON.parse(second.stdout()).abi).toBe('miakapp.app/1');
-  });
-
-  test('init --kind component keeps the semantic component shape', async () => {
-    const files = new MemoryFiles();
-    const host = testHost({ files });
-    expect(await run([
-      'init',
-      '--kind', 'component',
-      '--home', HOME_ID,
-      '--control-plane', 'https://control.example.test/api',
-    ], host)).toBe(EXIT_CODE.success);
-    files.entries.set(`${PROJECT_ROOT}/dist/component.js`, new TextEncoder().encode(ARTIFACT_SOURCE));
-    const second = testHost({ files });
-    expect(await run(['check', '--json'], second)).toBe(EXIT_CODE.success);
-    expect(JSON.parse(second.stdout()).abi).toBe('miakapp.component/1');
   });
 
   test('init never overwrites an existing project file', async () => {

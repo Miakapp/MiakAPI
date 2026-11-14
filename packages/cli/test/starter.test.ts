@@ -56,7 +56,7 @@ describe('init --starter app', () => {
     const { code, host } = await initStarter();
     expect(code).toBe(EXIT_CODE.success);
     expect(await listing(directory)).toEqual([...STARTER_FILES, 'miakapp.yaml'].sort());
-    expect(host.json()).toMatchObject({ kind: 'app', starter: 'app', artifact: 'dist/app.js', release: '0.1.0' });
+    expect(host.json()).toMatchObject({ starter: 'app', artifact: 'dist/app.js', release: '0.1.0' });
 
     const manifest = await readFile(join(directory, 'miakapp.yaml'), 'utf8');
     expect(manifest).toContain('home: demo-home\ncontrol_plane: https://control.example.test\n');
@@ -140,7 +140,6 @@ describe('init --starter app', () => {
 
   for (const [label, argv] of [
     ['an unknown starter', ['--starter', 'component']],
-    ['a component kind', ['--starter', 'app', '--kind', 'component']],
     ['an artifact needing shell quoting', ['--starter', 'app', '--artifact', 'dist/my app.js']],
     ['an artifact outside the project', ['--starter', 'app', '--artifact', '../app.js']],
     ['an artifact that is a starter file', ['--starter', 'app', '--artifact', 'app/main.ts']],
