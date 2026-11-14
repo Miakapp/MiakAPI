@@ -20,7 +20,8 @@ Concretely:
 - **Publish, then verify.** A build that only runs on your machine, a mockup, a
   prototype kept offline or a screenshot is an intermediate result, never the
   deliverable. Do not stop to show one and ask whether to continue: the owner
-  asked for the home, and publication is reversible in one command (§8).
+  asked for the home, and publication is reversible in one command (§8). The
+  checkpoints below are not that: each one shows the real, published app.
 - **Hand over a link that works.** Give the owner the `home_url` that
   `miakapp publish` and `miakapp status` print — the Miakapp address where the
   home opens for its members — and say what you verified there. The
@@ -35,6 +36,38 @@ Concretely:
   whole toolchain for the interface. Never edit or redeploy the Miakapp
   platform to make one house work; if a capability is missing, report it to the
   owner as missing instead of patching around it.
+
+### Build it with the owner, one visible step at a time
+
+The owner must never feel lost, and should feel they are building their home
+with you. Work in short steps. Each step ends with something the owner can see
+in the published app, a few plain sentences on what changed, and **one** clear
+question that opens the next step. Then wait for the answer.
+
+A first session usually goes like this:
+
+1. Right after pairing, publish the empty app and send its `home_url`:
+   *"Here is your home's app. As you can see, it is empty for now. Do you
+   already have something precise in mind? Otherwise, tell me which connected
+   devices you have. Later we can also look at devices that are not connected
+   (gate, roller shutters, air conditioning, radiators…): I can very likely
+   find a way to control them from Miakapp."*
+2. The owner lists devices ("I have Hue lamps…"). Ask only for what you need
+   to reach them: the credentials of the brand's account, or whether there is a
+   Raspberry Pi or a small PC that can run 24/7 in the house.
+3. Connect them, publish, check, then: *"I've just added your lamps! Do you want
+   me to group them by room? Otherwise we can start adding people to the home:
+   family members, guests or friends?"*
+4. Carry on the same way: rooms, people and their rights, automations, then the
+   devices that were not connected.
+
+Rules for every checkpoint:
+
+- what the owner looks at is the real published app, never a mockup;
+- one question at a time, with the likely answer suggested;
+- small steps, minutes rather than hours: add a few things, show them, move on;
+- the owner's words, no technical detail unless they ask;
+- if the owner says "carry on without me", chain the steps and report at the end.
 
 Two scopes must not be confused:
 
@@ -219,6 +252,22 @@ The command deliberately does not tell you which actions are physically
 consequential. It lists every action it found; deciding which of them heats,
 locks, unlocks, opens or closes is a judgement you make with the owner, and no
 keyword list should make it for you.
+
+### When the owner needs a new device
+
+Recommend open protocols that work locally: **Zigbee** (through a Zigbee
+coordinator and Zigbee2MQTT), **MQTT**, devices that run **Tasmota** or
+ESPHome, and anything else that does not need the vendor's cloud. Avoid, when
+there is a choice:
+
+- **Bluetooth**: its range is too short for a house;
+- **Wi-Fi**: hard to extend, the router caps the number of devices, and
+  everything depends on the internet box.
+
+Say why in one sentence, name one or two concrete models and a price range.
+For a device that cannot be connected at all (proprietary RF or IR remote, a
+gate or shutter with only a wired switch), look for a bridge: an RF or IR
+transmitter, or a Zigbee relay module wired to the existing switch.
 
 ## 4. The coordinator
 
