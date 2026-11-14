@@ -32,6 +32,7 @@ build a whole-house application with nothing but this package and Bun:
 | --- | --- |
 | `app/main.ts` | the interface to edit: shows what the home shares, grouped, with stale and empty states |
 | `app/miakapp.ts` | the bridge to `window.miakapp` — byte for byte the `@miakapp/app` SDK source, which is not on npm yet |
+| `app/theme.ts` | Miakapp design tokens, themes (Minuit in dark mode, Lumière in light) and recipes, with Manrope embedded |
 | `package.json` | `build` (Bun IIFE to the manifest's artifact), `typecheck`, `check`; pins this CLI and TypeScript |
 | `tsconfig.json` | strict TypeScript for `app/` |
 | `app/README.md` | the loop, the prerequisites and what to do before publishing |
@@ -50,6 +51,20 @@ The starter invents no value and offers no control. `app.requires` starts
 empty, so a fresh build shows only an empty state: inventory the house, declare
 the paths and calls, give them resident-facing names and a real layout, then
 publish.
+
+## Design
+
+`miakapp docs design` prints a short design guide and the directory of the
+files it describes: `tokens.css` (four themes: Minuit, Lumière, Miel, Craie),
+`components.css` (glass, device tile, scene, switch, level slider, stale
+banner), `fonts.css` (Manrope as a `data:` URL, since the frame has no network)
+and `gallery.html`, example screens to open in a browser. They are a starting
+point, not a framework: copy, change or ignore them.
+
+Maintainers: the generated files (`fonts.css`, `gallery.html`, the starter's
+`app/theme.ts`) come from `packages/cli/design/`; run `bun design/build.ts` in
+`packages/cli` after editing `tokens.css`, `components.css` or the gallery
+template. A test fails when they drift.
 
 ## The project file
 

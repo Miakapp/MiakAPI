@@ -153,11 +153,12 @@ export const TOOLS: readonly ToolDefinition[] = [
     description:
       'Read the complete agent guide bundled with this exact CLI release. Start here before '
       + 'creating or changing a home: it defines the repository shape, authorization boundary, '
-      + 'component contract, verification loop, publication and rollback rules. Offline and read-only.',
+      + 'component contract, verification loop, publication and rollback rules. Topic "design" gives '
+      + 'the design tokens, themes and example screens. Offline and read-only.',
     args: [],
     positional: {
       name: 'topic',
-      description: 'Guide topic. Use "start".',
+      description: 'Guide topic: "start" for the agent guide, "design" for tokens, themes and example screens.',
     },
     readOnly: true,
     guarded: false,

@@ -11,6 +11,7 @@ package.json       build, typecheck and check scripts
 tsconfig.json      strict TypeScript for app/
 app/main.ts        the interface — edit this
 app/miakapp.ts     the bridge to the home (window.miakapp), copied from this CLI release
+app/theme.ts       Miakapp design tokens, themes and recipes (`miakapp docs design`): yours to change
 app/README.md      this file
 ```
 

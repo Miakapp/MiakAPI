@@ -16,8 +16,13 @@
  * You own the whole document: any DOM, CSS, router or library a bundler can
  * inline. `bun run build` emits one classic-script IIFE. The only way to the
  * home is `./miakapp.ts`, the bridge copied from this CLI release.
+ *
+ * `./theme.ts` is the Miakapp design starting point (`miakapp docs design`):
+ * tokens, four themes and component recipes. Minuit follows the resident's
+ * dark mode, Lumière the light one. Keep it, restyle it or drop it.
  */
-import { connect, type HomeState } from './miakapp.js';
+import { connect, type HomeState, type Theme } from './miakapp.js';
+import { THEME_CSS } from './theme.js';
 
 /** Resident-facing names, from your inventory. A path without one shows as the path. */
 const LABELS: Readonly<Record<string, string>> = {};
@@ -40,33 +45,46 @@ const TEXT = french
     missing: '—',
   };
 
-const style = document.createElement('style');
-style.textContent = `
-  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-  body { margin: 0; background: Canvas; color: CanvasText; }
-  h1 { margin: 0; padding: 20px 20px 8px; font-size: 1.5rem; }
-  main { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 16px; }
-  section { padding: 18px; border-radius: 18px; background: color-mix(in srgb, CanvasText 6%, Canvas); }
-  h2 { margin: 0 0 8px; font-size: 1rem; text-transform: capitalize; }
-  dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
-  dd { margin: 0; font-weight: 600; text-align: end; }
-  .notice { margin: 0 16px; padding: 10px 14px; border-radius: 12px; background: #ffe2a8; color: #4a3000; }
-  .empty { padding: 0 20px; opacity: .7; }
-  .stale dd { opacity: .55; }
-`;
-document.head.append(style);
-
-const title = document.createElement('h1');
-const notice = document.createElement('p');
-const main = document.createElement('main');
-document.body.append(title, notice, main);
-
 function element(tag: string, text?: string, className?: string): HTMLElement {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
   if (className !== undefined) node.className = className;
   return node;
 }
+
+const style = document.createElement('style');
+style.textContent = `${THEME_CSS}
+  body { margin: 0; min-height: 100vh; }
+  h1 { margin: 0; padding: 28px 20px 4px; }
+  main { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 16px; }
+  section { padding: 18px; }
+  h2 { margin: 0 0 10px; font-size: var(--mk-text-lg); font-weight: 800; text-transform: capitalize; }
+  dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; }
+  dt { color: var(--mk-ink-2); }
+  dd { margin: 0; font-weight: 700; text-align: end; }
+  .mk-stale-banner { margin: 8px 16px 0; }
+  .empty { padding: 0 20px; color: var(--mk-ink-2); }
+  .is-stale dd { opacity: .55; }
+`;
+document.head.append(style);
+
+/** The resident's light or dark preference picks the theme; "system" asks the browser. */
+function applyTheme(preference: Theme): void {
+  const dark = preference === 'dark' || (preference === 'system'
+    && typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset['theme'] = dark ? 'minuit' : 'lumiere';
+}
+applyTheme(home.theme());
+home.onThemeChange(applyTheme);
+if (typeof matchMedia === 'function') {
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(home.theme()));
+}
+document.body.className = 'mk-app';
+
+const title = element('h1', undefined, 'mk-display');
+const notice = document.createElement('p');
+const main = document.createElement('main');
+document.body.append(title, notice, main);
 
 function format(value: unknown): string {
   if (value === undefined || value === null) return TEXT.missing;
@@ -78,7 +96,7 @@ function format(value: unknown): string {
 
 function render(state: HomeState): void {
   title.textContent = home.name;
-  notice.className = state.stale ? 'notice' : '';
+  notice.className = state.stale ? 'mk-stale-banner' : '';
   notice.textContent = state.stale ? TEXT.stale : '';
 
   const paths = home.paths();
@@ -92,7 +110,7 @@ function render(state: HomeState): void {
     groups.set(group, [...groups.get(group) ?? [], path]);
   }
   main.replaceChildren(...[...groups].map(([group, members]) => {
-    const section = element('section', undefined, state.stale ? 'stale' : undefined);
+    const section = element('section', undefined, state.stale ? 'mk-glass is-stale' : 'mk-glass');
     const list = element('dl');
     for (const path of members) {
       list.append(element('dt', LABELS[path] ?? path), element('dd', format(state.values[path])));

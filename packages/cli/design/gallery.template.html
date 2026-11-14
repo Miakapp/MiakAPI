@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en" data-theme="lumiere">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miakapp — design inspirations</title>
+<style>
+/*__FONT__*/
+/*__TOKENS__*/
+/*__COMPONENTS__*/
+
+/* ---- Gallery chrome (not part of the design system) ---- */
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body.mk-app { padding: 28px 20px 80px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+header.top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 28px; }
+header.top img { width: 52px; height: 52px; }
+header.top h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
+header.top p { margin: 4px 0 0; color: var(--mk-ink-2); font-size: 14px; }
+.switch-themes { margin-left: auto; display: flex; gap: 4px; padding: 5px; border-radius: 999px; }
+.switch-themes button { border: 0; background: transparent; padding: 9px 14px; border-radius: 999px; font: 700 13px var(--mk-font); color: var(--mk-ink-2); cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.switch-themes button i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.switch-themes button[aria-pressed="true"] { background: var(--mk-button); color: var(--mk-button-ink); }
+h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--mk-ink-3); margin: 44px 0 14px; font-weight: 800; }
+.offer { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.offer .mk-glass { padding: 18px; }
+.offer b { display: block; font-size: 16px; margin-bottom: 6px; }
+.offer code { font-size: 12px; background: var(--mk-surface-sunken); padding: 2px 6px; border-radius: 6px; }
+.offer p { margin: 0; color: var(--mk-ink-2); font-size: 14px; line-height: 1.45; }
+
+/* Stage: the screens take the selected theme */
+.stage { border-radius: 36px; padding: 34px 24px; display: flex; flex-wrap: wrap; gap: 30px; justify-content: center; align-items: flex-start; color: var(--mk-ink); background: var(--mk-bg-art), var(--mk-bg); font-family: var(--mk-font); font-variant-numeric: tabular-nums; transition: background .4s; }
+.phone { width: 340px; height: 720px; border-radius: 46px; padding: 10px; background: #0b0b0f; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .45); flex: none; }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 37px; overflow: hidden; background: var(--mk-bg-art), var(--mk-bg); color: var(--mk-ink); }
+.screen .scroll { position: absolute; inset: 0; overflow: auto; padding: 46px 16px 100px; scrollbar-width: none; }
+.screen .status { position: absolute; top: 0; left: 0; right: 0; height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 6px 26px 0; font-size: 13px; font-weight: 700; z-index: 3; }
+.screen .tabdock { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 3; }
+.caption { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--mk-ink-2); }
+.tablet { width: 860px; max-width: 100%; aspect-ratio: 16 / 9.4; border-radius: 34px; padding: 12px; background: #0b0b0f; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .45); }
+.tablet .screen { border-radius: 24px; }
+
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.row { display: flex; gap: 8px; align-items: center; }
+.between { justify-content: space-between; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hscroll { display: flex; gap: 10px; overflow-x: auto; margin: 0 -16px; padding: 4px 16px 10px; scrollbar-width: none; }
+.sechead { display: flex; justify-content: space-between; align-items: baseline; margin: 22px 2px 10px; }
+.sechead h3 { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+.sechead a { font-size: 13px; font-weight: 700; color: var(--mk-ink-2); text-decoration: none; }
+.room { padding: 14px; display: grid; gap: 10px; min-height: 120px; align-content: space-between; }
+.room .t { font-weight: 800; font-size: 16px; }
+.room .dots { display: flex; gap: 4px; }
+.room .dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--mk-surface-sunken); }
+.room .dots span.on { background: var(--mk-on); box-shadow: var(--mk-on-glow); }
+.iconbtn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
+.dial { padding: 16px; display: grid; justify-items: center; gap: 6px; }
+.dial svg { width: 230px; height: 190px; }
+.dial .val { margin-top: -128px; margin-bottom: 58px; text-align: center; }
+.dial .val .mk-display { font-size: 36px; }
+.bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; padding: 6px 2px 0; }
+.bars span { flex: 1; border-radius: 4px 4px 2px 2px; background: var(--mk-surface-sunken); }
+.bars span.now { background: var(--mk-accent-gradient); }
+.bars span.peak { background: color-mix(in srgb, var(--mk-heat) 55%, transparent); }
+.consumer { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--mk-hairline); font-size: 14px; }
+.consumer:first-child { border-top: 0; }
+.consumer .meter { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--mk-surface-sunken); overflow: hidden; }
+.consumer .meter i { display: block; height: 100%; border-radius: 3px; background: var(--mk-ink); opacity: .85; }
+.ir { padding: 14px; }
+.ir .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.ir .pad button { height: 44px; border: 0; border-radius: 14px; background: var(--mk-surface-sunken); color: var(--mk-ink); font: 700 14px var(--mk-font); cursor: pointer; display: grid; place-items: center; }
+.wall { position: absolute; inset: 0; display: grid; grid-template-columns: 1.05fr 1fr 1fr; gap: 16px; padding: 26px; }
+.wall .col { display: grid; gap: 14px; align-content: start; }
+.cam { height: 150px; border-radius: 20px; position: relative; overflow: hidden; background: linear-gradient(160deg, #2a3350, #6d7795 60%, #b8a88a); }
+.cam::after { content: ""; position: absolute; inset: 0; background: radial-gradient(40% 50% at 60% 70%, rgb(255 220 150 / .45), transparent 70%); }
+.cam .live { position: absolute; top: 10px; left: 10px; z-index: 1; font-size: 11px; font-weight: 800; color: #fff; background: rgb(0 0 0 / .35); padding: 4px 8px; border-radius: 99px; display: flex; gap: 6px; align-items: center; }
+.cam .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #ff5a5f; }
+.themes { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.theme-card { border-radius: 28px; padding: 18px; min-height: 230px; display: grid; gap: 12px; align-content: space-between; color: var(--mk-ink); background: var(--mk-bg-art), var(--mk-bg); font-family: var(--mk-font); border: 1px solid var(--mk-hairline); cursor: pointer; }
+.theme-card .nm { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.theme-card .sw { display: flex; gap: 6px; }
+.theme-card .sw span { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--mk-hairline); }
+.states { color: var(--mk-ink); font-family: var(--mk-font); display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; padding: 22px; border-radius: 30px; background: var(--mk-bg-art), var(--mk-bg); }
+.states .lbl { font-size: 12px; font-weight: 700; color: var(--mk-ink-3); margin-top: 6px; text-align: center; }
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.rules .mk-glass { padding: 16px 18px; font-size: 14px; line-height: 1.45; color: var(--mk-ink-2); }
+.rules b { color: var(--mk-ink); display: block; margin-bottom: 4px; font-size: 15px; }
+.miakapp-bar { align-items: center; gap: 2px; }
+.miakapp-bar .agent-slot { display: flex; gap: 2px; padding: 0 4px; border-left: 1px dashed var(--mk-hairline); border-right: 1px dashed var(--mk-hairline); }
+.miakapp-bar .avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 800; background: var(--mk-on); color: var(--mk-on-ink); }
+.fav { font-size: 12px; font-weight: 800; vertical-align: middle; padding: 3px 8px; border-radius: 99px; background: var(--mk-on); color: var(--mk-on-ink); letter-spacing: 0; }
+.barnote { margin: 18px auto 0; max-width: 760px; text-align: center; font-size: 13px; color: var(--mk-ink-2); line-height: 1.5; }
+@media (max-width: 560px) {
+  body.mk-app { padding: 18px 12px 60px; }
+  .switch-themes { margin-left: 0; width: 100%; overflow-x: auto; }
+  .stage { padding: 18px 8px; border-radius: 24px; }
+  .phone { width: 100%; max-width: 340px; }
+  .tablet { aspect-ratio: auto; height: 900px; }
+  .wall { grid-template-columns: 1fr; overflow: auto; }
+}
+</style>
+</head>
+<body class="mk-app">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="bulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6M10 22h4"/></symbol>
+  <symbol id="thermo" viewBox="0 0 24 24"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></symbol>
+  <symbol id="blind" viewBox="0 0 24 24"><path d="M3 3h18M20 7H8M20 11H8M10 19h10M8 15h12M4 3v14"/><circle cx="4" cy="19" r="2"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24"><path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+  <symbol id="tv" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="m17 2-5 5-5-5"/></symbol>
+  <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+  <symbol id="wind" viewBox="0 0 24 24"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2"/></symbol>
+  <symbol id="back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+  <symbol id="cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9Z"/></symbol>
+  <symbol id="door" viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.6v16.8a.6.6 0 0 1-.8.6L5 20V5.6a1 1 0 0 1 .8-1L12.2 3a.7.7 0 0 1 .8.6Z"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <img src="__LOGO__" alt="Miakapp">
+    <div>
+      <h1>Miakapp <span class="mk-gradient-text">inspirations</span></h1>
+      <p>Example screens built only with tokens.css and components.css. Borrow, remix, or ignore.</p>
+    </div>
+    <div class="switch-themes mk-glass" role="group" aria-label="Theme">
+      <button data-t="minuit" aria-pressed="true"><i style="background:linear-gradient(135deg,#1d2b57,#0a1024);box-shadow:inset 0 0 0 3px #ffdd6e"></i>Minuit</button>
+      <button data-t="lumiere"><i style="background:linear-gradient(135deg,#ffd2b0,#e3dcff,#d6f5e3)"></i>Lumière</button>
+      <button data-t="miel"><i style="background:linear-gradient(135deg,#ffd45c,#ff7448)"></i>Miel</button>
+      <button data-t="craie"><i style="background:#eef0f3;border:1px solid #c5ccd5"></i>Craie</button>
+    </div>
+  </header>
+
+  <h2 class="sec">Example screens · tap the tiles</h2>
+  <div class="stage" id="stage" data-theme="minuit">
+
+    <!-- 1. Accueil -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
+        <div class="scroll">
+          <div class="row between" style="margin:6px 2px 2px">
+            <span class="mk-meta" style="font-weight:700">Friday, November 14</span>
+            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#cloud"/></svg>54° · Drizzle</span>
+          </div>
+          <div class="mk-display" style="margin:10px 2px 4px">Good evening,<br><span class="mk-gradient-text">the house</span> is on watch.</div>
+          <div class="hscroll" style="margin-top:12px">
+            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#bulb"/></svg>3 lights on</span>
+            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#thermo"/></svg>71 °F inside</span>
+            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#lock"/></svg>All locked</span>
+          </div>
+          <div class="sechead"><h3>Scenes</h3><a href="#">Edit</a></div>
+          <div class="hscroll">
+            <button class="mk-scene"><span class="emoji">🛋️</span>Evening</button>
+            <button class="mk-scene"><span class="emoji">🎬</span>Movie</button>
+            <button class="mk-scene"><span class="emoji">🌙</span>Bedtime</button>
+            <button class="mk-scene"><span class="emoji">👋</span>Leaving</button>
+          </div>
+          <div class="sechead"><h3>Rooms</h3><a href="#">See all</a></div>
+          <div class="grid2">
+            <div class="mk-glass room"><div class="row between"><span class="t">Living room</span><svg class="i"><use href="#tv"/></svg></div><div><div class="mk-label">71° · 2 lights on</div><div class="dots" style="margin-top:8px"><span class="on"></span><span class="on"></span><span></span><span></span></div></div></div>
+            <div class="mk-glass room"><div class="row between"><span class="t">Kitchen</span><svg class="i"><use href="#plug"/></svg></div><div><div class="mk-label">69° · 1 light on</div><div class="dots" style="margin-top:8px"><span class="on"></span><span></span><span></span></div></div></div>
+            <div class="mk-glass room"><div class="row between"><span class="t">Bedroom</span><svg class="i"><use href="#moon"/></svg></div><div><div class="mk-label">66° · blinds closed</div><div class="dots" style="margin-top:8px"><span></span><span></span></div></div></div>
+            <div class="mk-glass room"><div class="row between"><span class="t">Office</span><svg class="i"><use href="#bolt"/></svg></div><div><div class="mk-label">68° · all off</div><div class="dots" style="margin-top:8px"><span></span><span></span><span></span></div></div></div>
+          </div>
+        </div>
+        <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
+      </div></div>
+      <div class="caption">Home</div>
+    </div>
+
+    <!-- 2. Pièce -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
+        <div class="scroll">
+          <div class="row between" style="margin:4px 0 8px">
+            <span class="iconbtn mk-glass"><svg class="i"><use href="#back"/></svg></span>
+            <span class="mk-chip">71 °F · 48 %</span>
+          </div>
+          <div class="mk-display" style="margin:8px 2px 14px">Living room</div>
+          <div class="grid2">
+            <button class="mk-tile is-on" data-toggle><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Ceiling</div><div class="value" data-on="80 %" data-off="Off">80 %</div></span></button>
+            <button class="mk-tile is-on" data-toggle><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Arc lamp</div><div class="value" data-on="On" data-off="Off">On</div></span></button>
+            <button class="mk-tile" data-toggle><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">LED strip</div><div class="value" data-on="On" data-off="Off">Off</div></span></button>
+            <button class="mk-tile" data-toggle><span class="mk-icon"><svg class="i"><use href="#wind"/></svg></span><span><div class="name">Fan</div><div class="value" data-on="Speed 2" data-off="Off">Off</div></span></button>
+          </div>
+          <div class="mk-glass dial" style="margin-top:12px">
+            <svg viewBox="0 0 200 170">
+              <defs><linearGradient id="dg" x1="0" x2="1"><stop offset="0" stop-color="var(--mk-cool)"/><stop offset="1" stop-color="var(--mk-heat)"/></linearGradient></defs>
+              <circle cx="100" cy="100" r="78" fill="none" stroke="var(--mk-surface-sunken)" stroke-width="14" stroke-linecap="round" stroke-dasharray="367.6 490" transform="rotate(135 100 100)"/>
+              <circle cx="100" cy="100" r="78" fill="none" stroke="url(#dg)" stroke-width="14" stroke-linecap="round" stroke-dasharray="230 490" transform="rotate(135 100 100)"/>
+            </svg>
+            <div class="val"><div class="mk-display">71°</div><div class="mk-label">Heating to 72°</div></div>
+            <div class="row"><button class="mk-button is-quiet" style="width:56px">−</button><button class="mk-button" style="width:56px">+</button></div>
+          </div>
+          <div class="mk-glass" style="margin-top:12px;padding:14px">
+            <div class="row between" style="margin-bottom:10px"><span class="row" style="font-weight:800"><svg class="i"><use href="#blind"/></svg>Blinds</span><span class="mk-label">60 % open</span></div>
+            <input class="mk-level" type="range" value="60" style="--level:60%" aria-label="Blinds">
+          </div>
+          <div class="mk-glass ir" style="margin-top:12px">
+            <div class="row between"><span class="row" style="font-weight:800"><svg class="i"><use href="#tv"/></svg>TV</span><span class="mk-meta">via infrared</span></div>
+            <div class="pad"><button>⏻</button><button>🔇</button><button>Netflix</button><button>Vol −</button><button>HDMI</button><button>Vol +</button></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="caption">A room</div>
+    </div>
+
+    <!-- 3. Énergie -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
+        <div class="scroll">
+          <div class="mk-label" style="margin:10px 2px 0">Today</div>
+          <div class="mk-hero" style="margin:4px 0 2px"><span class="mk-gradient-text">8.4</span><span style="font-size:24px;letter-spacing:0"> kWh</span></div>
+          <div class="mk-label" style="margin:0 2px 14px">≈ $1.72 · 12 % less than a usual Friday</div>
+          <div class="mk-glass" style="padding:14px">
+            <div class="row between"><b>Hour by hour</b><span class="mk-meta">peak at 7 pm</span></div>
+            <div class="bars" id="bars"></div>
+            <div class="row between mk-meta" style="margin-top:6px"><span>12 am</span><span>6 am</span><span>12 pm</span><span>6 pm</span><span>now</span></div>
+          </div>
+          <div class="sechead"><h3>Top consumers</h3></div>
+          <div class="mk-glass" style="padding:6px 14px">
+            <div class="consumer"><span>Water heater</span><b>3.1 kWh</b><div class="meter"><i style="width:100%"></i></div></div>
+            <div class="consumer"><span>Oven</span><b>1.8 kWh</b><div class="meter"><i style="width:58%"></i></div></div>
+            <div class="consumer"><span>Heaters</span><b>1.6 kWh</b><div class="meter"><i style="width:52%"></i></div></div>
+            <div class="consumer"><span>Everything else</span><b>1.9 kWh</b><div class="meter"><i style="width:61%"></i></div></div>
+          </div>
+          <div class="mk-stale-banner" style="margin-top:14px">Meter silent for 6 min · last known values</div>
+        </div>
+        <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a aria-current="page" href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
+      </div></div>
+      <div class="caption">Energy</div>
+    </div>
+
+    <!-- 4. Tablette murale -->
+    <div style="width:100%;display:grid;justify-items:center">
+      <div class="tablet"><div class="screen">
+        <div class="wall">
+          <div class="col">
+            <div class="mk-meta" style="font-weight:700;font-size:14px">Friday, November 14</div>
+            <div class="mk-hero" style="font-size:96px">21:47</div>
+            <div class="row" style="gap:10px"><span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#cloud"/></svg>54° outside</span><span class="mk-chip">71° inside</span></div>
+            <div class="mk-glass" style="padding:14px;margin-top:6px">
+              <div class="mk-label">Tonight</div>
+              <div style="font-weight:700;margin-top:4px;line-height:1.4">Recycling goes out tomorrow. Washer finished at 8:12 pm.</div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="mk-title">Scenes</div>
+            <div class="grid2">
+              <button class="mk-scene"><span class="emoji">🛋️</span>Evening</button>
+              <button class="mk-scene"><span class="emoji">🎬</span>Movie</button>
+              <button class="mk-scene"><span class="emoji">🌙</span>Bedtime</button>
+              <button class="mk-scene"><span class="emoji">👋</span>Leaving</button>
+            </div>
+            <div class="mk-glass" style="padding:14px">
+              <div class="row between"><b>Heating</b><input class="mk-switch" type="checkbox" checked aria-label="Heating"></div>
+              <div class="row between" style="margin-top:12px"><b>Alarm</b><input class="mk-switch" type="checkbox" aria-label="Alarm"></div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="mk-title">Front door</div>
+            <div class="cam"><span class="live">LIVE</span></div>
+            <div class="grid2">
+              <button class="mk-tile is-on" data-toggle style="min-height:96px"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Porch</div><div class="value" data-on="On" data-off="Off">On</div></span></button>
+              <button class="mk-tile" data-toggle style="min-height:96px"><span class="mk-icon"><svg class="i"><use href="#door"/></svg></span><span><div class="name">Gate</div><div class="value" data-on="Open" data-off="Closed">Closed</div></span></button>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <div class="caption">Wall tablet</div>
+    </div>
+  </div>
+
+  <p class="barnote"><b>The bottom bar is drawn by Miakapp, not by your app</b>: Home, and Me (the resident’s homes and sign-in methods). Do not draw your own global navigation. The buttons between the dashed lines show where a home may add one or two of its own.</p>
+
+  <h2 class="sec">Themes · click to try</h2>
+  <div class="themes">
+    <div class="theme-card" data-theme="minuit" data-pick="minuit"><div><div class="nm">Minuit </div><div class="mk-meta">Night, wall tablets, dark mode. The logo’s night blue and gold.</div></div><div class="sw"><span style="background:#0a1024"></span><span style="background:#1d2b57"></span><span style="background:#4c6bd6"></span><span style="background:#ffdd6e"></span><span style="background:#ffa63b"></span></div><div class="mk-tile is-on" style="min-height:70px"><div class="name">Ceiling · 80 %</div></div></div>
+    <div class="theme-card" data-theme="lumiere" data-pick="lumiere"><div><div class="nm">Lumière</div><div class="mk-meta">Day and light mode. Glass over peach, mint and lilac.</div></div><div class="sw"><span style="background:#ffd2b0"></span><span style="background:#d6f5e3"></span><span style="background:#e3dcff"></span><span style="background:#0a1024"></span><span style="background:linear-gradient(135deg,#ff7a45,#e0569b,#7a5cff)"></span></div><div class="mk-tile is-on" style="min-height:70px"><div class="name">Ceiling · 80 %</div></div></div>
+    <div class="theme-card" data-theme="miel" data-pick="miel"><div><div class="nm">Miel</div><div class="mk-meta">Warm and soft: cosy evenings.</div></div><div class="sw"><span style="background:#ffd45c"></span><span style="background:#ff9f2e"></span><span style="background:#ff7448"></span><span style="background:#1a1433"></span><span style="background:#fff6e8"></span></div><div class="mk-tile is-on" style="min-height:70px"><div class="name">Ceiling · 80 %</div></div></div>
+    <div class="theme-card" data-theme="craie" data-pick="craie"><div><div class="nm">Craie</div><div class="mk-meta">Flat, no blur, high contrast: old tablets, low vision.</div></div><div class="sw"><span style="background:#eef0f3"></span><span style="background:#ffffff"></span><span style="background:#0d1117"></span><span style="background:#ffc533"></span><span style="background:#2457e6"></span></div><div class="mk-tile is-on" style="min-height:70px"><div class="name">Ceiling · 80 %</div></div></div>
+  </div>
+
+  <h2 class="sec">States an interface must show</h2>
+  <div class="states" id="states" data-theme="minuit">
+    <div><button class="mk-tile" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">Off</div></span></button><div class="lbl">Off</div></div>
+    <div><button class="mk-tile is-on" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">On</div></span></button><div class="lbl">On</div></div>
+    <div><button class="mk-tile is-pending" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">Waiting for the home…</div></span></button><div class="lbl">Command sent</div></div>
+    <div><button class="mk-tile is-stale" style="width:100%" disabled><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">On 6 min ago</div></span></button><div class="lbl">Stale value</div></div>
+  </div>
+
+  <h2 class="sec">Principles</h2>
+  <div class="rules">
+    <div class="mk-glass"><b>The home first, not the devices</b>Organize by room and by moment of the day. Words residents use, never a technical identifier.</div>
+    <div class="mk-glass"><b>What is on glows</b>One strong signal: the golden glow of something that is on. Everything else stays calm.</div>
+    <div class="mk-glass"><b>One gradient per screen</b>The gradient is a signature: one title or one key number, not everywhere.</div>
+    <div class="mk-glass"><b>Say when the home goes quiet</b>Dim stale values, show an honest banner, disable controls. Never a fake “up to date”.</div>
+    <div class="mk-glass"><b>Big fingers, little text</b>44 px targets at least, tabular digits, three text sizes per screen.</div>
+    <div class="mk-glass"><b>Free to change everything</b>The tokens are a starting point. Make the home’s own theme with its residents.</div>
+  </div>
+</div>
+
+<script>
+  const stage = document.getElementById('stage');
+  const states = document.getElementById('states');
+  const buttons = document.querySelectorAll('.switch-themes button');
+  function pick(t) {
+    stage.dataset.theme = t; states.dataset.theme = t;
+    buttons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t)));
+  }
+  buttons.forEach(b => b.addEventListener('click', () => pick(b.dataset.t)));
+  document.querySelectorAll('[data-pick]').forEach(c => c.addEventListener('click', () => { pick(c.dataset.pick); stage.scrollIntoView({ behavior: 'smooth' }); }));
+  document.querySelectorAll('[data-toggle]').forEach(t => t.addEventListener('click', () => {
+    if (t.classList.contains('is-pending')) return;
+    t.classList.add('is-pending');
+    setTimeout(() => {
+      t.classList.remove('is-pending');
+      const on = t.classList.toggle('is-on');
+      const v = t.querySelector('.value'); v.textContent = on ? v.dataset.on : v.dataset.off;
+    }, 550);
+  }));
+  document.querySelectorAll('.mk-level').forEach(r => r.addEventListener('input', () => r.style.setProperty('--level', r.value + '%')));
+  const kwh = [.18,.15,.14,.13,.14,.16,.32,.48,.36,.22,.2,.24,.38,.3,.22,.2,.26,.42,.62,.71,.55];
+  const max = Math.max(...kwh), bars = document.getElementById('bars'), now = kwh.length - 1;
+  kwh.forEach((v, i) => { const s = document.createElement('span'); s.style.height = (v / max * 100) + '%'; if (i === now) s.className = 'now'; else if (v > .5) s.className = 'peak'; bars.append(s); });
+</script>
+</body>
+</html>
