@@ -25,25 +25,31 @@ export interface Discovery {
   readonly pushAudience: string;
   readonly componentsAudience: string;
   /**
-   * `https://<trusted web origin>/app?home={home_id}` when the deployment
+   * `https://<trusted web origin>/app/{home_id}` (or `/h/{home_id}`, or the
+   * legacy `/app?home={home_id}`) when the deployment
    * declares where residents open homes. The only source of a `home_url`; the
    * artifact `url` is never a resident link.
    */
   readonly homeUrlTemplate?: string;
 }
 
-const HOME_URL_SUFFIX = '/app?home={home_id}';
+/** The home link shapes a Miakapp web app answers, newest first. */
+const HOME_URL_SUFFIXES = ['/app/{home_id}', '/h/{home_id}', '/app?home={home_id}'] as const;
 
 /**
- * Accepts exactly `<canonical https origin>/app?home={home_id}`: no path, no
+ * Accepts exactly `<canonical https origin>` followed by one of
+ * HOME_URL_SUFFIXES: no other path, no
  * credentials, no port games, nothing a server could use to point residents
  * somewhere else under a plausible-looking link.
  */
 export function parseHomeUrlTemplate(value: unknown): string {
-  if (typeof value !== 'string' || !value.endsWith(HOME_URL_SUFFIX)) {
-    throw contractError('home_url_template is not <origin>/app?home={home_id}');
+  const suffix = typeof value === 'string'
+    ? HOME_URL_SUFFIXES.find((candidate) => value.endsWith(candidate))
+    : undefined;
+  if (typeof value !== 'string' || suffix === undefined) {
+    throw contractError('home_url_template is not <origin>/app/{home_id}');
   }
-  const origin = value.slice(0, -HOME_URL_SUFFIX.length);
+  const origin = value.slice(0, -suffix.length);
   canonicalHttpsUrl(origin, 'home_url_template origin');
   if (new URL(origin).origin !== origin) {
     throw contractError('home_url_template must be rooted at a bare origin');
