@@ -20,7 +20,7 @@ export const STARTERS = ['app'] as const;
 export type Starter = (typeof STARTERS)[number];
 
 /** Copied verbatim from `assets/starter/app/`, in this order. */
-export const STARTER_ASSETS = ['tsconfig.json', 'app/main.ts', 'app/miakapp.ts', 'app/README.md'] as const;
+export const STARTER_ASSETS = ['tsconfig.json', 'app/main.ts', 'app/miakapp.ts', 'app/theme.ts', 'app/README.md'] as const;
 
 /** Every file the starter writes besides the manifest, relative to the project root. */
 export const STARTER_FILES = ['package.json', ...STARTER_ASSETS] as const;

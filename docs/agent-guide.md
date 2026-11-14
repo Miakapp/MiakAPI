@@ -298,6 +298,12 @@ await home.call('lighting.set', { on: true });   // rejects with a closed code
 
 Do not edit the bridge; a newer CLI's starter carries any change to it.
 
+**Make it beautiful from the first build.** Run `miakapp docs design` before you
+draw anything: Miakapp ships design tokens, four themes (Minuit, Lumière, Miel,
+Craie), CSS recipes, an embedded font and example screens. The starter's
+`app/theme.ts` already uses them. They are a starting point you may change
+entirely; the Miakapp bar outside your frame is not yours to redraw.
+
 Declare every state path (exact or `prefix.*`) under `app.requires.state_read`
 and every function under `app.requires.call`. Events, media and `miakapp.*`
 functions are refused by `miakapp check`. Show `state.stale`, disable controls
