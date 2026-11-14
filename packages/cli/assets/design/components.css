@@ -13,7 +13,21 @@
   margin: 0;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
+  /* An app, not a page: no text selection or callout on a long press, except where residents type */
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
+.mk-app :is(input, textarea, select, [contenteditable]) { -webkit-user-select: text; user-select: text; }
+
+/* Pages (createNav): one layer per page, each scrolls on its own; the top one follows the finger on a swipe back */
+.mk-pages { position: fixed; inset: 0; overflow: hidden; isolation: isolate; }
+.mk-page {
+  position: absolute; inset: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  touch-action: pan-y; background: var(--mk-bg-art), var(--mk-bg);
+}
+.mk-page.is-moving { z-index: 2; box-shadow: -18px 0 40px -12px rgb(0 0 0 / .45); will-change: transform; }
+.mk-pages-shade { position: absolute; inset: 0; z-index: 1; background: #000; opacity: 0; pointer-events: none; }
 
 /* Glass: the one surface. Stack at most two levels. */
 .mk-glass {
@@ -73,7 +87,7 @@
 .mk-eyebrow { font-size: var(--mk-text-xs); font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--mk-ink-3); }
 .mk-headline { margin: 0; font-size: var(--mk-display); font-weight: 800; letter-spacing: -.045em; line-height: 1.02; }
 .mk-headline em { font-style: normal; background: var(--mk-accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.mk-headline em.is-alert { background: linear-gradient(110deg, color-mix(in srgb, var(--mk-warn) 70%, #fff), var(--mk-warn) 55%, var(--mk-heat)); -webkit-background-clip: text; background-clip: text; }
+.mk-headline em.is-warn, .mk-headline em.is-alert { background: linear-gradient(110deg, color-mix(in srgb, var(--mk-warn) 70%, #fff), var(--mk-warn) 55%, var(--mk-heat)); -webkit-background-clip: text; background-clip: text; }
 
 /* Entry tile: the home screen opens pages. Tiles of different sizes fill the screen */
 .mk-entries { flex: 1; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(108px, 1fr); gap: var(--mk-3); }
@@ -164,7 +178,8 @@
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
 }
 .mk-orb .mk-i { width: 112px; height: 112px; stroke-width: 1.4; filter: drop-shadow(0 0 18px color-mix(in srgb, var(--tint) 55%, transparent)); }
-.mk-orb.is-open, .mk-orb.is-alert { --tint: var(--mk-warn); }
+.mk-orb.is-open, .mk-orb.is-warn { --tint: var(--mk-warn); }
+.mk-orb.is-alert { --tint: var(--mk-alert); }
 
 /* A hue for a place or a kind of device, on a tile or an orb */
 .mk-tint-lilac { --tint: var(--mk-lilac); --glow: 34%; }
@@ -179,7 +194,11 @@
 .mk-state .now { font-size: 56px; font-weight: 800; letter-spacing: -.05em; line-height: 1; }
 .mk-state .since { display: inline-flex; justify-content: center; align-items: center; gap: var(--mk-2); font-size: var(--mk-text-sm); font-weight: 600; color: var(--mk-ink-2); }
 .mk-state .since.is-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mk-ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-ok) 22%, transparent); }
-.mk-state.is-open .now, .mk-state.is-alert .now { color: var(--mk-warn); }
+/* The state word carries its meaning (see .mk-status): green and calm when safe, orange to look at, gold when on, red only for an alarm or a failure */
+.mk-state.is-ok .now { color: color-mix(in srgb, var(--mk-ok) 80%, var(--mk-ink)); }
+.mk-state.is-open .now, .mk-state.is-warn .now { color: var(--mk-warn); }
+.mk-state.is-on .now { color: var(--mk-honey); }
+.mk-state.is-alert .now { color: var(--mk-alert); }
 
 /* Actions: under the thumb, at the bottom. Risky direction first and held; safe direction alone below */
 .mk-actions { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: var(--mk-3); }
@@ -283,13 +302,34 @@
 .mk-level::-webkit-slider-thumb { appearance: none; width: 4px; height: 44px; background: transparent; }
 .mk-level::-moz-range-thumb { width: 4px; height: 44px; border: 0; background: transparent; }
 
-/* The home is not answering: say it, never hide it */
-.mk-stale-banner {
-  display: flex; align-items: center; gap: var(--mk-2);
-  padding: 10px 14px; border-radius: var(--mk-pill);
-  background: color-mix(in srgb, var(--mk-warn) 18%, var(--mk-surface-strong));
-  color: var(--mk-ink); font-size: var(--mk-text-sm); font-weight: 600;
+/*
+ * Status: a word and a small dot, never a big coloured block. Always a word, so
+ * colour is never the only signal (colour blindness).
+ *   is-ok     normal and safe: closed, locked, armed (a discreet green)
+ *   is-warn   to look at: open, moving, low battery (orange)
+ *   is-on     on or running: a light, heating (gold)
+ *   is-alert  an alarm or a failure, nothing else (red)
+ */
+.mk-status { display: inline-flex; align-items: center; gap: .5em; font-weight: 700; }
+.mk-status::before {
+  content: ""; flex: none; width: .5em; height: .5em; border-radius: 50%; background: currentColor;
+  box-shadow: 0 0 0 .22em color-mix(in srgb, currentColor 22%, transparent);
 }
-.mk-stale-banner::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mk-warn); }
+.mk-status.is-ok { color: color-mix(in srgb, var(--mk-ok) 85%, var(--mk-ink)); }
+.mk-status.is-warn { color: var(--mk-warn); }
+.mk-status.is-on { color: var(--mk-honey); }
+.mk-status.is-alert { color: var(--mk-alert); }
+.mk-entry .mk-status, .mk-state .mk-status { display: flex; padding-left: .25em; }
+
+/*
+ * Old values. The Miakapp bar already says when the home is (re)connecting:
+ * never add a banner of your own. Put .is-stale on .mk-app while state.stale is
+ * true and the values dim; disable the controls. .mk-stale dims one value
+ * (a sensor silent for a while).
+ */
+.mk-app.is-stale :is(.now, .big, .hint, .value, .mk-status, .mk-orb), .mk-stale {
+  opacity: .45; filter: saturate(.2);
+  transition: opacity var(--mk-slow) var(--mk-ease), filter var(--mk-slow) var(--mk-ease);
+}
 
 :focus-visible { outline: 3px solid var(--mk-accent); outline-offset: 2px; }

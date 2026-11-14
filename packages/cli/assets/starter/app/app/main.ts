@@ -21,13 +21,18 @@
  * home is `./miakapp.ts`, the bridge copied from this CLI release.
  *
  * `./theme.ts` is the Miakapp design starting point (`miakapp docs design`):
- * tokens, four themes, component recipes, line icons (`icon()`) and
- * `holdToConfirm()` for actions nobody should trigger by accident. Minuit is
- * the default and follows dark mode; Lumière follows a light preference. Keep
- * it, restyle it or drop it.
+ * tokens, four themes, component recipes, line icons (`icon()`),
+ * `holdToConfirm()` for actions nobody should trigger by accident, `haptic()`,
+ * and `createNav()`: pages that slide in, one history entry each (Android's back
+ * button, Safari's swipe) and a swipe back from the left edge for the app
+ * installed on an iPhone. Minuit is the default and follows dark mode; Lumière
+ * follows a light preference. Keep it, restyle it or drop it.
+ *
+ * Old values are dimmed (`.mk-app.is-stale`), never announced by a banner: the
+ * Miakapp bar already says when the home is reconnecting.
  */
 import { connect, type HomeState, type Theme } from './miakapp.js';
-import { THEME_CSS, icon, type IconName } from './theme.js';
+import { THEME_CSS, createNav, icon, type IconName } from './theme.js';
 
 /** Resident-facing names, from your inventory. A path without one shows as the path. */
 const LABELS: Readonly<Record<string, string>> = {};
@@ -50,7 +55,6 @@ const french = home.locale.toLowerCase().startsWith('fr');
 const TEXT = french
   ? {
     empty: 'Rien de cette maison n’est encore partagé avec cette interface.',
-    stale: 'Dernières valeurs connues ; en attente de la maison.',
     yes: 'Oui',
     no: 'Non',
     missing: '—',
@@ -58,7 +62,6 @@ const TEXT = french
   }
   : {
     empty: 'Nothing from this home is shared with this interface yet.',
-    stale: 'Showing the last known values; waiting for the home.',
     yes: 'Yes',
     no: 'No',
     missing: '—',
@@ -81,7 +84,7 @@ style.textContent = `${THEME_CSS}
   dt { color: var(--mk-ink-2); }
   dd { margin: 0; font-weight: 700; text-align: end; }
   .empty { color: var(--mk-ink-2); }
-  .is-stale dd { opacity: .55; }
+  .mk-app.is-stale dd { opacity: .5; }
 `;
 document.head.append(style);
 
@@ -98,15 +101,6 @@ if (typeof matchMedia === 'function') {
 }
 document.body.className = 'mk-app';
 
-const screen = element('main', undefined, 'mk-screen');
-const header = document.createElement('div');
-const title = element('h1', undefined, 'mk-headline');
-const notice = document.createElement('p');
-const main = document.createElement('div');
-header.append(title);
-screen.append(header, notice, main);
-document.body.append(screen);
-
 function format(value: unknown): string {
   if (value === undefined || value === null) return TEXT.missing;
   if (typeof value === 'boolean') return value ? TEXT.yes : TEXT.no;
@@ -114,10 +108,6 @@ function format(value: unknown): string {
   if (typeof value === 'string') return value;
   return JSON.stringify(value);
 }
-
-/** The page on screen: null is the home screen (a launcher), otherwise a group. */
-let page: string | null = null;
-let last: HomeState | undefined;
 
 function groupsOf(paths: readonly string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
@@ -128,64 +118,60 @@ function groupsOf(paths: readonly string[]): Map<string, string[]> {
   return groups;
 }
 
-function show(next: string | null): void {
-  page = next;
-  if (last !== undefined) render(last);
-}
+let last: HomeState | undefined;
 
-function render(state: HomeState): void {
-  last = state;
-  notice.className = state.stale ? 'mk-stale-banner' : '';
-  header.replaceChildren(title);
-  notice.textContent = state.stale ? TEXT.stale : '';
-
+/** Home screen: it opens pages, it does not show values. It fills the screen. */
+function homeScreen(): HTMLElement {
+  const screen = element('main', undefined, 'mk-screen');
+  screen.append(element('h1', home.name, 'mk-headline'));
   const groups = groupsOf(home.paths());
   if (groups.size === 0) {
-    title.textContent = home.name;
-    main.className = '';
-    main.replaceChildren(element('p', TEXT.empty, 'empty'));
-    return;
+    screen.append(element('p', TEXT.empty, 'empty'));
+    return screen;
   }
-  const members = page === null ? undefined : groups.get(page);
-  if (page === null || members === undefined) {
-    // Home screen: it opens pages, it does not show values. It fills the screen.
-    page = null;
-    title.textContent = home.name;
-    main.className = 'mk-entries';
-    const tiles: HTMLElement[] = [];
-    for (const [index, group] of [...groups.keys()].entries()) {
-      const spec = PAGES[group];
-      const classes = ['mk-entry'];
-      if (spec !== undefined && index === 0) classes.push('is-featured');
-      else if (spec?.tint !== undefined) classes.push(`mk-tint-${spec.tint}`);
-      const entry = element('button', undefined, classes.join(' '));
-      const glyph = element('span', undefined, 'mk-icon');
-      glyph.innerHTML = icon(spec?.icon ?? 'grid');
-      entry.append(glyph, element('span', spec?.label ?? group, 'name'));
-      entry.addEventListener('click', () => show(group));
-      tiles.push(entry);
-    }
-    main.replaceChildren(...tiles);
-    return;
+  const tiles = element('div', undefined, 'mk-entries');
+  for (const [index, group] of [...groups.keys()].entries()) {
+    const spec = PAGES[group];
+    const classes = ['mk-entry'];
+    if (spec !== undefined && index === 0) classes.push('is-featured');
+    else if (spec?.tint !== undefined) classes.push(`mk-tint-${spec.tint}`);
+    const entry = element('button', undefined, classes.join(' '));
+    const glyph = element('span', undefined, 'mk-icon');
+    glyph.innerHTML = icon(spec?.icon ?? 'grid');
+    entry.append(glyph, element('span', spec?.label ?? group, 'name'));
+    entry.addEventListener('click', () => nav.go(group));
+    tiles.append(entry);
   }
-  // One page about one thing: what it is now, then (once you add calls) what to do.
-  main.className = '';
-  title.textContent = PAGES[page]?.label ?? page;
+  screen.append(tiles);
+  return screen;
+}
+
+/** One page about one thing: what it is now, then (once you add calls) what to do. */
+function groupPage(group: string): HTMLElement {
+  const screen = element('main', undefined, 'mk-screen');
   const back = element('button', undefined, 'mk-back');
   back.innerHTML = icon('back');
   back.ariaLabel = TEXT.back;
-  back.addEventListener('click', () => show(null));
+  back.addEventListener('click', () => nav.back());
   const top = element('div', undefined, 'mk-topbar');
-  top.append(back);
-  header.replaceChildren(top, title);
-  const section = element('section', undefined, state.stale ? 'mk-glass is-stale' : 'mk-glass');
+  top.append(back, element('span', PAGES[group]?.label ?? group));
+  const section = element('section', undefined, 'mk-glass');
   const list = element('dl');
-  for (const path of members) {
-    list.append(element('dt', LABELS[path] ?? path), element('dd', format(state.values[path])));
+  for (const path of groupsOf(home.paths()).get(group) ?? []) {
+    list.append(element('dt', LABELS[path] ?? path), element('dd', format(last?.values[path])));
   }
   section.append(list);
-  main.replaceChildren(section);
+  screen.append(top, section);
+  return screen;
 }
 
-home.subscribe(render);
+// Pages slide in and out, each with its own history entry; swipe from the left edge to go back.
+const nav = createNav({ render: (route) => (route === '' ? homeScreen() : groupPage(route)) });
+
+home.subscribe((state) => {
+  last = state;
+  // Old values are dimmed, not announced: the Miakapp bar says the home is reconnecting.
+  document.body.classList.toggle('is-stale', state.stale);
+  nav.refresh();
+});
 home.ready();

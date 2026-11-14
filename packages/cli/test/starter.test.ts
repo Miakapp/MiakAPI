@@ -178,11 +178,36 @@ describe('the bridge is the canonical SDK', () => {
   });
 });
 
+/** Lets the navigation's queued page changes run. */
+const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0); });
+
 /** Just enough DOM for the starter: no network, no storage, nothing else. */
 class FakeElement {
   children: Array<FakeElement | string> = [];
   className = '';
+  parent: FakeElement | undefined;
+  hidden = false;
+  inert = false;
+  scrollTop = 0;
+  clientWidth = 390;
+  ariaLabel = '';
+  innerHTML = '';
+  readonly style = { transform: '', opacity: '', cssText: '', setProperty: () => {} };
+  readonly classList = {
+    add: (name: string) => { if (!this.classes().includes(name)) this.className = [...this.classes(), name].join(' '); },
+    remove: (name: string) => { this.className = this.classes().filter((each) => each !== name).join(' '); },
+    toggle: (name: string, on: boolean) => { if (on) this.classList.add(name); else this.classList.remove(name); },
+  };
   constructor(readonly tagName: string) {}
+  classes(): string[] {
+    return this.className.split(' ').filter(Boolean);
+  }
+  remove(): void {
+    if (this.parent !== undefined) this.parent.children = this.parent.children.filter((child) => child !== this);
+  }
+  getBoundingClientRect() {
+    return { left: 0, top: 0 };
+  }
   set textContent(value: string) {
     this.children = [String(value)];
   }
@@ -190,10 +215,19 @@ class FakeElement {
     return this.children.map((child) => (typeof child === 'string' ? child : child.textContent)).join('');
   }
   append(...nodes: Array<FakeElement | string>): void {
+    for (const node of nodes) if (typeof node !== 'string') node.parent = this;
     this.children.push(...nodes);
   }
   replaceChildren(...nodes: Array<FakeElement | string>): void {
+    for (const node of nodes) if (typeof node !== 'string') node.parent = this;
     this.children = [...nodes];
+  }
+  /** Visible elements only: what a resident sees. */
+  shown(tag: string): FakeElement[] {
+    if (this.hidden) return [];
+    return this.children.flatMap((child) => (typeof child === 'string' || child.hidden
+      ? []
+      : [...(child.tagName === tag ? [child] : []), ...child.shown(tag)]));
   }
   readonly listeners: Array<() => void> = [];
   addEventListener(type: string, listener: () => void): void {
@@ -240,8 +274,33 @@ function frame(values: Record<string, unknown>, options: { stale?: boolean; loca
     body: new FakeElement('body'),
     createElement: (tag: string) => new FakeElement(tag),
   };
+  // One entry per page, like the frame's joint session history; back() fires popstate.
+  const pops: Array<(event: { state: unknown }) => void> = [];
+  const entries: unknown[] = [null];
+  let index = 0;
+  const history = {
+    get state() { return entries[index]; },
+    replaceState: (state: unknown) => { entries[index] = state; },
+    pushState: (state: unknown) => { entries.splice(index + 1, Infinity, state); index += 1; },
+    go: (delta: number) => {
+      index = Math.max(0, Math.min(entries.length - 1, index + delta));
+      for (const listener of pops) listener({ state: entries[index] });
+    },
+    back: () => { history.go(-1); },
+  };
+  const window = {
+    history,
+    innerWidth: 390,
+    performance: { now: () => 0 },
+    // Reduced motion: pages change at once, so the test needs no animation.
+    matchMedia: (query: string) => ({ matches: query.includes('reduced-motion'), addEventListener: () => {} }),
+    addEventListener: (type: string, listener: (event: { state: unknown }) => void) => {
+      if (type === 'popstate') pops.push(listener);
+    },
+    removeEventListener: () => {},
+  };
   return {
-    context: { miakapp: host, document },
+    context: { miakapp: host, document, ...window },
     body: document.body,
     theme: () => document.documentElement.dataset['theme'],
     readyCalls: () => readyCalls,
@@ -315,7 +374,7 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
     expect(bundle).toContain('font/woff2');
   });
 
-  test('its home screen opens one page per group, which shows exactly the shared values and marks a stale view', () => {
+  test('its home screen opens one page per group, which shows exactly the shared values and dims a stale view', async () => {
     const fixture = frame({
       'climate.salon.temperature': 25.3,
       'climate.entree.temperature': null,
@@ -323,17 +382,43 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
     }, { locale: 'fr' });
     runInNewContext(bundle, fixture.context);
     // The home screen opens pages; it shows no value.
-    const entries = fixture.body.find('button').filter((node) => node.className === 'mk-entry');
+    const entries = fixture.body.shown('button').filter((node) => node.className === 'mk-entry');
     expect(entries.map((node) => node.textContent)).toEqual(['climate', 'zone']);
     expect(fixture.body.find('dd')).toEqual([]);
 
     entries[0]?.click();
-    expect(fixture.body.find('dd').map((node) => node.textContent)).toEqual(['—', '25,3']);
+    await settled();
+    expect(fixture.body.shown('dd').map((node) => node.textContent)).toEqual(['—', '25,3']);
+    expect(fixture.body.shown('button').filter((node) => node.className === 'mk-entry')).toEqual([]);
 
+    // Old values are dimmed, never announced by a banner: the Miakapp bar does that.
     fixture.push({ 'climate.salon.temperature': 24.1 }, true);
-    expect(fixture.body.textContent).toContain('Dernières valeurs connues ; en attente de la maison.');
-    expect(fixture.body.find('dd').map((node) => node.textContent)).toEqual(['24,1']);
-    expect(fixture.body.find('section')[0]?.className).toBe('mk-glass is-stale');
+    expect(fixture.body.className).toBe('mk-app is-stale');
+    expect(fixture.body.textContent).not.toContain('Dernières valeurs');
+    expect(fixture.body.shown('dd').map((node) => node.textContent)).toEqual(['24,1']);
+    fixture.push({ 'climate.salon.temperature': 24.2 });
+    expect(fixture.body.className).toBe('mk-app');
+  });
+
+  test('each page has a history entry: the system back returns to the home screen', async () => {
+    const fixture = frame({ 'climate.salon.temperature': 25.3, 'zone.salon.light.on': true });
+    runInNewContext(bundle, fixture.context);
+    fixture.body.shown('button').filter((node) => node.className === 'mk-entry')[1]?.click();
+    await settled();
+    expect(fixture.body.shown('dd').map((node) => node.textContent)).toEqual(['Yes']);
+
+    fixture.context.history.back();
+    await settled();
+    expect(fixture.body.find('dd')).toEqual([]);
+    expect(fixture.body.shown('button').filter((node) => node.className === 'mk-entry')).toHaveLength(2);
+
+    // The page's own back button goes through the history too.
+    fixture.body.shown('button').filter((node) => node.className === 'mk-entry')[0]?.click();
+    await settled();
+    fixture.body.shown('button').find((node) => node.className === 'mk-back')?.click();
+    await settled();
+    expect(fixture.body.find('dd')).toEqual([]);
+    expect(fixture.context.history.state).toMatchObject({ mkNav: 0 });
   });
 
   test('outside a Miakapp frame it fails loudly instead of rendering an empty home', () => {

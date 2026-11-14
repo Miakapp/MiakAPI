@@ -4,7 +4,8 @@
  *   assets/design/fonts.css            Manrope as a data: URL (the app frame has no network)
  *   assets/design/gallery.html         self-contained inspiration screens
  *   assets/design/icons.svg            the line icons of icons.ts, as an SVG sprite
- *   assets/starter/app/app/theme.ts    fonts + tokens + components as one string, the icons, hold to confirm
+ *   assets/starter/app/app/theme.ts    fonts + tokens + components as one string, the icons, and
+ *                                      runtime.ts (hold to confirm, haptic, pages with swipe back)
  *
  * `bun design/build.ts` writes them; `bun design/build.ts --check` fails when
  * one is out of date, so a test catches an edit to tokens.css that was not
@@ -34,6 +35,10 @@ export async function designOutputs(): Promise<ReadonlyArray<readonly [path: str
 }
 `;
   const tokens = await text('../assets/design/tokens.css');
+  // runtime.ts goes verbatim into theme.ts, minus its file header, and as plain JS into the gallery.
+  const runtimeSource = await text('runtime.ts');
+  const runtime = runtimeSource.slice(runtimeSource.indexOf('const reduceMotion'));
+  const runtimeJs = new Bun.Transpiler({ loader: 'ts' }).transformSync(runtime).replace(/^export /gm, '');
   const components = await text('../assets/design/components.css');
   const symbols = Object.entries(ICONS)
     .map(([name, body]) => `  <symbol id="${name}" viewBox="0 0 24 24">${body}</symbol>`)
@@ -48,13 +53,14 @@ ${symbols}
     .replace('/*__FONT__*/', () => fonts)
     .replace('/*__TOKENS__*/', () => tokens)
     .replace('/*__COMPONENTS__*/', () => components)
+    .replace('/*__RUNTIME__*/', () => runtimeJs)
     .replace('__LOGO__', `data:image/svg+xml;base64,${await base64('miakapp.svg')}`);
   const theme = `/**
  * Miakapp design tokens and component recipes, as one stylesheet.
  *
  * Generated from the CLI's assets/design/ (fonts.css, tokens.css,
- * components.css, icons.svg): run \`miakapp docs design\` for the guide. This copy is
- * yours: edit it, trim it or replace it.
+ * components.css, icons.svg, runtime.ts): run \`miakapp docs design\` for the guide.
+ * This copy is yours: edit it, trim it or replace it.
  */
 export const THEME_CSS = ${JSON.stringify(`${fonts}\n${tokens}\n${components}`)};
 
@@ -68,61 +74,7 @@ export function icon(name: IconName, className = 'mk-i'): string {
   return \`<svg class="\${className}" viewBox="0 0 24 24" aria-hidden="true">\${ICONS[name]}</svg>\`;
 }
 
-/**
- * Hold to confirm, for an action nobody should trigger by accident (open the
- * gate, unlock the door): \`run\` fires once the button has been held for \`ms\`;
- * letting go earlier cancels. The button's \`--hold\` goes from 0 to 1 while it
- * is held, and \`.mk-action.is-hold\` draws it as a filling gauge. Enter and
- * Space work the same from a keyboard. Returns a function that detaches it.
- */
-export function holdToConfirm(button: HTMLButtonElement, run: () => void, ms = 600): () => void {
-  let holding = false;
-  let started = 0;
-  let frame = 0;
-  const show = (progress: number): void => { button.style.setProperty('--hold', String(progress)); };
-  const stop = (): void => {
-    holding = false;
-    cancelAnimationFrame(frame);
-    show(0);
-  };
-  const tick = (now: number): void => {
-    if (!holding) return;
-    const progress = Math.min(1, (now - started) / ms);
-    show(progress);
-    if (progress < 1) {
-      frame = requestAnimationFrame(tick);
-      return;
-    }
-    stop();
-    run();
-  };
-  const begin = (event: Event): void => {
-    if (holding || button.disabled) return;
-    event.preventDefault();
-    holding = true;
-    started = performance.now();
-    frame = requestAnimationFrame(tick);
-  };
-  const isPress = (event: KeyboardEvent): boolean => event.key === 'Enter' || event.key === ' ';
-  const keydown = (event: KeyboardEvent): void => { if (isPress(event) && !event.repeat) begin(event); };
-  const keyup = (event: KeyboardEvent): void => { if (isPress(event)) stop(); };
-  const noMenu = (event: Event): void => { event.preventDefault(); };
-  const cancels = ['pointerup', 'pointerleave', 'pointercancel', 'blur'] as const;
-  button.addEventListener('pointerdown', begin);
-  for (const type of cancels) button.addEventListener(type, stop);
-  button.addEventListener('keydown', keydown);
-  button.addEventListener('keyup', keyup);
-  button.addEventListener('contextmenu', noMenu);
-  return () => {
-    stop();
-    button.removeEventListener('pointerdown', begin);
-    for (const type of cancels) button.removeEventListener(type, stop);
-    button.removeEventListener('keydown', keydown);
-    button.removeEventListener('keyup', keyup);
-    button.removeEventListener('contextmenu', noMenu);
-  };
-}
-`;
+${runtime}`;
   return [
     ['../assets/design/fonts.css', fonts],
     ['../assets/design/gallery.html', gallery],

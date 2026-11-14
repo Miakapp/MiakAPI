@@ -37,6 +37,10 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; colo
 .screen .status { position: absolute; top: 0; left: 0; right: 0; height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 6px 26px 0; font-size: 13px; font-weight: 700; z-index: 3; }
 .screen .mk-screen { position: absolute; inset: 0; overflow: auto; min-height: 0; padding: 50px 14px 96px; gap: 14px; scrollbar-width: none; }
 .screen .mk-headline { font-size: 34px; }
+.screen .mk-pages { position: absolute; }
+.statuses { display: flex; flex-wrap: wrap; gap: 12px; padding: 18px; border-radius: 28px; background: var(--mk-bg-art), var(--mk-bg); color: var(--mk-ink); }
+.statuses .mk-glass { flex: 1 1 200px; padding: 16px; display: grid; gap: 6px; }
+.statuses .mk-status { font-size: 20px; }
 .screen .tabdock { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 3; }
 .caption { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--mk-ink-2); }
 .tablet { width: 860px; max-width: 100%; aspect-ratio: 16 / 9.4; border-radius: 34px; padding: 12px; background: #0b0b0f; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .45); }
@@ -143,7 +147,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
           <div class="mk-entries">
             <button class="mk-entry is-featured">
               <span class="mk-icon"><svg class="mk-i"><use href="#gate"/></svg></span>
-              <span class="grow"><span class="hint">Gate</span><span class="now">Closed</span></span>
+              <span class="grow"><span class="hint">Gate</span><span class="now">Closed</span><span class="hint mk-status is-ok">Live</span></span>
               <svg class="mk-i" style="opacity:.55"><use href="#chevron"/></svg>
             </button>
             <button class="mk-entry is-tall mk-tint-peach">
@@ -152,7 +156,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             </button>
             <button class="mk-entry mk-tint-lilac">
               <span class="mk-icon"><svg class="mk-i"><use href="#door"/></svg></span>
-              <span><span class="name">Front door</span><span class="hint">Locked</span></span>
+              <span><span class="name">Front door</span><span class="hint mk-status is-ok">Locked</span></span>
             </button>
             <button class="mk-entry mk-tint-sky">
               <span class="mk-icon"><svg class="mk-i"><use href="#shutter"/></svg></span>
@@ -179,7 +183,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
         <div class="mk-screen">
           <div class="mk-topbar"><button class="mk-back" aria-label="Back"><svg class="mk-i"><use href="#back"/></svg></button>Gate</div>
           <div class="mk-orb" id="gate-orb"><svg class="mk-i"><use href="#gate"/></svg></div>
-          <div class="mk-state" id="gate-state"><div class="now">Closed</div><div class="since is-live">Live</div></div>
+          <div class="mk-state is-ok" id="gate-state"><div class="now">Closed</div><div class="since is-live">Live</div></div>
           <div class="mk-actions">
             <button class="mk-action is-hold" data-gate="open"><svg class="mk-i"><use href="#unlock"/></svg><span>Open<span class="how">Hold</span></span></button>
             <button class="mk-action is-hold" data-gate="walk"><svg class="mk-i"><use href="#walk"/></svg><span>Pedestrian<span class="how">Hold</span></span></button>
@@ -190,6 +194,14 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
         <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
       </div></div>
       <div class="caption">A device page · hold “Open”, then tap “Close”</div>
+    </div>
+    <!-- 1d. Pages with createNav(): a tile slides its page in; swipe from the left edge (or drag with the mouse) to go back -->
+    <div>
+      <div class="phone"><div class="screen" id="nav-demo">
+        <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
+        <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
+      </div></div>
+      <div class="caption">Pages · tap a tile, then swipe back from the left edge</div>
     </div>
     <!-- 1c. The same home while the gate is open: the featured tile turns warm and offers the safe shortcut -->
     <div>
@@ -204,7 +216,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             <div class="mk-entry is-featured has-attention" role="group">
               <button class="mk-open" aria-label="Gate"></button>
               <span class="mk-icon"><svg class="mk-i"><use href="#gate"/></svg></span>
-              <span class="grow"><span class="hint">Gate</span><span class="now">Open</span><span class="hint">for 4 min</span></span>
+              <span class="grow"><span class="hint">Gate</span><span class="now">Open</span><span class="hint mk-status is-warn">for 4 min</span></span>
               <button class="mk-shortcut"><svg class="mk-i"><use href="#lock"/></svg>Close</button>
             </div>
             <button class="mk-entry is-tall mk-tint-peach">
@@ -213,7 +225,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             </button>
             <button class="mk-entry mk-tint-lilac">
               <span class="mk-icon"><svg class="mk-i"><use href="#door"/></svg></span>
-              <span><span class="name">Front door</span><span class="hint">Locked</span></span>
+              <span><span class="name">Front door</span><span class="hint mk-status is-ok">Locked</span></span>
             </button>
             <button class="mk-entry mk-tint-sky">
               <span class="mk-icon"><svg class="mk-i"><use href="#shutter"/></svg></span>
@@ -277,8 +289,8 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
         <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
         <div class="scroll">
           <div class="mk-label" style="margin:10px 2px 0">Today</div>
-          <div class="mk-hero" style="margin:4px 0 2px"><span class="mk-gradient-text">8.4</span><span style="font-size:24px;letter-spacing:0"> kWh</span></div>
-          <div class="mk-label" style="margin:0 2px 14px">≈ $1.72 · 12 % less than a usual Friday</div>
+          <div class="mk-hero mk-stale" style="margin:4px 0 2px"><span class="mk-gradient-text">8.4</span><span style="font-size:24px;letter-spacing:0"> kWh</span></div>
+          <div class="mk-label" style="margin:0 2px 14px">≈ $1.72 · meter last heard 6 min ago</div>
           <div class="mk-glass" style="padding:14px">
             <div class="row between"><b>Hour by hour</b><span class="mk-meta">peak at 7 pm</span></div>
             <div class="bars" id="bars"></div>
@@ -291,11 +303,10 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             <div class="consumer"><span>Heaters</span><b>1.6 kWh</b><div class="meter"><i style="width:52%"></i></div></div>
             <div class="consumer"><span>Everything else</span><b>1.9 kWh</b><div class="meter"><i style="width:61%"></i></div></div>
           </div>
-          <div class="mk-stale-banner" style="margin-top:14px">Meter silent for 6 min · last known values</div>
         </div>
         <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a aria-current="page" href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
       </div></div>
-      <div class="caption">Energy</div>
+      <div class="caption">Energy · an old value is dimmed, never bannered</div>
     </div>
 
     <!-- 4. Tablette murale -->
@@ -356,6 +367,14 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
     <div><button class="mk-tile is-stale" style="width:100%" disabled><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Lamp</div><div class="value">On 6 min ago</div></span></button><div class="lbl">Stale value</div></div>
   </div>
 
+  <h2 class="sec">Colours mean something · always with a word</h2>
+  <div class="statuses" id="statuses" data-theme="minuit">
+    <div class="mk-glass"><span class="mk-status is-ok">Closed</span><span class="mk-meta">Normal and safe: closed, locked, armed. A discreet green word and dot, never a green block.</span></div>
+    <div class="mk-glass"><span class="mk-status is-warn">Open</span><span class="mk-meta">To look at: open, moving, battery low.</span></div>
+    <div class="mk-glass"><span class="mk-status is-on">On</span><span class="mk-meta">On or running: a light, the heating. Gold, like the lit tiles.</span></div>
+    <div class="mk-glass"><span class="mk-status is-alert">Alarm</span><span class="mk-meta">Only an alarm or a failure. Red everywhere else teaches people to ignore it.</span></div>
+  </div>
+
   <h2 class="sec">Principles</h2>
   <div class="rules">
     <div class="mk-glass"><b>A remote, not a dashboard</b>The home screen opens pages and fills one screen, no more. One page per thing. Upkeep (batteries, silent sensors) goes elsewhere.</div>
@@ -366,17 +385,21 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
     <div class="mk-glass"><b>Open: never by accident</b>Actions that open, unlock or start sit together on the first row and are <em>held</em> to confirm. Never from the home screen.</div>
     <div class="mk-glass"><b>Close: never forgotten</b>Alone on its row, one tap. While something is open it becomes the gold button, and the home tile turns warm with a Close shortcut.</div>
     <div class="mk-glass"><b>Buttons never move</b>Open or closed, each button keeps its place; only its emphasis changes. The thumb learns where to tap.</div>
-    <div class="mk-glass"><b>Say when the home goes quiet</b>Dim stale values, show an honest banner, disable controls. Never a fake “up to date”.</div>
+    <div class="mk-glass"><b>Old values are dimmed, not bannered</b>The Miakapp bar already says “Connecting…”. Your app only dims the values that may be old and disables the controls. Never a banner of your own, never a fake “up to date”.</div>
+    <div class="mk-glass"><b>An app, not a web page</b>Pages slide in and have a history entry each; a swipe from the left edge goes back. Text is not selectable, except in fields.</div>
   </div>
 </div>
 </div>
 
 <script>
+/*__RUNTIME__*/
+</script>
+<script>
   const stage = document.getElementById('stage');
   const states = document.getElementById('states');
   const buttons = document.querySelectorAll('.switch-themes button');
   function pick(t) {
-    stage.dataset.theme = t; states.dataset.theme = t;
+    stage.dataset.theme = t; states.dataset.theme = t; document.getElementById('statuses').dataset.theme = t;
     buttons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === t)));
   }
   buttons.forEach(b => b.addEventListener('click', () => pick(b.dataset.t)));
@@ -395,6 +418,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   function setGate(open) {
     const st = document.getElementById('gate-state');
     st.classList.toggle('is-open', open);
+    st.classList.toggle('is-ok', !open);
     document.getElementById('gate-orb').classList.toggle('is-open', open);
     st.querySelector('.now').textContent = open ? 'Open' : 'Closed';
     st.querySelector('.since').textContent = open ? 'Open just now' : 'Live';
@@ -410,19 +434,40 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   }
   gateButtons.forEach(b => {
     if (b.dataset.gate === 'close') { b.addEventListener('click', () => { if (!b.disabled) act(b, false); }); return; }
-    let t0 = 0, raf = 0;
-    const stop = () => { t0 = 0; cancelAnimationFrame(raf); b.style.setProperty('--hold', 0); };
-    const tick = now => {
-      if (!t0) return;
-      const p = Math.min(1, (now - t0) / 600);
-      b.style.setProperty('--hold', p);
-      if (p < 1) raf = requestAnimationFrame(tick); else { stop(); act(b, true); }
-    };
-    b.addEventListener('pointerdown', e => { if (b.disabled) return; e.preventDefault(); t0 = performance.now(); raf = requestAnimationFrame(tick); });
-    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stop));
-    b.addEventListener('contextmenu', e => e.preventDefault());
+    holdToConfirm(b, () => act(b, true));
   });
   document.querySelectorAll('.mk-level').forEach(r => r.addEventListener('input', () => r.style.setProperty('--level', r.value + '%')));
+  // Pages: the real createNav() from the starter's theme.ts, rooted in the demo phone.
+  const navTiles = [
+    { id: 'gate', label: 'Gate', icon: 'gate', hint: 'Closed', featured: true },
+    { id: 'living', label: 'Living room', icon: 'sofa', tint: 'peach', big: '71°' },
+    { id: 'door', label: 'Front door', icon: 'door', tint: 'lilac', hint: 'Locked' },
+    { id: 'garden', label: 'Garden', icon: 'tree', tint: 'mint', hint: 'Sprinklers off' },
+  ];
+  const svg = (name, cls = 'mk-i') => `<svg class="${cls}"><use href="#${name}"/></svg>`;
+  const demoNav = createNav({
+    root: document.getElementById('nav-demo'),
+    render(route) {
+      const screen = document.createElement('main');
+      screen.className = 'mk-screen';
+      const tile = navTiles.find((t) => t.id === route);
+      if (tile === undefined) {
+        screen.innerHTML = `<div><div class="mk-eyebrow">Friday, November 14</div><h1 class="mk-headline">Good evening.<br>All <em>closed</em>.</h1></div>
+          <div class="mk-entries">${navTiles.map((t) => `<button class="mk-entry ${t.featured ? 'is-featured' : `mk-tint-${t.tint}`}${t.big ? ' is-tall' : ''}" data-go="${t.id}">
+            <span class="mk-icon">${svg(t.icon)}</span>
+            <span class="${t.featured ? 'grow' : ''}">${t.featured ? `<span class="hint">${t.label}</span><span class="now">${t.hint}</span>`
+              : `${t.big ? `<span class="big">${t.big}</span>` : ''}<span class="name">${t.label}</span>${t.hint ? `<span class="hint">${t.hint}</span>` : ''}`}</span></button>`).join('')}</div>`;
+        screen.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => demoNav.go(b.dataset.go)));
+        return screen;
+      }
+      screen.innerHTML = `<div class="mk-topbar"><button class="mk-back" aria-label="Back">${svg('back')}</button>${tile.label}</div>
+        <div class="mk-orb${tile.tint ? ` mk-tint-${tile.tint}` : ''}">${svg(tile.icon)}</div>
+        <div class="mk-state${tile.hint === 'Closed' || tile.hint === 'Locked' ? ' is-ok' : ''}"><div class="now">${tile.big ?? tile.hint}</div><div class="since is-live">Live</div></div>
+        <p class="mk-meta" style="text-align:center">Swipe from the left edge to go back:<br>slowly, then let go halfway, or with a quick flick.</p>`;
+      screen.querySelector('.mk-back').addEventListener('click', () => demoNav.back());
+      return screen;
+    },
+  });
   const kwh = [.18,.15,.14,.13,.14,.16,.32,.48,.36,.22,.2,.24,.38,.3,.22,.2,.26,.42,.62,.71,.55];
   const max = Math.max(...kwh), bars = document.getElementById('bars'), now = kwh.length - 1;
   kwh.forEach((v, i) => { const s = document.createElement('span'); s.style.height = (v / max * 100) + '%'; if (i === now) s.className = 'now'; else if (v > .5) s.className = 'peak'; bars.append(s); });
