@@ -12,7 +12,7 @@ The files sit next to this guide, in the design directory printed at the end:
 | File | What it is |
 |---|---|
 | `tokens.css` | `--mk-*` variables (color, glass, radius, type, space, motion) for four themes |
-| `components.css` | Recipes on top of the tokens: glass, device tile, scene, switch, level slider, stale banner, tab bar |
+| `components.css` | Recipes on top of the tokens: glass, device tile, scene, switch, level slider, stale banner |
 | `fonts.css` | Manrope as a `data:` URL, ready for the frame, which has no network (OFL, see `OFL-Manrope.txt`) |
 | `gallery.html` | Example screens built only with the files above: home, room, energy, wall tablet. Open it in a browser, switch themes, read its source |
 
