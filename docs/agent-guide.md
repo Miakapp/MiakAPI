@@ -41,7 +41,7 @@ Two scopes must not be confused:
 | In scope by default | Needs the owner's explicit, separate request |
 | --- | --- |
 | reading the existing installation (§3) | changing flows, automations, brokers or devices that already run the house |
-| writing and testing a coordinator and a component | granting a physical action (heat, lock, unlock, open, close) that the owner has not named |
+| writing and testing a coordinator and an app | granting a physical action (heat, lock, unlock, open, close) that the owner has not named |
 | publishing, verifying and rolling back the V4 interface | anything on the owner's own machines beyond the coordinator you were asked to run |
 
 Caution about the second column is not a reason to withhold the first. A new V4
@@ -55,14 +55,14 @@ Three artifacts, and no more:
 | Artifact | Where it runs | What it owns |
 | --- | --- | --- |
 | Coordinator | the owner's machine, under Bun | state, events, functions, **authorization** |
-| Interface | an isolated frame (app) or sandboxed Worker (component) in the household's browser | what residents see and touch |
+| Interface | an isolated frame in the household's browser | what residents see and touch |
 | `miakapp.yaml` | neither; it is the contract | what the interface may ask for |
 
-The interface is, by default, a **whole-house application** (`app:` in
-`miakapp.yaml`, ABI `miakapp.app/1`): your own layout, styles, navigation and
-libraries, bundled into one file. A semantic **component** (`component:`,
-`miakapp.component/1`) is still supported for a minimal tree Miakapp draws for
-you. §5 covers both.
+The interface is a **whole-house application** (`app:` in `miakapp.yaml`, ABI
+`miakapp.app/1`): your own HTML, CSS, layout, navigation and libraries, bundled
+into one file. Miakapp draws nothing for you, and no longer draws the old
+semantic `component:` kind at all: a home published that way shows as having no
+interface. §5 covers the app.
 
 The coordinator is trusted. The interface is not. The relay between them is
 platform-untrusted but not blind: it terminates TLS, stores plaintext state and
@@ -84,11 +84,7 @@ any of those files already exists. As generated it shows only what the home
 shares, with an honest empty state; it is where your work starts, never what
 you publish. Without `--starter`, `init` writes `miakapp.yaml` alone.
 
-`templates/home` in the MiakAPI source repository is an optional developer
-example: a coordinator, an app and a component wired to the repository with
-`file:` dependencies, some unpublished. Read it for ideas if you have it;
-nothing in it is needed to build or publish a home. This guide covers the
-judgment no starter can.
+This guide covers the judgment no starter can.
 
 ### Leave the repository readable by the next agent
 
@@ -113,7 +109,7 @@ that contradicts the CLI installed beside it is worse than no guide.
 
 **The coordinator authorizes everything.** The relay proves *who* is calling and
 attaches non-spoofable caller metadata. Deciding whether that person *may* act is
-the coordinator's job and nobody else's. In the developer example that decision is the
+the coordinator's job and nobody else's. In a well-built coordinator that decision is the
 first line of the function body:
 
 ```ts
@@ -125,17 +121,17 @@ if (call.source.kind !== 'user' || call.source.id !== options.ownerUserId) {
 Removing that check does not produce an error anywhere. It produces a home that
 anyone enrolled can drive. There is no second layer that will catch it for you.
 
-**The component trusts nothing it was not given.** It has no network, no storage
-and no DOM. It cannot reach the lamp except through a call the coordinator
-declared, and it cannot read a state path the coordinator did not grant. This is
-why it is safe to let a component be rewritten often and reviewed lightly, and
-why it is not safe to move a decision into it.
+**The app trusts nothing it was not given.** It has no network and no storage
+shared with anyone. It cannot reach the lamp except through a call the
+coordinator declared, and it cannot read a state path the coordinator did not
+grant. This is why it is safe to let an app be rewritten often and reviewed
+lightly, and why it is not safe to move a decision into it.
 
 **You own the UI; the coordinator owns the facts.** The coordinator exposes state
 and actions. What the household actually sees — the layout, the wording, the
-language, which controls are prominent — is yours to design from the semantic
-vocabulary in §5. Do not push presentation choices into the coordinator, and do
-not push authorization into the component.
+language, which controls are prominent — is yours to design (§5). Do not push
+presentation choices into the coordinator, and do not push authorization into
+the app.
 
 ## 3. Before you write anything: characterize the house
 
@@ -226,8 +222,7 @@ keyword list should make it for you.
 
 ## 4. The coordinator
 
-The developer example's `coordinator/home.ts` (in `templates/home` of the MiakAPI
-repository) shows the shape: the configuration is a
+Keep the coordinator in the same shape: the configuration is a
 **pure function of its options**, so it can be tested without a relay, a control
 plane or a network. `coordinator/main.ts` is the only file that touches the
 outside world. Keep that split. It is what makes `test/home.test.ts` possible,
@@ -263,7 +258,7 @@ see the old value. The reverse order is a race that will reproduce once a month
 and waste a day.
 
 **Reject bad arguments with a typed application error.** `ApplicationCallError`
-carries a numeric code the component can branch on. Do not throw a bare `Error`
+carries a numeric code the app can branch on. Do not throw a bare `Error`
 for a caller mistake; the distinction between "you asked wrongly" and "something
 broke" is the one the interface needs most.
 
@@ -312,43 +307,6 @@ while it is true, and handle `outcome_unknown` exactly as below.
 fetch it. Put no household data in it — no names, rooms, devices or accounts —
 and read everything from state, which the coordinator filters per resident.
 
-### A semantic component (compatible)
-
-Import from `@miakapp/component`. The whole public surface is one module, and the
-whole rendering vocabulary is `ui.*`:
-
-```
-screen  stack  grid  section          layout
-text  status  progress  media         output
-button  toggle  input  select         interaction
-```
-
-You return one complete semantic tree per render; the trusted host draws it with
-its own components. You do not ship CSS, you do not ship a DOM, and you cannot
-style your way around the host. This is a constraint worth accepting rather than
-fighting: it is what lets the host stay accessible, themed and localized without
-auditing your code.
-
-Handlers are functions, not identifiers to wire up by hand:
-
-```ts
-ui.toggle({
-  id: 'living-room-light',
-  label: 'Living-room lamp',
-  value: asBoolean(home.state.get(LIGHT_ON)),
-  disabled: home.staging || !healthy,
-  pending,
-  onChange: (next) => void setLight(next),
-})
-```
-
-Handlers are registered for the render that created them, so a stale tree cannot
-fire an action against new state.
-
-The limits are real and enforced: 1 024 nodes, depth 32, 30 renders per second,
-32 outstanding calls, 8 KiB per text node. If you are approaching any of them you
-are building a dashboard the household will not read.
-
 ### Two states the interface must never hide
 
 **Staleness.** `home.state.stale` means the snapshot may no longer reflect the
@@ -382,7 +340,7 @@ code 7.
 
 ## 6. The intersection rule
 
-Every name a component may touch appears in **two** places, and the effective
+Every name an app may touch appears in **two** places, and the effective
 grant is the intersection:
 
 | `miakapp.yaml` → `requires` | `coordinator/home.ts` |
@@ -393,14 +351,13 @@ grant is the intersection:
 | `call` | `functions` |
 
 Asking for more than the coordinator grants **does not fail loudly at
-publication**. The component simply never receives that path, and the interface
+publication**. The app simply never receives that path, and the interface
 renders a hole — an empty card, a control that does nothing, a temperature that
 is permanently unavailable. This is the single most common way a Miakapp home
 breaks, and it breaks quietly.
 
-So: assert the correspondence in a test. The developer example's
-`test/home.test.ts` does exactly this, and it is the reason a mismatch fails in CI rather than in
-someone's living room. When you add a path, change four things in one commit —
+So: assert the correspondence in a test, so a mismatch fails in CI rather than
+in someone's living room. When you add a path, change four things in one commit —
 the state declaration, the access pattern, the `requires` entry, and the test.
 
 ## 7. The loop
@@ -413,8 +370,8 @@ Run it before every publication and in CI. It costs nothing and catches the
 artifact rules the runtime would reject anyway.
 
 Do not treat a check that exists as a check that runs. On 2026-09-14 this
-repository had a template and a component example that were both verified
-locally and built by nobody, because the workflow called `bun run check` and not
+repository had two example packages that were both verified locally and built
+by nobody, because the workflow called `bun run check` and not
 `check:packages`; when CI finally exercised them they failed three times in a
 row on defects that had been sitting there invisibly. If you add a package, add
 it to the job that runs in CI, then watch one run go green before believing it.
@@ -553,7 +510,7 @@ refused before any request: a key can never publish into the wrong house.
 
 Prefer one key per agent or machine, so the owner can revoke one without
 breaking the others. A coordinator running on the owner's machine still reads
-its own key from its environment (the developer example's `coordinator/main.ts`).
+its own key from its environment.
 
 If you are about to write a secret into `miakapp.yaml` or any file in the
 repository so something works, stop: that is the failure this design exists to
@@ -590,13 +547,9 @@ need them, or the platform repository, to build and publish a home.
 
 - `packages/cli/README.md` — every command and every tool, including what the
   pack writes and what it refuses to overwrite.
-- `templates/home/README.md` (MiakAPI repository, optional) — the developer
-  example: a coordinator and both interface kinds.
 - `docs/rfcs/0001` (Miakapp-V3) — wire protocol: ownership, collisions, `4409`.
-- `docs/rfcs/0002` — component runtime and the staleness rule. **The broker is
-  the authority for the guest ABI, not the RFC**: `component-runtime/src/runtime-broker.ts`
-  and `contract.ts` define the exact payloads, and the broker terminates the
-  instance rather than answering when a field is wrong.
+- `docs/rfcs/0002` — release pointer, capabilities and the staleness rule;
+  `docs/specs/2026-10-03-house-app-abi.md` — the app frame and its bridge.
 - `docs/rfcs/0003` — the coordinator SDK surface.
 - `docs/rfcs/0004` — Home Key bootstrap, scopes, publication.
 - `docs/rfcs/0005` — the trusted browser client.
