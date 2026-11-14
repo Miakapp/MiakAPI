@@ -330,6 +330,5 @@ describe('the docs send a new agent through the starter', () => {
       expect([name, text.includes('app/miakapp.ts')]).toEqual([name, true]);
       expect([name, /from '@miakapp\/app'/.test(text)]).toEqual([name, false]);
     }
-    expect(guide).toContain('optional developer');
   });
 });

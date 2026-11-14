@@ -11,11 +11,10 @@ client. It is currently an alpha while the Miakapp 4 stack is being completed.
 
 **Building a home with a coding agent?** Read
 [docs/agent-guide.md](docs/agent-guide.md) first. It covers the judgment the
-reference below does not: what the coordinator must authorize, why component
+reference below does not: what the coordinator must authorize, why app
 requirements and coordinator grants intersect silently, and which failures must
 never be retried. Start a home interface with the published CLI:
-`npx @miakapp/cli init --starter app`. [`templates/home`](templates/home) is an
-optional developer example that builds against this repository's sources.
+`npx @miakapp/cli init --starter app`.
 
 ## Coordinator requirements
 
