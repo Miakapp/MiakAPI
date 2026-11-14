@@ -58,6 +58,57 @@
   font-size: var(--mk-text-sm); font-weight: 600; white-space: nowrap;
 }
 
+/* Entry tile: the home screen opens pages, it does not show values */
+.mk-entry {
+  position: relative; display: grid; place-items: center; align-content: center; gap: var(--mk-2);
+  min-height: 132px; padding: var(--mk-4);
+  border-radius: var(--mk-radius); border: 1px solid var(--mk-rim);
+  background: var(--mk-surface); box-shadow: var(--mk-shadow);
+  -webkit-backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  backdrop-filter: blur(var(--mk-blur)) saturate(var(--mk-saturate));
+  color: inherit; font: 700 var(--mk-text-lg)/1.15 var(--mk-font); text-align: center; cursor: pointer;
+  transition: transform var(--mk-fast) var(--mk-spring);
+}
+.mk-entry:active { transform: scale(.96); }
+.mk-entry .glyph { font-size: 40px; line-height: 1; }
+.mk-entry.is-wide { grid-column: 1 / -1; min-height: 104px; }
+/* One small signal when something needs attention, never a full value */
+.mk-entry.has-attention::after {
+  content: ""; position: absolute; top: 14px; right: 14px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--mk-warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--mk-warn) 30%, transparent);
+}
+.mk-entries { display: grid; grid-template-columns: 1fr 1fr; gap: var(--mk-3); }
+@media (min-width: 720px) { .mk-entries { grid-template-columns: repeat(3, 1fr); } }
+
+/* State header: see first, big, then act */
+.mk-state { display: grid; gap: var(--mk-1); padding: var(--mk-5) var(--mk-2) var(--mk-4); text-align: center; }
+.mk-state .now { font-size: var(--mk-display); font-weight: 800; letter-spacing: var(--mk-tight); line-height: 1; }
+.mk-state .since { font-size: var(--mk-text-sm); color: var(--mk-ink-2); }
+.mk-state.is-open .now, .mk-state.is-alert .now { color: var(--mk-warn); }
+
+/* Action button: do. Disabled when it makes no sense, pending until confirmed */
+.mk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--mk-3); }
+.mk-action {
+  position: relative; display: grid; place-items: center; gap: var(--mk-2);
+  min-height: 112px; padding: var(--mk-4);
+  border: 0; border-radius: var(--mk-radius);
+  background: var(--mk-button); color: var(--mk-button-ink);
+  font: 800 var(--mk-text-lg)/1 var(--mk-font); cursor: pointer;
+  transition: transform var(--mk-fast) var(--mk-spring), opacity var(--mk-slow) var(--mk-ease);
+}
+.mk-action .glyph { font-size: 30px; }
+.mk-action:active { transform: scale(.96); }
+.mk-action.is-wide { grid-column: 1 / -1; }
+.mk-action:disabled { opacity: .35; cursor: default; transform: none; }
+.mk-action.is-pending { opacity: .7; }
+.mk-action.is-pending::after {
+  content: ""; position: absolute; top: 14px; right: 14px; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / .35); border-top-color: currentColor; animation: mk-spin .8s linear infinite;
+}
+/* Rare actions live apart, lower and quieter */
+.mk-rare { margin-top: var(--mk-6); padding: var(--mk-4); display: grid; gap: var(--mk-3); }
+.mk-rare h2 { margin: 0; font-size: var(--mk-text); font-weight: 700; color: var(--mk-ink-2); }
+
 /* Device tile: off, on, pending, stale */
 .mk-tile {
   position: relative; display: grid; gap: var(--mk-1); align-content: space-between;

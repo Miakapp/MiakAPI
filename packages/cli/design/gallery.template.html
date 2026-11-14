@@ -145,39 +145,45 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   <h2 class="sec">Example screens · tap the tiles</h2>
   <div class="stage" id="stage" data-theme="minuit">
 
-    <!-- 1. Accueil -->
+    <!-- 1. Accueil : it opens pages, it does not show values. No scrolling. -->
     <div>
       <div class="phone"><div class="screen">
         <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
         <div class="scroll">
-          <div class="row between" style="margin:6px 2px 2px">
-            <span class="mk-meta" style="font-weight:700">Friday, November 14</span>
-            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#cloud"/></svg>54° · Drizzle</span>
-          </div>
-          <div class="mk-display" style="margin:10px 2px 4px">Good evening,<br><span class="mk-gradient-text">the house</span> is on watch.</div>
-          <div class="hscroll" style="margin-top:12px">
-            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#bulb"/></svg>3 lights on</span>
-            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#thermo"/></svg>71 °F inside</span>
-            <span class="mk-chip"><svg class="i" style="width:16px;height:16px"><use href="#lock"/></svg>All locked</span>
-          </div>
-          <div class="sechead"><h3>Scenes</h3><a href="#">Edit</a></div>
-          <div class="hscroll">
-            <button class="mk-scene"><span class="emoji">🛋️</span>Evening</button>
-            <button class="mk-scene"><span class="emoji">🎬</span>Movie</button>
-            <button class="mk-scene"><span class="emoji">🌙</span>Bedtime</button>
-            <button class="mk-scene"><span class="emoji">👋</span>Leaving</button>
-          </div>
-          <div class="sechead"><h3>Rooms</h3><a href="#">See all</a></div>
-          <div class="grid2">
-            <div class="mk-glass room"><div class="row between"><span class="t">Living room</span><svg class="i"><use href="#tv"/></svg></div><div><div class="mk-label">71° · 2 lights on</div><div class="dots" style="margin-top:8px"><span class="on"></span><span class="on"></span><span></span><span></span></div></div></div>
-            <div class="mk-glass room"><div class="row between"><span class="t">Kitchen</span><svg class="i"><use href="#plug"/></svg></div><div><div class="mk-label">69° · 1 light on</div><div class="dots" style="margin-top:8px"><span class="on"></span><span></span><span></span></div></div></div>
-            <div class="mk-glass room"><div class="row between"><span class="t">Bedroom</span><svg class="i"><use href="#moon"/></svg></div><div><div class="mk-label">66° · blinds closed</div><div class="dots" style="margin-top:8px"><span></span><span></span></div></div></div>
-            <div class="mk-glass room"><div class="row between"><span class="t">Office</span><svg class="i"><use href="#bolt"/></svg></div><div><div class="mk-label">68° · all off</div><div class="dots" style="margin-top:8px"><span></span><span></span><span></span></div></div></div>
+          <div class="mk-display" style="margin:10px 2px 6px">Good evening</div>
+          <div class="mk-stale-banner" style="margin:0 0 16px">The gate is open</div>
+          <div class="mk-entries">
+            <button class="mk-entry has-attention"><span class="glyph">🚗</span>Gate</button>
+            <button class="mk-entry"><span class="glyph">🏡</span>House</button>
+            <button class="mk-entry"><span class="glyph">🪟</span>Shutters</button>
+            <button class="mk-entry"><span class="glyph">🛏️</span>Bedrooms</button>
+            <button class="mk-entry"><span class="glyph">🌡️</span>Heating</button>
+            <button class="mk-entry"><span class="glyph">📷</span>Cameras</button>
           </div>
         </div>
         <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
       </div></div>
-      <div class="caption">Home</div>
+      <div class="caption">Home · opens, never shows</div>
+    </div>
+
+    <!-- 1b. Une page d'appareil : state first, then actions, rare things apart -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
+        <div class="scroll">
+          <div class="row between" style="margin:4px 0 0">
+            <span class="iconbtn mk-glass"><svg class="i"><use href="#back"/></svg></span>
+          </div>
+          <div class="mk-state is-open" id="gate-state"><div class="now">Gate open</div><div class="since">for 4 min</div></div>
+          <div class="mk-actions">
+            <button class="mk-action" data-gate="open" disabled><span class="glyph">🚗</span>Open</button>
+            <button class="mk-action" data-gate="walk"><span class="glyph">🚶</span>Pedestrian</button>
+            <button class="mk-action is-wide" data-gate="close"><span class="glyph">🔒</span>Close</button>
+          </div>
+          <div class="mk-glass mk-rare"><h2>Adjust the recorded state</h2><button class="mk-button is-quiet">The gate is actually closed</button></div>
+        </div>
+      </div></div>
+      <div class="caption">A device page</div>
     </div>
 
     <!-- 2. Pièce -->
@@ -215,7 +221,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
           </div>
         </div>
       </div></div>
-      <div class="caption">A room</div>
+      <div class="caption">A room (grouped by room)</div>
     </div>
 
     <!-- 3. Énergie -->
@@ -305,7 +311,9 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 
   <h2 class="sec">Principles</h2>
   <div class="rules">
-    <div class="mk-glass"><b>The home first, not the devices</b>Organize by room and by moment of the day. Words residents use, never a technical identifier.</div>
+    <div class="mk-glass"><b>A remote, not a dashboard</b>The home screen opens pages and fits one screen. One page per thing. Upkeep (batteries, silent sensors) goes elsewhere.</div>
+    <div class="mk-glass"><b>Open, see, do</b>A tile opens. A page shows the state first, big, then large action buttons, then the rare ones apart. Never mixed.</div>
+    <div class="mk-glass"><b>Room or device type, never both</b>“Bedrooms” or “Shutters”, not a rooms section next to a temperatures section repeating them. Words residents use.</div>
     <div class="mk-glass"><b>What is on glows</b>One strong signal: the golden glow of something that is on. Everything else stays calm.</div>
     <div class="mk-glass"><b>One gradient per screen</b>The gradient is a signature: one title or one key number, not everywhere.</div>
     <div class="mk-glass"><b>Say when the home goes quiet</b>Dim stale values, show an honest banner, disable controls. Never a fake “up to date”.</div>
@@ -332,6 +340,20 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
       const on = t.classList.toggle('is-on');
       const v = t.querySelector('.value'); v.textContent = on ? v.dataset.on : v.dataset.off;
     }, 550);
+  }));
+  document.querySelectorAll('[data-gate]').forEach(b => b.addEventListener('click', () => {
+    const all = document.querySelectorAll('[data-gate]');
+    if (b.disabled || b.classList.contains('is-pending')) return;
+    b.classList.add('is-pending');
+    setTimeout(() => {
+      b.classList.remove('is-pending');
+      const open = b.dataset.gate !== 'close';
+      const st = document.getElementById('gate-state');
+      st.classList.toggle('is-open', open);
+      st.querySelector('.now').textContent = open ? 'Gate open' : 'Gate closed';
+      st.querySelector('.since').textContent = 'just now';
+      all.forEach(x => { x.disabled = open ? x.dataset.gate !== 'close' : x.dataset.gate === 'close'; });
+    }, 700);
   }));
   document.querySelectorAll('.mk-level').forEach(r => r.addEventListener('input', () => r.style.setProperty('--level', r.value + '%')));
   const kwh = [.18,.15,.14,.13,.14,.16,.32,.48,.36,.22,.2,.24,.38,.3,.22,.2,.26,.42,.62,.71,.55];
