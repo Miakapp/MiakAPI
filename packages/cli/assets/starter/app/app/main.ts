@@ -8,8 +8,11 @@
  *
  * 1. inventory the house (sources, values, freshness, possible actions);
  * 2. declare the paths and calls you need in miakapp.yaml (app.requires);
- * 3. give every path a resident-facing name in LABELS, and replace this layout
- *    with one organized the way people live in the house;
+ * 3. give every path a resident-facing name in LABELS and every group a page in
+ *    PAGES: the home screen is a launcher of large tiles that fits one phone
+ *    screen, each page is about one room or one type of device (never both),
+ *    with its state first and its actions below (`miakapp docs design`,
+ *    "How a home app works");
  * 4. add controls only for calls the owner authorized, and never retry one
  *    that failed with `outcome_unknown`.
  *
@@ -27,6 +30,12 @@ import { THEME_CSS } from './theme.js';
 /** Resident-facing names, from your inventory. A path without one shows as the path. */
 const LABELS: Readonly<Record<string, string>> = {};
 
+/**
+ * The home screen's tiles: one page each, the most used first. A group of
+ * state paths without an entry here gets a tile named after its first segment.
+ */
+const PAGES: Readonly<Record<string, { readonly label: string; readonly glyph: string }>> = {};
+
 const home = connect();
 const french = home.locale.toLowerCase().startsWith('fr');
 const TEXT = french
@@ -36,6 +45,7 @@ const TEXT = french
     yes: 'Oui',
     no: 'Non',
     missing: '—',
+    back: 'Retour',
   }
   : {
     empty: 'Nothing from this home is shared with this interface yet.',
@@ -43,6 +53,7 @@ const TEXT = french
     yes: 'Yes',
     no: 'No',
     missing: '—',
+    back: 'Back',
   };
 
 function element(tag: string, text?: string, className?: string): HTMLElement {
@@ -56,10 +67,10 @@ const style = document.createElement('style');
 style.textContent = `${THEME_CSS}
   /* The Miakapp bar floats over the bottom of the frame: keep that strip free. */
   body { margin: 0; min-height: 100vh; padding-bottom: 96px; box-sizing: border-box; }
-  h1 { margin: 0; padding: 28px 20px 4px; }
-  main { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: 16px; }
+  h1 { margin: 0; padding: 28px 20px 12px; }
+  main { padding: 0 16px 16px; max-width: 720px; margin: 0 auto; }
+  .back { margin: 20px 16px 0; }
   section { padding: 18px; }
-  h2 { margin: 0 0 10px; font-size: var(--mk-text-lg); font-weight: 800; text-transform: capitalize; }
   dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; }
   dt { color: var(--mk-ink-2); }
   dd { margin: 0; font-weight: 700; text-align: end; }
@@ -95,30 +106,61 @@ function format(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function render(state: HomeState): void {
-  title.textContent = home.name;
-  notice.className = state.stale ? 'mk-stale-banner' : '';
-  notice.textContent = state.stale ? TEXT.stale : '';
+/** The page on screen: null is the home screen (a launcher), otherwise a group. */
+let page: string | null = null;
+let last: HomeState | undefined;
 
-  const paths = home.paths();
-  if (paths.length === 0) {
-    main.replaceChildren(element('p', TEXT.empty, 'empty'));
-    return;
-  }
+function groupsOf(paths: readonly string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
   for (const path of paths) {
     const group = path.split('.')[0] ?? path;
     groups.set(group, [...groups.get(group) ?? [], path]);
   }
-  main.replaceChildren(...[...groups].map(([group, members]) => {
-    const section = element('section', undefined, state.stale ? 'mk-glass is-stale' : 'mk-glass');
-    const list = element('dl');
-    for (const path of members) {
-      list.append(element('dt', LABELS[path] ?? path), element('dd', format(state.values[path])));
+  return groups;
+}
+
+function show(next: string | null): void {
+  page = next;
+  if (last !== undefined) render(last);
+}
+
+function render(state: HomeState): void {
+  last = state;
+  notice.className = state.stale ? 'mk-stale-banner' : '';
+  notice.textContent = state.stale ? TEXT.stale : '';
+
+  const groups = groupsOf(home.paths());
+  if (groups.size === 0) {
+    title.textContent = home.name;
+    main.replaceChildren(element('p', TEXT.empty, 'empty'));
+    return;
+  }
+  const members = page === null ? undefined : groups.get(page);
+  if (page === null || members === undefined) {
+    // Home screen: it opens pages, it does not show values.
+    page = null;
+    title.textContent = home.name;
+    const entries = element('div', undefined, 'mk-entries');
+    for (const group of groups.keys()) {
+      const entry = element('button', undefined, 'mk-entry');
+      entry.append(element('span', PAGES[group]?.glyph ?? '•', 'glyph'), PAGES[group]?.label ?? group);
+      entry.addEventListener('click', () => show(group));
+      entries.append(entry);
     }
-    section.append(element('h2', group), list);
-    return section;
-  }));
+    main.replaceChildren(entries);
+    return;
+  }
+  // One page about one thing: what it is now, then (once you add calls) what to do.
+  title.textContent = PAGES[page]?.label ?? page;
+  const back = element('button', `← ${TEXT.back}`, 'mk-button is-quiet back');
+  back.addEventListener('click', () => show(null));
+  const section = element('section', undefined, state.stale ? 'mk-glass is-stale' : 'mk-glass');
+  const list = element('dl');
+  for (const path of members) {
+    list.append(element('dt', LABELS[path] ?? path), element('dd', format(state.values[path])));
+  }
+  section.append(list);
+  main.replaceChildren(back, section);
 }
 
 home.subscribe(render);
