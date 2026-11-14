@@ -372,6 +372,14 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
       if (this.#loopController.signal.aborted) break;
       if (end.failure !== undefined) this.#emitFailure(end.failure);
       if (this.#loopController.signal.aborted) break;
+      if (end.failure instanceof BrowserClientError
+        && end.failure.kind === 'authorization'
+        && !end.failure.retryable) {
+        // Asking again cannot change the answer: stop instead of looping.
+        this.#startDeferred?.reject(end.failure);
+        void this.stop();
+        break;
+      }
       this.#transition('reconnecting', undefined, end.failure);
       if (this.#loopController.signal.aborted) break;
       if (endedSession !== undefined
@@ -436,7 +444,11 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         return this.#options.credentialProvider.getCredential(request);
       })
       .then((value) => validateBrowserRelayCredential(value, this.#runtime.now()))
-      .catch(() => { throw browserUnavailable('Browser relay credential provider failed'); });
+      .catch((error: unknown) => {
+        // A permanent refusal (home deleted, access withdrawn) stays permanent.
+        if (error instanceof BrowserClientError && !error.retryable) throw error;
+        throw browserUnavailable('Browser relay credential provider failed');
+      });
     const timeout = this.#runtime.setTimer(() => {
       child.controller.abort(browserUnavailable('Browser relay credential request timed out'));
     }, Math.max(1, Math.min(timeoutMs, SESSION_PHASE_TIMEOUT_MS)));
