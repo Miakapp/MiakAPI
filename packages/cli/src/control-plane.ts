@@ -149,6 +149,7 @@ export async function exchangePublisherToken(
   discovery: Discovery,
   homeKey: string,
   options: { readonly fetch?: FetchLike } = {},
+  purpose: 'components' | 'push' = 'components',
 ): Promise<PublisherToken> {
   const keyId = homeKeyId(homeKey);
   const fetcher = options.fetch ?? globalThis.fetch;
@@ -159,7 +160,7 @@ export async function exchangePublisherToken(
       authorization: `Bearer ${homeKey}`,
       'content-type': 'application/json',
     },
-    body: requestBody({ purpose: 'components' }),
+    body: requestBody({ purpose }),
     // No request-side `cache` hint: Node and Bun have no HTTP cache to opt out
     // of, and the response-side no-store headers checked below are the actual
     // guarantee that this token is never stored by an intermediary.
@@ -209,4 +210,41 @@ export async function exchangePublisherToken(
     keyId,
     keyLabel: boundedString(key.label, 1, 64),
   });
+}
+
+/**
+ * Sends a notification to every device that turned notifications on for the
+ * home (`POST /v1/push` without a grant ID). Returns how many were reached.
+ */
+export async function sendNotification(
+  discovery: Discovery,
+  homeKey: string,
+  notification: { readonly title: string; readonly body: string },
+  options: { readonly fetch?: FetchLike } = {},
+): Promise<number> {
+  const token = await exchangePublisherToken(discovery, homeKey, options, 'push');
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const response = await fetcher(discovery.pushAudience, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${token.accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: requestBody(notification),
+    credentials: 'omit',
+    redirect: 'error',
+    referrerPolicy: 'no-referrer',
+  });
+  const document = parseJson(await readBoundedBody(response, 16_384)) as {
+    readonly delivered?: unknown;
+    readonly error?: { readonly code?: unknown };
+  };
+  if (response.status !== 202) {
+    throw authorizationError(
+      `Notification refused: ${String(document.error?.code ?? response.status)}`,
+      'Ask the owner to open the home, then Settings → turn on notifications on their device.',
+    );
+  }
+  return typeof document.delivered === 'number' ? document.delivered : 1;
 }

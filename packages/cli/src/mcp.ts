@@ -268,6 +268,22 @@ export const TOOLS: readonly ToolDefinition[] = [
     guarded: false,
   },
   {
+    name: 'miakapp_notify',
+    title: 'Notify the people of the home',
+    command: 'notify',
+    description:
+      'Send a push notification to every device that turned notifications on for the home of '
+      + 'the context (Settings → notifications in the home). Plain text, title up to 120 bytes, '
+      + 'body up to 1024. Use it for things a person should know now, not for routine state.',
+    args: [
+      { name: 'title', type: 'string', required: true, description: 'Notification title.' },
+      { name: 'body', type: 'string', required: true, description: 'Notification text.' },
+      CONTEXT_ARGUMENT,
+    ],
+    readOnly: false,
+    guarded: false,
+  },
+  {
     name: 'miakapp_discover',
     title: 'Inventory an existing Node-RED house',
     command: 'discover',
