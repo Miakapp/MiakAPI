@@ -57,6 +57,7 @@ const SHIM = `(() => {
     locale: navigator.language || 'en',
     theme: 'system',
     onThemeChange: () => () => {},
+    bar: { setButtons: () => {}, onSelect: () => () => {} },
     state: {
       get: (path) => values[path],
       values: () => values,

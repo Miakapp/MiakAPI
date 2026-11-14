@@ -59,11 +59,28 @@ glass; check dark themes twice (dark blue on darker blue is easy to miss).
 
 ## The Miakapp bar is not yours
 
-Miakapp draws its own bar outside your frame: the home, the resident's other
-homes, their account and sign-in methods. Do not draw a global navigation that
-duplicates it (home switcher, profile, sign out). In-app navigation between
-your own screens (rooms, energy…) is yours; `gallery.html` shows where a
-home's own one or two entries would sit next to Miakapp's.
+Miakapp draws its own bar at the bottom, outside your frame: the home, the
+resident's other homes, their account and sign-in methods. Do not draw a
+global navigation that duplicates it (bottom tab bar, home switcher, profile,
+sign out), and leave the bottom of your page free of fixed controls.
+
+A home may add **one or two buttons of its own** to that bar (rooms, energy…).
+Miakapp draws them; you name them and react to taps:
+
+```ts
+home.bar.setButtons([
+  { id: 'rooms', label: 'Pièces', icon: 'grid', active: true },
+  { id: 'energy', label: 'Énergie', icon: 'bolt' },
+]);
+home.bar.onSelect((id) => show(id ?? 'home')); // null: the home tab
+```
+
+At most two, labels of 16 characters at most, icons from `BAR_ICONS`
+(`grid`, `bolt`, `light`, `thermometer`, `camera`, `lock`, `list`, `chart`,
+`leaf`, `star`). Set them on every start, from the resident or the home's
+state if you like; Miakapp shows the last list straight away on the next visit.
+When you change screen yourself, call `setButtons` again with `active` on the
+screen shown.
 
 ## In the frame
 
