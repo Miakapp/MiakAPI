@@ -309,7 +309,7 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
   test('it dresses itself with the Miakapp tokens and follows the theme', () => {
     const fixture = frame({});
     runInNewContext(bundle, fixture.context);
-    expect(fixture.theme()).toBe('lumiere');
+    expect(fixture.theme()).toBe('minuit');
     expect(fixture.body.className).toBe('mk-app');
     expect(bundle).toContain('--mk-ink');
     expect(bundle).toContain('font/woff2');
@@ -324,7 +324,7 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
     runInNewContext(bundle, fixture.context);
     // The home screen opens pages; it shows no value.
     const entries = fixture.body.find('button').filter((node) => node.className === 'mk-entry');
-    expect(entries.map((node) => node.textContent)).toEqual(['•climate', '•zone']);
+    expect(entries.map((node) => node.textContent)).toEqual(['climate', 'zone']);
     expect(fixture.body.find('dd')).toEqual([]);
 
     entries[0]?.click();

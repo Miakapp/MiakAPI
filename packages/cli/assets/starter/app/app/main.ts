@@ -21,20 +21,29 @@
  * home is `./miakapp.ts`, the bridge copied from this CLI release.
  *
  * `./theme.ts` is the Miakapp design starting point (`miakapp docs design`):
- * tokens, four themes and component recipes. Minuit follows the resident's
- * dark mode, Lumière the light one. Keep it, restyle it or drop it.
+ * tokens, four themes, component recipes, line icons (`icon()`) and
+ * `holdToConfirm()` for actions nobody should trigger by accident. Minuit is
+ * the default and follows dark mode; Lumière follows a light preference. Keep
+ * it, restyle it or drop it.
  */
 import { connect, type HomeState, type Theme } from './miakapp.js';
-import { THEME_CSS } from './theme.js';
+import { THEME_CSS, icon, type IconName } from './theme.js';
 
 /** Resident-facing names, from your inventory. A path without one shows as the path. */
 const LABELS: Readonly<Record<string, string>> = {};
 
 /**
- * The home screen's tiles: one page each, the most used first. A group of
- * state paths without an entry here gets a tile named after its first segment.
+ * The home screen's tiles: one page each, the most used first. The first one
+ * is featured (wide and gold: the gate, the front door); give the others a
+ * hue each (`.mk-tint-*`: lilac, sky, peach, rose, mint, honey) and a line
+ * icon, never an emoji. A group of state paths without an entry here gets a
+ * plain tile named after its first segment.
  */
-const PAGES: Readonly<Record<string, { readonly label: string; readonly glyph: string }>> = {};
+const PAGES: Readonly<Record<string, {
+  readonly label: string;
+  readonly icon: IconName;
+  readonly tint?: 'lilac' | 'sky' | 'peach' | 'rose' | 'mint' | 'honey';
+}>> = {};
 
 const home = connect();
 const french = home.locale.toLowerCase().startsWith('fr');
@@ -65,38 +74,38 @@ function element(tag: string, text?: string, className?: string): HTMLElement {
 
 const style = document.createElement('style');
 style.textContent = `${THEME_CSS}
-  /* The Miakapp bar floats over the bottom of the frame: keep that strip free. */
-  body { margin: 0; min-height: 100vh; padding-bottom: 96px; box-sizing: border-box; }
-  h1 { margin: 0; padding: 28px 20px 12px; }
-  main { padding: 0 16px 16px; max-width: 720px; margin: 0 auto; }
-  .back { margin: 20px 16px 0; }
+  /* .mk-screen fills the phone and keeps the bottom strip free for the Miakapp bar. */
+  body { margin: 0; overscroll-behavior: none; }
   section { padding: 18px; }
   dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; }
   dt { color: var(--mk-ink-2); }
   dd { margin: 0; font-weight: 700; text-align: end; }
-  .mk-stale-banner { margin: 8px 16px 0; }
-  .empty { padding: 0 20px; color: var(--mk-ink-2); }
+  .empty { color: var(--mk-ink-2); }
   .is-stale dd { opacity: .55; }
 `;
 document.head.append(style);
 
-/** The resident's light or dark preference picks the theme; "system" asks the browser. */
+/** Minuit unless the resident prefers light; "system" asks the browser. */
 function applyTheme(preference: Theme): void {
-  const dark = preference === 'dark' || (preference === 'system'
-    && typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.dataset['theme'] = dark ? 'minuit' : 'lumiere';
+  const light = preference === 'light' || (preference === 'system'
+    && typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: light)').matches);
+  document.documentElement.dataset['theme'] = light ? 'lumiere' : 'minuit';
 }
 applyTheme(home.theme());
 home.onThemeChange(applyTheme);
 if (typeof matchMedia === 'function') {
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(home.theme()));
+  matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => applyTheme(home.theme()));
 }
 document.body.className = 'mk-app';
 
-const title = element('h1', undefined, 'mk-display');
+const screen = element('main', undefined, 'mk-screen');
+const header = document.createElement('div');
+const title = element('h1', undefined, 'mk-headline');
 const notice = document.createElement('p');
-const main = document.createElement('main');
-document.body.append(title, notice, main);
+const main = document.createElement('div');
+header.append(title);
+screen.append(header, notice, main);
+document.body.append(screen);
 
 function format(value: unknown): string {
   if (value === undefined || value === null) return TEXT.missing;
@@ -127,40 +136,55 @@ function show(next: string | null): void {
 function render(state: HomeState): void {
   last = state;
   notice.className = state.stale ? 'mk-stale-banner' : '';
+  header.replaceChildren(title);
   notice.textContent = state.stale ? TEXT.stale : '';
 
   const groups = groupsOf(home.paths());
   if (groups.size === 0) {
     title.textContent = home.name;
+    main.className = '';
     main.replaceChildren(element('p', TEXT.empty, 'empty'));
     return;
   }
   const members = page === null ? undefined : groups.get(page);
   if (page === null || members === undefined) {
-    // Home screen: it opens pages, it does not show values.
+    // Home screen: it opens pages, it does not show values. It fills the screen.
     page = null;
     title.textContent = home.name;
-    const entries = element('div', undefined, 'mk-entries');
-    for (const group of groups.keys()) {
-      const entry = element('button', undefined, 'mk-entry');
-      entry.append(element('span', PAGES[group]?.glyph ?? '•', 'glyph'), PAGES[group]?.label ?? group);
+    main.className = 'mk-entries';
+    const tiles: HTMLElement[] = [];
+    for (const [index, group] of [...groups.keys()].entries()) {
+      const spec = PAGES[group];
+      const classes = ['mk-entry'];
+      if (spec !== undefined && index === 0) classes.push('is-featured');
+      else if (spec?.tint !== undefined) classes.push(`mk-tint-${spec.tint}`);
+      const entry = element('button', undefined, classes.join(' '));
+      const glyph = element('span', undefined, 'mk-icon');
+      glyph.innerHTML = icon(spec?.icon ?? 'grid');
+      entry.append(glyph, element('span', spec?.label ?? group, 'name'));
       entry.addEventListener('click', () => show(group));
-      entries.append(entry);
+      tiles.push(entry);
     }
-    main.replaceChildren(entries);
+    main.replaceChildren(...tiles);
     return;
   }
   // One page about one thing: what it is now, then (once you add calls) what to do.
+  main.className = '';
   title.textContent = PAGES[page]?.label ?? page;
-  const back = element('button', `← ${TEXT.back}`, 'mk-button is-quiet back');
+  const back = element('button', undefined, 'mk-back');
+  back.innerHTML = icon('back');
+  back.ariaLabel = TEXT.back;
   back.addEventListener('click', () => show(null));
+  const top = element('div', undefined, 'mk-topbar');
+  top.append(back);
+  header.replaceChildren(top, title);
   const section = element('section', undefined, state.stale ? 'mk-glass is-stale' : 'mk-glass');
   const list = element('dl');
   for (const path of members) {
     list.append(element('dt', LABELS[path] ?? path), element('dd', format(state.values[path])));
   }
   section.append(list);
-  main.replaceChildren(back, section);
+  main.replaceChildren(section);
 }
 
 home.subscribe(render);

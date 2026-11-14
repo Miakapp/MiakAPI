@@ -31,10 +31,12 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; colo
 
 /* Stage: the screens take the selected theme */
 .stage { border-radius: 36px; padding: 34px 24px; display: flex; flex-wrap: wrap; gap: 30px; justify-content: center; align-items: flex-start; color: var(--mk-ink); background: var(--mk-bg-art), var(--mk-bg); font-family: var(--mk-font); font-variant-numeric: tabular-nums; transition: background .4s; }
-.phone { width: 340px; height: 720px; border-radius: 46px; padding: 10px; background: #0b0b0f; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .45); flex: none; }
+.phone { width: 390px; height: 844px; border-radius: 46px; padding: 10px; background: #0b0b0f; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .45); flex: none; }
 .screen { position: relative; width: 100%; height: 100%; border-radius: 37px; overflow: hidden; background: var(--mk-bg-art), var(--mk-bg); color: var(--mk-ink); }
 .screen .scroll { position: absolute; inset: 0; overflow: auto; padding: 46px 16px 100px; scrollbar-width: none; }
 .screen .status { position: absolute; top: 0; left: 0; right: 0; height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 6px 26px 0; font-size: 13px; font-weight: 700; z-index: 3; }
+.screen .mk-screen { position: absolute; inset: 0; overflow: auto; min-height: 0; padding: 50px 14px 96px; gap: 14px; scrollbar-width: none; }
+.screen .mk-headline { font-size: 34px; }
 .screen .tabdock { position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 3; }
 .caption { text-align: center; margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--mk-ink-2); }
 .tablet { width: 860px; max-width: 100%; aspect-ratio: 16 / 9.4; border-radius: 34px; padding: 12px; background: #0b0b0f; box-shadow: 0 40px 80px -30px rgb(0 0 0 / .45); }
@@ -102,30 +104,14 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   body.mk-app { padding: 18px 12px 60px; }
   .switch-themes { margin-left: 0; width: 100%; overflow-x: auto; }
   .stage { padding: 18px 8px; border-radius: 24px; }
-  .phone { width: 100%; max-width: 340px; }
+  .phone { width: 100%; max-width: 390px; }
   .tablet { aspect-ratio: auto; height: 900px; }
   .wall { grid-template-columns: 1fr; overflow: auto; }
 }
 </style>
 </head>
 <body class="mk-app">
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="bulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6M10 22h4"/></symbol>
-  <symbol id="thermo" viewBox="0 0 24 24"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></symbol>
-  <symbol id="blind" viewBox="0 0 24 24"><path d="M3 3h18M20 7H8M20 11H8M10 19h10M8 15h12M4 3v14"/><circle cx="4" cy="19" r="2"/></symbol>
-  <symbol id="lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
-  <symbol id="plug" viewBox="0 0 24 24"><path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
-  <symbol id="tv" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="m17 2-5 5-5-5"/></symbol>
-  <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
-  <symbol id="moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
-  <symbol id="home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
-  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
-  <symbol id="wind" viewBox="0 0 24 24"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2"/></symbol>
-  <symbol id="back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
-  <symbol id="grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
-  <symbol id="cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.7-9h1.8a4.5 4.5 0 1 1 0 9Z"/></symbol>
-  <symbol id="door" viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.6v16.8a.6.6 0 0 1-.8.6L5 20V5.6a1 1 0 0 1 .8-1L12.2 3a.7.7 0 0 1 .8.6Z"/></symbol>
-</svg>
+<!--__ICONS__-->
 
 <div class="wrap">
   <header class="top">
@@ -145,47 +131,108 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
   <h2 class="sec">Example screens · tap the tiles</h2>
   <div class="stage" id="stage" data-theme="minuit">
 
-    <!-- 1. Accueil : it opens pages, it does not show values. No scrolling. -->
+    <!-- 1. Home: it opens pages. Tiles of different sizes fill the screen; one featured; a hue per place -->
     <div>
       <div class="phone"><div class="screen">
         <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
-        <div class="scroll">
-          <div class="mk-display" style="margin:10px 2px 6px">Good evening</div>
-          <div class="mk-stale-banner" style="margin:0 0 16px">The gate is open</div>
+        <div class="mk-screen">
+          <div>
+            <div class="mk-eyebrow">Friday, November 14</div>
+            <h1 class="mk-headline">Good evening.<br>All <em>closed</em>.</h1>
+          </div>
           <div class="mk-entries">
-            <button class="mk-entry has-attention"><span class="glyph">🚗</span>Gate<span class="hint">Open</span></button>
-            <button class="mk-entry"><span class="glyph">🏡</span>House</button>
-            <button class="mk-entry"><span class="glyph">🪟</span>Shutters<span class="hint">Closed</span></button>
-            <button class="mk-entry"><span class="glyph">🛏️</span>Bedrooms</button>
-            <button class="mk-entry"><span class="glyph">🌡️</span>Heating</button>
-            <button class="mk-entry"><span class="glyph">📷</span>Cameras</button>
+            <button class="mk-entry is-featured">
+              <span class="mk-icon"><svg class="mk-i"><use href="#gate"/></svg></span>
+              <span class="grow"><span class="hint">Gate</span><span class="now">Closed</span></span>
+              <svg class="mk-i" style="opacity:.55"><use href="#chevron"/></svg>
+            </button>
+            <button class="mk-entry is-tall mk-tint-peach">
+              <span class="mk-icon"><svg class="mk-i"><use href="#sofa"/></svg></span>
+              <span><span class="big">71°</span><span class="name" style="margin-top:6px">Living room</span><span class="hint">45 % humidity</span></span>
+            </button>
+            <button class="mk-entry mk-tint-lilac">
+              <span class="mk-icon"><svg class="mk-i"><use href="#door"/></svg></span>
+              <span><span class="name">Front door</span><span class="hint">Locked</span></span>
+            </button>
+            <button class="mk-entry mk-tint-sky">
+              <span class="mk-icon"><svg class="mk-i"><use href="#shutter"/></svg></span>
+              <span><span class="name">Shutters</span><span class="hint">Closed</span></span>
+            </button>
+            <button class="mk-entry mk-tint-rose">
+              <span class="mk-icon"><svg class="mk-i"><use href="#bed"/></svg></span>
+              <span><span class="name">Bedrooms</span></span>
+            </button>
+            <button class="mk-entry mk-tint-mint">
+              <span class="mk-icon"><svg class="mk-i"><use href="#tree"/></svg></span>
+              <span><span class="name">Garden</span><span class="hint">Sprinklers off</span></span>
+            </button>
           </div>
         </div>
         <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
       </div></div>
       <div class="caption">Home · opens, never shows</div>
     </div>
-
-    <!-- 1b. Une page d'appareil : state first, then actions, rare things apart -->
+    <!-- 1b. A device page: the orb, the state, then actions under the thumb. Opening is held, closing is one tap -->
     <div>
       <div class="phone"><div class="screen">
         <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
-        <div class="scroll">
-          <div class="row between" style="margin:4px 0 0">
-            <span class="iconbtn mk-glass"><svg class="i"><use href="#back"/></svg></span>
-          </div>
-          <div class="mk-state is-open" id="gate-state"><div class="now">Gate open</div><div class="since">for 4 min</div></div>
+        <div class="mk-screen">
+          <div class="mk-topbar"><button class="mk-back" aria-label="Back"><svg class="mk-i"><use href="#back"/></svg></button>Gate</div>
+          <div class="mk-orb" id="gate-orb"><svg class="mk-i"><use href="#gate"/></svg></div>
+          <div class="mk-state" id="gate-state"><div class="now">Closed</div><div class="since is-live">Live</div></div>
           <div class="mk-actions">
-            <button class="mk-action" data-gate="open" disabled><span class="glyph">🚗</span>Open</button>
-            <button class="mk-action" data-gate="walk"><span class="glyph">🚶</span>Pedestrian</button>
-            <button class="mk-action is-wide" data-gate="close"><span class="glyph">🔒</span>Close</button>
+            <button class="mk-action is-hold" data-gate="open"><svg class="mk-i"><use href="#unlock"/></svg><span>Open<span class="how">Hold</span></span></button>
+            <button class="mk-action is-hold" data-gate="walk"><svg class="mk-i"><use href="#walk"/></svg><span>Pedestrian<span class="how">Hold</span></span></button>
+            <button class="mk-action is-wide" data-gate="close" disabled><svg class="mk-i"><use href="#lock"/></svg>Close</button>
           </div>
-          <div class="mk-glass mk-rare"><h2>Adjust the recorded state</h2><button class="mk-button is-quiet">The gate is actually closed</button></div>
+          <div class="mk-rare"><button>Adjust the recorded state</button></div>
         </div>
+        <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
       </div></div>
-      <div class="caption">A device page</div>
+      <div class="caption">A device page · hold “Open”, then tap “Close”</div>
     </div>
-
+    <!-- 1c. The same home while the gate is open: the featured tile turns warm and offers the safe shortcut -->
+    <div>
+      <div class="phone"><div class="screen">
+        <div class="status"><span>21:47</span><span>●●● 87 %</span></div>
+        <div class="mk-screen">
+          <div>
+            <div class="mk-eyebrow">Friday, November 14</div>
+            <h1 class="mk-headline">Good evening.<br>Gate <em class="is-alert">open</em>.</h1>
+          </div>
+          <div class="mk-entries">
+            <div class="mk-entry is-featured has-attention" role="group">
+              <button class="mk-open" aria-label="Gate"></button>
+              <span class="mk-icon"><svg class="mk-i"><use href="#gate"/></svg></span>
+              <span class="grow"><span class="hint">Gate</span><span class="now">Open</span><span class="hint">for 4 min</span></span>
+              <button class="mk-shortcut"><svg class="mk-i"><use href="#lock"/></svg>Close</button>
+            </div>
+            <button class="mk-entry is-tall mk-tint-peach">
+              <span class="mk-icon"><svg class="mk-i"><use href="#sofa"/></svg></span>
+              <span><span class="big">71°</span><span class="name" style="margin-top:6px">Living room</span><span class="hint">45 % humidity</span></span>
+            </button>
+            <button class="mk-entry mk-tint-lilac">
+              <span class="mk-icon"><svg class="mk-i"><use href="#door"/></svg></span>
+              <span><span class="name">Front door</span><span class="hint">Locked</span></span>
+            </button>
+            <button class="mk-entry mk-tint-sky">
+              <span class="mk-icon"><svg class="mk-i"><use href="#shutter"/></svg></span>
+              <span><span class="name">Shutters</span><span class="hint">Closed</span></span>
+            </button>
+            <button class="mk-entry mk-tint-rose">
+              <span class="mk-icon"><svg class="mk-i"><use href="#bed"/></svg></span>
+              <span><span class="name">Bedrooms</span></span>
+            </button>
+            <button class="mk-entry mk-tint-mint">
+              <span class="mk-icon"><svg class="mk-i"><use href="#tree"/></svg></span>
+              <span><span class="name">Garden</span><span class="hint">Sprinklers off</span></span>
+            </button>
+          </div>
+        </div>
+        <div class="tabdock"><nav class="mk-tabbar mk-glass miakapp-bar" aria-label="Miakapp bar"><a aria-current="page" href="#"><svg class="i"><use href="#home"/></svg>Home</a><span class="agent-slot"><a href="#"><svg class="i"><use href="#grid"/></svg>Rooms</a><a href="#"><svg class="i"><use href="#bolt"/></svg>Energy</a></span><a href="#" class="me"><span class="avatar">A</span>Me</a></nav></div>
+      </div></div>
+      <div class="caption">Home · something to close stands out</div>
+    </div>
     <!-- 2. Pièce -->
     <div>
       <div class="phone"><div class="screen">
@@ -197,10 +244,10 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
           </div>
           <div class="mk-display" style="margin:8px 2px 14px">Living room</div>
           <div class="grid2">
-            <button class="mk-tile is-on" data-toggle><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Ceiling</div><div class="value" data-on="80 %" data-off="Off">80 %</div></span></button>
-            <button class="mk-tile is-on" data-toggle><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Arc lamp</div><div class="value" data-on="On" data-off="Off">On</div></span></button>
-            <button class="mk-tile" data-toggle><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">LED strip</div><div class="value" data-on="On" data-off="Off">Off</div></span></button>
-            <button class="mk-tile" data-toggle><span class="mk-icon"><svg class="i"><use href="#wind"/></svg></span><span><div class="name">Fan</div><div class="value" data-on="Speed 2" data-off="Off">Off</div></span></button>
+            <button class="mk-tile is-on" data-toggle><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Ceiling</div><div class="value" data-on="80 %" data-off="Off">80 %</div></span></button>
+            <button class="mk-tile is-on" data-toggle><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Arc lamp</div><div class="value" data-on="On" data-off="Off">On</div></span></button>
+            <button class="mk-tile" data-toggle><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">LED strip</div><div class="value" data-on="On" data-off="Off">Off</div></span></button>
+            <button class="mk-tile" data-toggle><span class="mk-icon"><svg class="i"><use href="#fan"/></svg></span><span><div class="name">Fan</div><div class="value" data-on="Speed 2" data-off="Off">Off</div></span></button>
           </div>
           <div class="mk-glass dial" style="margin-top:12px">
             <svg viewBox="0 0 200 170">
@@ -212,12 +259,12 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             <div class="row"><button class="mk-button is-quiet" style="width:56px">−</button><button class="mk-button" style="width:56px">+</button></div>
           </div>
           <div class="mk-glass" style="margin-top:12px;padding:14px">
-            <div class="row between" style="margin-bottom:10px"><span class="row" style="font-weight:800"><svg class="i"><use href="#blind"/></svg>Blinds</span><span class="mk-label">60 % open</span></div>
+            <div class="row between" style="margin-bottom:10px"><span class="row" style="font-weight:800"><svg class="i"><use href="#shutter"/></svg>Blinds</span><span class="mk-label">60 % open</span></div>
             <input class="mk-level" type="range" value="60" style="--level:60%" aria-label="Blinds">
           </div>
           <div class="mk-glass ir" style="margin-top:12px">
             <div class="row between"><span class="row" style="font-weight:800"><svg class="i"><use href="#tv"/></svg>TV</span><span class="mk-meta">via infrared</span></div>
-            <div class="pad"><button>⏻</button><button>🔇</button><button>Netflix</button><button>Vol −</button><button>HDMI</button><button>Vol +</button></div>
+            <div class="pad"><button aria-label="Power"><svg class="mk-i"><use href="#power"/></svg></button><button aria-label="Mute"><svg class="mk-i"><use href="#mute"/></svg></button><button>Netflix</button><button>Vol −</button><button>HDMI</button><button>Vol +</button></div>
           </div>
         </div>
       </div></div>
@@ -267,10 +314,10 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
           <div class="col">
             <div class="mk-title">Scenes</div>
             <div class="grid2">
-              <button class="mk-scene"><span class="emoji">🛋️</span>Evening</button>
-              <button class="mk-scene"><span class="emoji">🎬</span>Movie</button>
-              <button class="mk-scene"><span class="emoji">🌙</span>Bedtime</button>
-              <button class="mk-scene"><span class="emoji">👋</span>Leaving</button>
+              <button class="mk-scene"><svg class="mk-i"><use href="#sofa"/></svg>Evening</button>
+              <button class="mk-scene"><svg class="mk-i"><use href="#tv"/></svg>Movie</button>
+              <button class="mk-scene"><svg class="mk-i"><use href="#moon"/></svg>Bedtime</button>
+              <button class="mk-scene"><svg class="mk-i"><use href="#walk"/></svg>Leaving</button>
             </div>
             <div class="mk-glass" style="padding:14px">
               <div class="row between"><b>Heating</b><input class="mk-switch" type="checkbox" checked aria-label="Heating"></div>
@@ -281,7 +328,7 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
             <div class="mk-title">Front door</div>
             <div class="cam"><span class="live">LIVE</span></div>
             <div class="grid2">
-              <button class="mk-tile is-on" data-toggle style="min-height:96px"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Porch</div><div class="value" data-on="On" data-off="Off">On</div></span></button>
+              <button class="mk-tile is-on" data-toggle style="min-height:96px"><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Porch</div><div class="value" data-on="On" data-off="Off">On</div></span></button>
               <button class="mk-tile" data-toggle style="min-height:96px"><span class="mk-icon"><svg class="i"><use href="#door"/></svg></span><span><div class="name">Gate</div><div class="value" data-on="Open" data-off="Closed">Closed</div></span></button>
             </div>
           </div>
@@ -303,23 +350,25 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 
   <h2 class="sec">States an interface must show</h2>
   <div class="states" id="states" data-theme="minuit">
-    <div><button class="mk-tile" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">Off</div></span></button><div class="lbl">Off</div></div>
-    <div><button class="mk-tile is-on" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">On</div></span></button><div class="lbl">On</div></div>
-    <div><button class="mk-tile is-pending" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">Waiting for the home…</div></span></button><div class="lbl">Command sent</div></div>
-    <div><button class="mk-tile is-stale" style="width:100%" disabled><span class="mk-icon"><svg class="i"><use href="#bulb"/></svg></span><span><div class="name">Lamp</div><div class="value">On 6 min ago</div></span></button><div class="lbl">Stale value</div></div>
+    <div><button class="mk-tile" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Lamp</div><div class="value">Off</div></span></button><div class="lbl">Off</div></div>
+    <div><button class="mk-tile is-on" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Lamp</div><div class="value">On</div></span></button><div class="lbl">On</div></div>
+    <div><button class="mk-tile is-pending" style="width:100%"><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Lamp</div><div class="value">Waiting for the home…</div></span></button><div class="lbl">Command sent</div></div>
+    <div><button class="mk-tile is-stale" style="width:100%" disabled><span class="mk-icon"><svg class="i"><use href="#light"/></svg></span><span><div class="name">Lamp</div><div class="value">On 6 min ago</div></span></button><div class="lbl">Stale value</div></div>
   </div>
 
   <h2 class="sec">Principles</h2>
   <div class="rules">
-    <div class="mk-glass"><b>A remote, not a dashboard</b>The home screen opens pages and fits one screen. One page per thing. Upkeep (batteries, silent sensors) goes elsewhere.</div>
-    <div class="mk-glass"><b>Open, see, do</b>A tile opens. A page shows the state first, big, then large action buttons, then the rare ones apart. Never mixed.</div>
-    <div class="mk-glass"><b>Room or device type, never both</b>“Bedrooms” or “Shutters”, not a rooms section next to a temperatures section repeating them. Words residents use.</div>
-    <div class="mk-glass"><b>What is on glows</b>One strong signal: the golden glow of something that is on. Everything else stays calm.</div>
-    <div class="mk-glass"><b>One gradient per screen</b>The gradient is a signature: one title or one key number, not everywhere.</div>
+    <div class="mk-glass"><b>A remote, not a dashboard</b>The home screen opens pages and fills one screen, no more. One page per thing. Upkeep (batteries, silent sensors) goes elsewhere.</div>
+    <div class="mk-glass"><b>A living background</b>Keep the theme’s halos (<code>--mk-bg-art</code>): glass needs light behind it. A flat colour makes every tile look dead.</div>
+    <div class="mk-glass"><b>One featured tile, then sizes</b>The thing most reached for is wide and gold, first. Others vary: a tall tile for a big number, regular ones, a wide one to close the grid.</div>
+    <div class="mk-glass"><b>A hue per place, gold for the star</b>A discreet tint per place or kind of device (<code>.mk-tint-*</code>) tells tiles apart. One hue per tile, never more.</div>
+    <div class="mk-glass"><b>Line icons, never emoji</b>Emoji bring their own colours and styles. Use the shipped icons (<code>icons.svg</code>, <code>icon()</code>).</div>
+    <div class="mk-glass"><b>Open: never by accident</b>Actions that open, unlock or start sit together on the first row and are <em>held</em> to confirm. Never from the home screen.</div>
+    <div class="mk-glass"><b>Close: never forgotten</b>Alone on its row, one tap. While something is open it becomes the gold button, and the home tile turns warm with a Close shortcut.</div>
+    <div class="mk-glass"><b>Buttons never move</b>Open or closed, each button keeps its place; only its emphasis changes. The thumb learns where to tap.</div>
     <div class="mk-glass"><b>Say when the home goes quiet</b>Dim stale values, show an honest banner, disable controls. Never a fake “up to date”.</div>
-    <div class="mk-glass"><b>Big fingers, little text</b>44 px targets at least, tabular digits, three text sizes per screen.</div>
-    <div class="mk-glass"><b>Free to change everything</b>The tokens are a starting point. Make the home’s own theme with its residents.</div>
   </div>
+</div>
 </div>
 
 <script>
@@ -341,20 +390,38 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
       const v = t.querySelector('.value'); v.textContent = on ? v.dataset.on : v.dataset.off;
     }, 550);
   }));
-  document.querySelectorAll('[data-gate]').forEach(b => b.addEventListener('click', () => {
-    const all = document.querySelectorAll('[data-gate]');
-    if (b.disabled || b.classList.contains('is-pending')) return;
+  // The gate: opening is held (the gauge fills), closing is one tap. Buttons never move.
+  const gateButtons = document.querySelectorAll('[data-gate]');
+  function setGate(open) {
+    const st = document.getElementById('gate-state');
+    st.classList.toggle('is-open', open);
+    document.getElementById('gate-orb').classList.toggle('is-open', open);
+    st.querySelector('.now').textContent = open ? 'Open' : 'Closed';
+    st.querySelector('.since').textContent = open ? 'Open just now' : 'Live';
+    gateButtons.forEach(x => {
+      const closing = x.dataset.gate === 'close';
+      x.disabled = open ? !closing : closing;
+      x.classList.toggle('is-primary', closing && open);
+    });
+  }
+  function act(b, open) {
     b.classList.add('is-pending');
-    setTimeout(() => {
-      b.classList.remove('is-pending');
-      const open = b.dataset.gate !== 'close';
-      const st = document.getElementById('gate-state');
-      st.classList.toggle('is-open', open);
-      st.querySelector('.now').textContent = open ? 'Gate open' : 'Gate closed';
-      st.querySelector('.since').textContent = 'just now';
-      all.forEach(x => { x.disabled = open ? x.dataset.gate !== 'close' : x.dataset.gate === 'close'; });
-    }, 700);
-  }));
+    setTimeout(() => { b.classList.remove('is-pending'); setGate(open); }, 700);
+  }
+  gateButtons.forEach(b => {
+    if (b.dataset.gate === 'close') { b.addEventListener('click', () => { if (!b.disabled) act(b, false); }); return; }
+    let t0 = 0, raf = 0;
+    const stop = () => { t0 = 0; cancelAnimationFrame(raf); b.style.setProperty('--hold', 0); };
+    const tick = now => {
+      if (!t0) return;
+      const p = Math.min(1, (now - t0) / 600);
+      b.style.setProperty('--hold', p);
+      if (p < 1) raf = requestAnimationFrame(tick); else { stop(); act(b, true); }
+    };
+    b.addEventListener('pointerdown', e => { if (b.disabled) return; e.preventDefault(); t0 = performance.now(); raf = requestAnimationFrame(tick); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stop));
+    b.addEventListener('contextmenu', e => e.preventDefault());
+  });
   document.querySelectorAll('.mk-level').forEach(r => r.addEventListener('input', () => r.style.setProperty('--level', r.value + '%')));
   const kwh = [.18,.15,.14,.13,.14,.16,.32,.48,.36,.22,.2,.24,.38,.3,.22,.2,.26,.42,.62,.71,.55];
   const max = Math.max(...kwh), bars = document.getElementById('bars'), now = kwh.length - 1;

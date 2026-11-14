@@ -54,10 +54,12 @@ publish.
 ## Design
 
 `miakapp docs design` prints a short design guide and the directory of the
-files it describes: `tokens.css` (four themes: Minuit, Lumière, Miel, Craie),
-`components.css` (glass, device tile, scene, switch, level slider, stale
-banner), `fonts.css` (Manrope as a `data:` URL, since the frame has no network)
-and `gallery.html`, example screens to open in a browser. They are a starting
+files it describes: `tokens.css` (four themes: Minuit, Lumière, Miel, Craie,
+and a hue per place), `components.css` (screen, entry tiles, orb, state,
+held and primary actions, device tile, scene, switch, level slider, stale
+banner), `icons.svg` (line icons), `fonts.css` (Manrope as a `data:` URL, since
+the frame has no network) and `gallery.html`, example screens to open in a
+browser. They are a starting
 point, not a framework: copy, change or ignore them.
 
 Maintainers: the generated files (`fonts.css`, `gallery.html`, the starter's
