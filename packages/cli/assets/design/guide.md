@@ -62,7 +62,9 @@ glass; check dark themes twice (dark blue on darker blue is easy to miss).
 Miakapp draws its own bar at the bottom, outside your frame: the home, the
 resident's other homes, their account and sign-in methods. Do not draw a
 global navigation that duplicates it (bottom tab bar, home switcher, profile,
-sign out), and leave the bottom of your page free of fixed controls.
+sign out). The bar floats over the bottom of your frame: keep **96 px of
+padding at the bottom** of your page and put no fixed control there (the
+starter does).
 
 A home may add **one or two buttons of its own** to that bar (rooms, energy…).
 Miakapp draws them; you name them and react to taps:
