@@ -18,7 +18,7 @@ import { homedir, hostname } from 'node:os';
 import { installPack } from './agent-pack.js';
 import { CLI_VERSION } from './version.js';
 import { prepareArtifact, type Artifact } from './artifact.js';
-import { exchangePublisherToken, fetchDiscovery, homeKeyId, homeUrl } from './control-plane.js';
+import { exchangePublisherToken, fetchDiscovery, homeKeyId, homeUrl, sendNotification } from './control-plane.js';
 import {
   configDirectory,
   contextNameError,
@@ -153,6 +153,7 @@ Commands
   discover                Inventory an existing Node-RED installation offline
   check                   Validate the project and the artifact offline
   status                  Read the live generation and release of the home
+  notify                  Notify every device that turned notifications on for the home
   publish                 Upload, finalize and activate the built artifact
   activate                Activate an already finalized digest at a new generation
   rollback                Alias of activate, for returning to a known-good digest
@@ -242,6 +243,7 @@ export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   discover: ['flows'],
   check: [],
   status: ['context'],
+  notify: ['title', 'body', 'context'],
   publish: ['expected-generation', 'generation', 'release', 'context'],
   activate: ['sha256', 'expected-generation', 'generation', 'context'],
   rollback: ['sha256', 'expected-generation', 'generation', 'context'],
@@ -1139,6 +1141,27 @@ async function runStatus(host: CliHost, invocation: Invocation): Promise<Command
   return { ...result, json: { ...result.json, active: true } };
 }
 
+/** Needs only a paired context (`--context` or the current one), not a project. */
+async function runNotify(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const title = invocation.options.get('title')?.trim();
+  const body = invocation.options.get('body')?.trim();
+  if (!title || !body) {
+    throw usageError('Usage: miakapp notify --title <title> --body <body>', 'Example: miakapp notify --title Door --body "The front door is open"');
+  }
+  const directory = storeDirectory(host);
+  const name = explicitContext(host, invocation) ?? (await readContexts(directory)).current ?? undefined;
+  if (name === undefined) throw usageError('No context: run miakapp pair first, or pass --context <name>');
+  const { context, homeKey } = await readCredential(directory, name);
+  const options = host.fetch === undefined ? {} : { fetch: host.fetch };
+  const discovery = await fetchDiscovery({ issuer: context.issuer, ...options });
+  const delivered = await sendNotification(discovery, homeKey, { title, body }, options);
+  return {
+    summary: `Notified ${delivered} device${delivered === 1 ? '' : 's'} of ${context.homeId}`,
+    fields: [['home', context.homeId], ['delivered', delivered]],
+    json: { home_id: context.homeId, delivered },
+  };
+}
+
 function defaultLabel(host: CliHost): string {
   const machine = (host.hostname?.() ?? hostname()).replace(/[^A-Za-z0-9._-]/g, '-');
   return `miakapp-cli@${machine === '' ? 'unknown' : machine}`.slice(0, 64);
@@ -1426,6 +1449,8 @@ export async function dispatch(host: CliHost, invocation: Invocation): Promise<C
       return await runContext(host, invocation);
     case 'status':
       return await runStatus(host, invocation);
+    case 'notify':
+      return await runNotify(host, invocation);
     case 'init':
       return await runInit(host, invocation);
     case 'agent-pack':
