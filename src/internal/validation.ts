@@ -437,7 +437,7 @@ export function validateConfiguration(value: unknown): CoordinatorConfiguration 
 }
 
 export function validateCoordinatorOptions(value: unknown): CoordinatorOptions {
-  const options = exactObject(value, ['name', 'accessTokenProvider'], ['logger'], 'options');
+  const options = exactObject(value, ['name', 'accessTokenProvider'], ['logger', 'direct'], 'options');
   const provider = options.accessTokenProvider;
   if (!isAccessTokenProvider(provider)) {
     throw new TypeError('options.accessTokenProvider must implement getAccessToken');
@@ -447,9 +447,16 @@ export function validateCoordinatorOptions(value: unknown): CoordinatorOptions {
     throw new TypeError('options.logger must implement write');
   }
   const name = validateCoordinatorName(options.name);
-  return logger === undefined
-    ? Object.freeze({ name, accessTokenProvider: provider })
-    : Object.freeze({ name, accessTokenProvider: provider, logger });
+  const direct = options.direct;
+  if (direct !== undefined && typeof direct !== 'boolean' && (typeof direct !== 'object' || direct === null)) {
+    throw new TypeError('options.direct must be a boolean or an object');
+  }
+  return Object.freeze({
+    name,
+    accessTokenProvider: provider,
+    ...(logger === undefined ? {} : { logger }),
+    ...(direct === undefined ? {} : { direct: direct as CoordinatorOptions['direct'] }),
+  }) as CoordinatorOptions;
 }
 
 export function validateAccessToken(value: unknown, now: number): AccessToken {
@@ -525,9 +532,14 @@ export function validateBrowserClientOptions(value: unknown): BrowserClientOptio
   const options = exactObject(
     value,
     ['homeId', 'credentialProvider'],
-    ['logger'],
+    ['logger', 'direct'],
     'options',
   );
+  const direct = options.direct as { load?: unknown; save?: unknown } | undefined;
+  if (direct !== undefined && (typeof direct !== 'object' || direct === null
+    || typeof direct.load !== 'function' || typeof direct.save !== 'function')) {
+    throw new TypeError('options.direct must implement load and save');
+  }
   const homeId = boundedString(options.homeId, 3, 63, 'options.homeId');
   if (!HOME_ID.test(homeId)) throw new TypeError('options.homeId is invalid');
   if (!isBrowserRelayCredentialProvider(options.credentialProvider)) {
@@ -540,9 +552,11 @@ export function validateBrowserClientOptions(value: unknown): BrowserClientOptio
     homeId,
     credentialProvider: options.credentialProvider,
   });
-  return options.logger === undefined
-    ? base
-    : Object.freeze({ ...base, logger: options.logger });
+  return Object.freeze({
+    ...base,
+    ...(options.logger === undefined ? {} : { logger: options.logger as BrowserClientOptions['logger'] }),
+    ...(direct === undefined ? {} : { direct: direct as BrowserClientOptions['direct'] }),
+  }) as BrowserClientOptions;
 }
 
 export function validateBrowserCallOptions(value: unknown): BrowserCallOptions {

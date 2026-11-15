@@ -55,11 +55,25 @@ export interface BrowserClientLogger {
   write(record: BrowserClientLogRecord): void;
 }
 
+/**
+ * Where the client keeps a home's direct coordinates and the resident's local
+ * ticket between visits (one per account and home). With it, the client races
+ * a direct local-network session against the relay and keeps the first ready,
+ * so the home opens fast at home and without the internet.
+ */
+export interface BrowserDirectStore {
+  load(): unknown;
+  save(value: unknown): void;
+}
+
 export interface BrowserClientOptions {
   readonly homeId: string;
   readonly credentialProvider: BrowserRelayCredentialProvider;
   readonly logger?: BrowserClientLogger;
+  readonly direct?: BrowserDirectStore;
 }
+
+export type BrowserTransport = 'relay' | 'direct';
 
 export interface BrowserCoordinatorStatus {
   readonly name: string;
@@ -148,6 +162,8 @@ export interface BrowserClientErrors {
 
 export interface BrowserClient {
   readonly status: BrowserClientStatus;
+  /** How the current session reaches the home, once one is open. */
+  readonly transport: BrowserTransport | undefined;
   readonly home: BrowserHome;
   readonly state: BrowserState;
   readonly calls: BrowserCalls;

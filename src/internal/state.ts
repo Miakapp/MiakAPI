@@ -24,6 +24,8 @@ export interface StateHost {
   activeDeclarations(): ActiveDeclarations | undefined;
   nextRequestId(): number;
   emitFailure(failure: CoordinatorError): void;
+  /** Applies a batch to the direct endpoint; true when one is running. */
+  applyDirect?(mutations: readonly StateMutation[]): boolean;
 }
 
 interface PendingStateSet {
@@ -81,7 +83,15 @@ export class StateManager implements CoordinatorState {
     if (signal?.aborted === true) return Promise.reject(cancelled('not_dispatched'));
     const session = this.#host.readySession();
     const active = this.#host.activeDeclarations();
-    if (session === undefined || active === undefined) return Promise.reject(unavailable());
+    if (session === undefined || active === undefined) {
+      // Without the relay, a coordinator with a direct endpoint keeps the home
+      // running on the local network: the batch applies there, and is replayed
+      // to the relay by the next STATE_SYNC as an acknowledged value.
+      if (this.#host.applyDirect?.(validated) !== true) return Promise.reject(unavailable());
+      this.#sequence += 1;
+      this.#declarations.recordConfirmed(validated, this.#declarations.desired.revisions.state, this.#sequence);
+      return Promise.resolve(Object.freeze({ outcome: 'applied' as const }));
+    }
     if (this.#pending.size >= LIMITS.declarationsPerCoordinator) {
       return Promise.reject(unavailable('State mutation concurrency limit is reached'));
     }
@@ -93,6 +103,7 @@ export class StateManager implements CoordinatorState {
         ? [pathId, 1]
         : [pathId, 0, mutation.value];
     });
+    this.#host.applyDirect?.(validated);
     const id = this.#host.nextRequestId();
     const deferred = createDeferred<StateReceipt>();
     this.#sequence += 1;
