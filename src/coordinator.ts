@@ -9,12 +9,16 @@ import type {
   CoordinatorOptions,
   CoordinatorStatus,
   DeclarationReceipt,
+  FunctionHandler,
   LifecycleEvent,
+  ProtocolValue,
   ReadySession,
   StartOptions,
+  StateMutation,
   StopOptions,
   Unsubscribe,
 } from './api.js';
+import { ApplicationCallError } from './api.js';
 import { Opcode, type Frame } from './protocol/codec.js';
 import {
   AccessManager,
@@ -46,6 +50,7 @@ import { delay, type CoordinatorRuntime, type RuntimeTimer } from './internal/ru
 import { RelaySession } from './internal/session.js';
 import { createProductionRuntime } from './internal/socket.js';
 import { StateManager, type StateHost } from './internal/state.js';
+import { DIRECT_FUNCTION_PREFIX, DirectServer } from './internal/direct-server.js';
 import {
   validateAccessToken,
   validateConfiguration,
@@ -137,11 +142,26 @@ class CoordinatorImpl implements
   #sessionEstablishedAtMs: number | undefined;
   #relayHost: string | undefined;
   #goawayRetryAfterMs: number | undefined;
+  #direct: DirectServer | undefined;
+  #directClosed = false;
 
   constructor(options: CoordinatorOptions, runtime: CoordinatorRuntime) {
     this.#options = options;
     this.#runtime = runtime;
     this.#declarations = new DeclarationManager(this);
+    if (options.direct !== false) {
+      const name = `${DIRECT_FUNCTION_PREFIX}${options.name}`;
+      // Residents fetch this coordinator's local coordinates and their own
+      // local ticket through the relay, which vouches for who they are.
+      const handler: FunctionHandler = (call) => {
+        if (this.#direct === undefined || call.source.kind !== 'user') {
+          throw new ApplicationCallError(2999, 'Direct access is not available on this coordinator');
+        }
+        return this.#direct.coordinatesFor(call.source) as unknown as ProtocolValue;
+      };
+      this.#declarations.augmentFunctions = (functions) => ({ ...functions, [name]: handler });
+      this.#declarations.desiredChanged = () => this.#direct?.declarationsChanged();
+    }
     this.state = new StateManager(this, this.#declarations);
     this.access = new AccessManager(this.#declarations);
     this.events = new EventManager(this, this.#declarations);
@@ -183,6 +203,7 @@ class CoordinatorImpl implements
       signal.addEventListener('abort', abort, { once: true });
     }
     this.#loopTask = this.#runConnectionLoop();
+    if (this.#options.direct !== false) void this.#startDirect();
     void this.#loopTask.catch((error) => {
       const failure = error instanceof CoordinatorError ? error : internalFailure();
       this.#startDeferred?.reject(failure);
@@ -208,6 +229,9 @@ class CoordinatorImpl implements
     this.state.stop(stoppingFailure);
     this.events.stop();
     this.presence.stop();
+    this.#directClosed = true;
+    this.#direct?.close();
+    this.#direct = undefined;
     this.#clearReauthentication();
     this.#abortTokenRequest();
     this.#loopController.abort(stoppingFailure);
@@ -230,6 +254,33 @@ class CoordinatorImpl implements
 
   nextRequestId(): number {
     return this.#requestIds.take();
+  }
+
+  async #startDirect(): Promise<void> {
+    const direct = this.#options.direct === undefined || this.#options.direct === true ? {} : this.#options.direct;
+    if (direct === false) return;
+    const server = await DirectServer.start({
+      coordinatorName: this.#options.name,
+      ...(this.#options.logger === undefined ? {} : { logger: this.#options.logger }),
+      declarations: () => {
+        const desired = this.#declarations.desired;
+        return {
+          stateRevision: desired.revisions.state,
+          state: desired.state,
+          stateAccess: desired.stateAccess,
+          eventAccess: desired.eventAccess,
+          functions: desired.functions,
+        };
+      },
+    }, direct);
+    if (this.#directClosed) server?.close();
+    else this.#direct = server;
+  }
+
+  applyDirect(mutations: readonly StateMutation[]): boolean {
+    if (this.#direct === undefined) return false;
+    this.#direct.apply(mutations);
+    return true;
   }
 
   nextEventId(): number {
@@ -634,5 +685,6 @@ export function createCoordinatorWithRuntime(
   options: CoordinatorOptions,
   runtime: CoordinatorRuntime,
 ): Coordinator {
-  return new CoordinatorImpl(validateCoordinatorOptions(options), runtime);
+  // An injected runtime is a test harness: no UDP endpoint unless asked for.
+  return new CoordinatorImpl(validateCoordinatorOptions({ direct: false, ...options }), runtime);
 }

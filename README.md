@@ -145,6 +145,28 @@ coordinator becomes `ready` only after the relay acknowledges them in order. A
 later declaration call replaces its complete slice and temporarily returns the
 coordinator to `synchronizing` until atomic activation.
 
+### Direct access on the local network
+
+A coordinator also listens for residents on the local network, on one UDP port
+(4455 by default), through WebRTC. A resident's browser that has been online
+once keeps the coordinator's coordinates and a local ticket, then races a direct
+session against the relay and keeps the first ready: at home the house opens
+over the LAN, and it keeps working when the internet link is down.
+
+- It is on by default when the optional `node-datachannel` package is installed
+  (npm installs it). `direct: false` turns it off; `direct: { port, hosts,
+  directory }` changes the port, the published addresses or where the identity
+  lives (`.miakapp/direct` by default: keep it on a persistent volume, its
+  certificate fingerprint is what browsers pin).
+- In Docker, use host networking (`network_mode: host`), or publish the UDP
+  port and pass `hosts: ['<the machine\'s LAN address>']`.
+- Give the coordinator a fixed LAN address (a DHCP reservation): a browser that
+  is offline can only reach the address it last saw.
+- Authorization is the coordinator's own declarations, with the relay's rules.
+  Without the relay, `state.set` applies locally and is replayed to the relay on
+  reconnection. Events are not served on the direct path.
+- Only homes with a single coordinator use it.
+
 ## State, events, and calls
 
 State mutations are atomic and use acknowledged string paths:
@@ -233,6 +255,13 @@ const credentialProvider = createControlPlaneBrowserRelayCredentialProvider({
 const client = createBrowserClient({
   homeId: 'my-home',
   credentialProvider,
+  // Optional: per account and home. Enables the direct local-network session.
+  direct: {
+    load: () => JSON.parse(localStorage.getItem(directKey) ?? 'null'),
+    save: (value) => value === undefined
+      ? localStorage.removeItem(directKey)
+      : localStorage.setItem(directKey, JSON.stringify(value)),
+  },
 });
 
 await client.start();
