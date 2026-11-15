@@ -231,6 +231,10 @@ export class DeclarationManager {
   #transactionToken = 0;
   #stopped = false;
   readonly #confirmed = new Map<string, ConfirmedEntry>();
+  /** Called whenever the desired declarations change (the direct endpoint follows them). */
+  desiredChanged: (() => void) | undefined;
+  /** Adds the coordinator's built-in functions to every function declaration. */
+  augmentFunctions: ((functions: Readonly<Record<string, FunctionHandler>>) => Readonly<Record<string, FunctionHandler>>) | undefined;
   /** A confirmed value arrived after the current transaction was handed off. */
   #confirmedAfterHandoff = false;
 
@@ -257,8 +261,10 @@ export class DeclarationManager {
     };
     this.#desired = Object.freeze({
       ...configuration,
+      functions: this.augmentFunctions?.(configuration.functions) ?? configuration.functions,
       revisions: Object.freeze(revisions),
     });
+    this.desiredChanged?.();
   }
 
   declareState(
@@ -311,7 +317,11 @@ export class DeclarationManager {
   ): Promise<DeclarationReceipt> {
     return this.#replace(
       'functions',
-      (snapshot, revisions) => copySnapshot({ ...snapshot, functions, revisions }),
+      (snapshot, revisions) => copySnapshot({
+        ...snapshot,
+        functions: this.augmentFunctions?.(functions) ?? functions,
+        revisions,
+      }),
       signal,
     );
   }
@@ -481,6 +491,7 @@ export class DeclarationManager {
     const revision = this.#desired.revisions[domain] + 1;
     const revisions = copyRevisions({ ...this.#desired.revisions, [domain]: revision });
     this.#desired = update(this.#desired, revisions);
+    this.desiredChanged?.();
     const deferred = createDeferred<DeclarationReceipt>();
     const pending: PendingDeclaration = { domain, revision, deferred };
     if (signal !== undefined) {
@@ -679,6 +690,7 @@ export class DeclarationManager {
       if (domain === 'functions') next.functions = activeSnapshot.functions;
     }
     this.#desired = copySnapshot({ ...next, revisions: copyRevisions(revisions) });
+    this.desiredChanged?.();
     const hasQueuedSnapshot = !revisionsEqual(this.#desired.revisions, activeSnapshot.revisions);
     const hasActiveConfiguration = this.#active?.receipt.sessionId === transaction.receipt.sessionId
       && this.#active.receipt.generation === transaction.receipt.generation;

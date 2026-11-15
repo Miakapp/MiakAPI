@@ -74,10 +74,27 @@ export interface CoordinatorLogger {
   write(record: CoordinatorLogRecord): void;
 }
 
+export interface DirectOptions {
+  /** Where the certificate, ICE password and ticket key live. Default `.miakapp/direct`. */
+  directory?: string;
+  /** UDP port residents connect to. Default 4455. */
+  port?: number;
+  /** Addresses to publish to residents. Default: this machine's private IPv4 addresses. */
+  hosts?: readonly string[];
+  /** How long a resident's local ticket lasts. Default 30 days. */
+  ticketLifetimeMs?: number;
+}
+
 export interface CoordinatorOptions {
   name: string;
   accessTokenProvider: AccessTokenProvider;
   logger?: CoordinatorLogger;
+  /**
+   * Direct local-network access for residents (WebRTC, no relay, works without
+   * the internet). On by default when the optional `node-datachannel` package
+   * is installed; `false` turns it off.
+   */
+  direct?: DirectOptions | boolean;
 }
 
 export interface CoordinatorConfiguration {

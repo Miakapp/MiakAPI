@@ -16,7 +16,14 @@ import type {
   BrowserRelayCredential,
   BrowserRelayCredentialReason,
   BrowserRelayCredentialRequest,
+  BrowserTransport,
 } from './browser-api.js';
+import {
+  directTransportAvailable,
+  openDirectSocket,
+  parseDirectCoordinates,
+  type DirectCoordinates,
+} from './internal/direct-socket.js';
 import { createBrowserRuntime } from './internal/browser-socket.js';
 import {
   BrowserClientError,
@@ -36,8 +43,18 @@ import {
   ListenerSet,
   type Deferred,
 } from './internal/resources.js';
-import { delay, type BrowserRuntime, type RuntimeTimer } from './internal/runtime.js';
-import { parseUserHomeStatus, UserRelaySession } from './internal/user-session.js';
+import {
+  delay,
+  type BrowserRuntime,
+  type ManagedSocket,
+  type RuntimeTimer,
+  type SocketHandlers,
+} from './internal/runtime.js';
+import {
+  parseUserHomeStatus,
+  UserRelaySession,
+  type UserRelaySessionCallbacks,
+} from './internal/user-session.js';
 import { UserStateManager, type UserStateHost } from './internal/user-state.js';
 import {
   validateBrowserClientOptions,
@@ -51,7 +68,26 @@ interface SessionEnd {
   readonly failure?: BrowserClientFailure;
   readonly retryAfterMs?: number;
   readonly handoffCredential?: BrowserRelayCredential;
+  /** A better transport is reachable: reconnect at once, without backoff. */
+  readonly reconnectNow?: boolean;
 }
+
+interface DirectRecord extends DirectCoordinates {
+  readonly coordinator: string;
+  readonly ticket: string;
+  readonly expiresAtMs: number;
+}
+
+interface OpenedSession {
+  readonly session: UserRelaySession;
+  readonly credential: BrowserRelayCredential;
+  readonly transport: BrowserTransport;
+}
+
+const DIRECT_FUNCTION_PREFIX = 'miakapp.direct.';
+const DIRECT_PROBE_INTERVAL_MS = 15_000;
+const DIRECT_PROBE_TIMEOUT_MS = 2_500;
+const DIRECT_OPEN_TIMEOUT_MS = 4_000;
 
 interface CredentialRequest {
   readonly controller: AbortController;
@@ -126,6 +162,9 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
   #functionReady = false;
   #topicReady = false;
   #homeStatus: BrowserHomeStatus | undefined;
+  #transport: BrowserTransport | undefined;
+  #directProbe: RuntimeTimer | undefined;
+  #directProbing = false;
 
   constructor(options: BrowserClientOptions, runtime: BrowserRuntime) {
     this.#options = options;
@@ -146,6 +185,10 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
 
   get status(): BrowserClientStatus {
     return this.#status;
+  }
+
+  get transport(): BrowserTransport | undefined {
+    return this.#transport;
   }
 
   start(options: StartOptions = {}): Promise<BrowserReadySession> {
@@ -267,12 +310,8 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
       try {
         this.#transition('connecting');
         if (this.#loopController.signal.aborted) break;
-        const credential = pendingCredential ?? await this.#getCredential(reason);
+        const handoff = pendingCredential;
         pendingCredential = undefined;
-        if (this.#loopController.signal.aborted) break;
-        if (credential.expiresAtMs <= this.#runtime.now()) {
-          throw browserUnavailable('Browser relay credential expired before connection');
-        }
         this.#transition('authenticating');
         if (this.#loopController.signal.aborted) break;
         this.#requestIds = new IdSequence();
@@ -283,12 +322,9 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
         this.#sessionEnd = connectionEnd;
         this.#sessionReady = sessionReady;
         this.#goawayRetryAfterMs = undefined;
-        const session = await UserRelaySession.connect(
-          this.#runtime,
-          this.#options.homeId,
-          credential.relayUrl,
-          credential.accessToken,
-          this.#loopController.signal,
+        const opened = await this.#openSession(
+          reason,
+          handoff,
           {
             frame: (frame) => this.#handleFrame(frame),
             closed: () => {
@@ -306,11 +342,11 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
               connectionEnd?.resolve({ failure });
             },
           },
-          (createdSession) => {
-            this.#session = createdSession;
-            this.#sessionRelayUrl = credential.relayUrl;
-          },
         );
+        const { session, credential } = opened;
+        this.#session = session;
+        this.#sessionRelayUrl = credential.relayUrl;
+        this.#transport = opened.transport;
         if (this.#loopController.signal.aborted) {
           session.terminate();
           session.detach();
@@ -397,6 +433,10 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
       if (this.#loopController.signal.aborted) break;
       if (end.handoffCredential !== undefined) {
         pendingCredential = end.handoffCredential;
+        reason = 'reconnect';
+        continue;
+      }
+      if (end.reconnectNow === true) {
         reason = 'reconnect';
         continue;
       }
@@ -632,6 +672,200 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     }
   }
 
+  // ---- Direct transport ----
+
+  #directRecord(): DirectRecord | undefined {
+    const store = this.#options.direct;
+    if (store === undefined || !directTransportAvailable()) return undefined;
+    let raw: unknown;
+    try {
+      raw = store.load();
+    } catch {
+      return undefined;
+    }
+    const coordinates = parseDirectCoordinates(raw);
+    if (coordinates === undefined) return undefined;
+    const { coordinator, ticket, expiresAtMs } = raw as Record<string, unknown>;
+    if (typeof coordinator !== 'string' || typeof ticket !== 'string'
+      || typeof expiresAtMs !== 'number' || expiresAtMs <= this.#runtime.now() + 60_000) return undefined;
+    return Object.freeze({ ...coordinates, coordinator, ticket, expiresAtMs });
+  }
+
+  #saveDirect(value: unknown): void {
+    try {
+      this.#options.direct?.save(value);
+    } catch {
+      safeBrowserLog(this.#options.logger, { level: 'warn', event: 'direct_store_failed' });
+    }
+  }
+
+  /**
+   * Opens the session: through the relay, and in parallel straight to the
+   * coordinator when its coordinates are cached. The first to complete its
+   * handshake wins; the other is dropped.
+   */
+  async #openSession(
+    reason: BrowserRelayCredentialReason,
+    handoff: BrowserRelayCredential | undefined,
+    callbacks: UserRelaySessionCallbacks,
+  ): Promise<OpenedSession> {
+    const signal = this.#loopController.signal;
+    const direct = handoff === undefined ? this.#directRecord() : undefined;
+    let winner: UserRelaySession | undefined;
+    const gated = (current: () => UserRelaySession | undefined): UserRelaySessionCallbacks => ({
+      frame: (frame) => { if (winner !== undefined && winner === current()) callbacks.frame(frame); },
+      closed: (code, why) => { if (winner !== undefined && winner === current()) callbacks.closed(code, why); },
+      failed: (error) => { if (winner !== undefined && winner === current()) callbacks.failed(error); },
+    });
+    const attempts: { abort(): void; dispose(): void }[] = [];
+    const attempt = (
+      runtime: BrowserRuntime,
+      credential: BrowserRelayCredential,
+      transport: BrowserTransport,
+    ): Promise<OpenedSession> => {
+      const child = childAbortController(signal);
+      let created: UserRelaySession | undefined;
+      attempts.push({
+        abort: () => {
+          child.controller.abort(browserCancelled('not_dispatched', 'Another transport won'));
+          if (created !== winner) created?.terminate();
+        },
+        dispose: child.dispose,
+      });
+      return UserRelaySession.connect(
+        runtime,
+        this.#options.homeId,
+        credential.relayUrl,
+        credential.accessToken,
+        child.controller.signal,
+        gated(() => created),
+        (session) => { created = session; },
+      ).then((session) => ({ session, credential, transport }));
+    };
+
+    const relayCredential = async () => {
+      const credential = handoff ?? await this.#getCredential(reason);
+      if (signal.aborted) throw signal.reason;
+      if (credential.expiresAtMs <= this.#runtime.now()) {
+        throw browserUnavailable('Browser relay credential expired before connection');
+      }
+      return credential;
+    };
+    if (direct === undefined) {
+      // Relay only: the session is tracked from its creation, as it always was.
+      const credential = await relayCredential();
+      const session = await UserRelaySession.connect(
+        this.#runtime,
+        this.#options.homeId,
+        credential.relayUrl,
+        credential.accessToken,
+        signal,
+        callbacks,
+        (created) => {
+          this.#session = created;
+          this.#sessionRelayUrl = credential.relayUrl;
+        },
+      );
+      return { session, credential, transport: 'relay' };
+    }
+    const relay = relayCredential().then((credential) => attempt(this.#runtime, credential, 'relay'));
+
+    const record = direct;
+    const directRuntime: BrowserRuntime = Object.freeze({
+      ...this.#runtime,
+      socketFactory: {
+        connect: async (
+          _url: string,
+          handlers: SocketHandlers,
+          connectSignal: AbortSignal,
+          onSocket?: (socket: ManagedSocket) => void,
+        ) => {
+          const socket = await openDirectSocket(record, connectSignal, DIRECT_OPEN_TIMEOUT_MS);
+          const managed = socket.bind(handlers);
+          onSocket?.(managed);
+          return managed;
+        },
+      },
+    });
+    const directAttempt = attempt(directRuntime, {
+      relayUrl: `direct:${record.coordinator}`,
+      accessToken: record.ticket,
+      expiresAtMs: record.expiresAtMs,
+    }, 'direct');
+    try {
+      const opened = await new Promise<OpenedSession>((resolve, reject) => {
+        let failures = 0;
+        let lastError: unknown;
+        const settle = (promise: Promise<OpenedSession>) => promise.then((value) => {
+          if (winner === undefined) {
+            winner = value.session;
+            resolve(value);
+          } else if (value.session !== winner) {
+            value.session.terminate();
+          }
+        }, (error: unknown) => {
+          // A refused ticket is forgotten: the relay hands out a fresh one.
+          if (promise === directAttempt && error instanceof BrowserClientError && error.kind === 'authentication') {
+            this.#saveDirect(undefined);
+          }
+          lastError = promise === relay || lastError === undefined ? error : lastError;
+          failures += 1;
+          if (failures === 2) reject(lastError);
+        });
+        settle(directAttempt);
+        settle(relay);
+      });
+      for (const entry of attempts) if (entry !== undefined) entry.abort();
+      if (opened.transport === 'direct') this.#abortCredentialRequest();
+      return opened;
+    } finally {
+      for (const entry of attempts) entry.dispose();
+    }
+  }
+
+  /** After a session is ready: refresh the direct coordinates, or watch for them. */
+  #afterReady(session: UserRelaySession): void {
+    if (this.#options.direct === undefined || !directTransportAvailable()) return;
+    const coordinators = session.welcome.readySession.coordinators;
+    // A direct session reaches one coordinator: only single-coordinator homes use it.
+    if (coordinators.length !== 1) return;
+    const name = `${DIRECT_FUNCTION_PREFIX}${(coordinators[0] as { name: string }).name}`;
+    const call = this.calls.start({ function: name, arguments: null, timeoutMs: 5_000 });
+    void call.result.then((value) => {
+      if (this.#session !== session) return;
+      if (parseDirectCoordinates(value) === undefined) return;
+      this.#saveDirect(value);
+      if (this.#transport === 'relay') this.#scheduleDirectProbe(session, 0);
+    }, () => {
+      if (this.#session === session && this.#transport === 'relay') this.#scheduleDirectProbe(session, DIRECT_PROBE_INTERVAL_MS);
+    });
+  }
+
+  /** While on the relay, keep checking whether the home is reachable directly. */
+  #scheduleDirectProbe(session: UserRelaySession, delayMs: number): void {
+    this.#directProbe?.cancel();
+    this.#directProbe = this.#runtime.setTimer(() => {
+      this.#directProbe = undefined;
+      if (this.#session !== session || this.#transport !== 'relay' || this.#directProbing) return;
+      const record = this.#directRecord();
+      if (record === undefined) return;
+      this.#directProbing = true;
+      const probe = childAbortController(this.#loopController.signal);
+      void openDirectSocket(record, probe.controller.signal, DIRECT_PROBE_TIMEOUT_MS).then((socket) => {
+        socket.close();
+        if (this.#session !== session || this.#transport !== 'relay') return;
+        safeBrowserLog(this.#options.logger, { level: 'info', event: 'direct_reachable' });
+        this.#sessionEnd?.resolve({ reconnectNow: true });
+        session.close();
+      }, () => {
+        if (this.#session === session) this.#scheduleDirectProbe(session, DIRECT_PROBE_INTERVAL_MS);
+      }).finally(() => {
+        this.#directProbing = false;
+        probe.dispose();
+      });
+    }, delayMs);
+  }
+
   #handleRelayError(frame: Frame): void {
     const correlationId = relayInteger(frame, 0, 'ERROR.correlationId');
     const sourceOpcode = relayInteger(frame, 1, 'ERROR.sourceOpcode');
@@ -670,6 +904,7 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     this.#transition('ready', ready);
     this.#sessionReady?.resolve(undefined);
     this.#startDeferred?.resolve(ready);
+    this.#afterReady(session);
   }
 
   #disconnectSession(): void {
@@ -686,6 +921,9 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
   }
 
   #deactivateSession(): void {
+    this.#directProbe?.cancel();
+    this.#directProbe = undefined;
+    this.#transport = undefined;
     this.#bootstrapTimer?.cancel();
     this.#bootstrapTimer = undefined;
     this.#clearReauthentication();
