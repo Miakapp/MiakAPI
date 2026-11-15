@@ -708,6 +708,16 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     return Object.freeze({ ...coordinates, coordinator, ticket, expiresAtMs });
   }
 
+  /** Remembers a coordinator's functions, so that while it is away its calls fail as unavailable. */
+  #learnFunctions(coordinator: string, functions: readonly string[]): void {
+    const stored = this.#directStore();
+    const record = stored?.records[coordinator];
+    if (stored === undefined || record === null || typeof record !== 'object') return;
+    const previous = (record as { functions?: unknown }).functions;
+    if (Array.isArray(previous) && previous.length === functions.length && previous.every((name, index) => name === functions[index])) return;
+    this.#saveDirect({ ...stored, records: { ...stored.records, [coordinator]: { ...record, functions: [...functions] } } });
+  }
+
   /** Every coordinator of the home, when each one can be reached directly. */
   #directTargets(): DirectTarget[] | undefined {
     const stored = this.#directStore();
@@ -810,7 +820,16 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
           connectSignal: AbortSignal,
           onSocket?: (socket: ManagedSocket) => void,
         ) => {
-          const mux = await openDirectMux(targets, connectSignal, DIRECT_OPEN_TIMEOUT_MS, DIRECT_PARTIAL_AFTER_MS);
+          const known: Record<string, readonly string[]> = {};
+          const records = this.#directStore()?.records ?? {};
+          for (const target of targets) {
+            const functions = (records[target.coordinator] as { functions?: unknown } | undefined)?.functions;
+            if (Array.isArray(functions)) known[target.coordinator] = functions.filter((name): name is string => typeof name === 'string');
+          }
+          const mux = await openDirectMux(targets, connectSignal, DIRECT_OPEN_TIMEOUT_MS, DIRECT_PARTIAL_AFTER_MS, {
+            known,
+            learned: (coordinator, functions) => this.#learnFunctions(coordinator, functions),
+          });
           const managed = mux.bind(handlers);
           onSocket?.(managed);
           return managed;
@@ -871,7 +890,11 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
       if (this.#session !== session) return;
       const previous = this.#directStore();
       const records: Record<string, unknown> = { ...(previous?.records ?? {}) };
-      for (const result of results) if (result !== undefined) records[result[0]] = result[1];
+      for (const result of results) {
+        if (result === undefined) continue;
+        const functions = (records[result[0]] as { functions?: unknown } | undefined)?.functions;
+        records[result[0]] = functions === undefined ? result[1] : { ...(result[1] as object), functions };
+      }
       // Through the relay the WELCOME lists every coordinator of the home; a
       // direct session lists only those that answered, so it keeps the list.
       const expected = transport === 'relay' ? names : previous?.expected ?? names;

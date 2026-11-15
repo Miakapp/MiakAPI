@@ -167,7 +167,10 @@ over the LAN, and it keeps working when the internet link is down.
   reconnection. Events are not served on the direct path.
 - A home with several coordinators is aggregated in the browser, as the relay
   does: direct when every coordinator answers, the relay otherwise. Without the
-  internet, the home opens with the coordinators that answer.
+  internet, the home opens with the coordinators that answer; one that is away
+  shows in grace (its calls fail with 1401, retryable) and joins back as soon
+  as it answers, without interrupting the others. The state is not marked
+  stale for it, so the rest of the home stays usable.
 
 ## State, events, and calls
 

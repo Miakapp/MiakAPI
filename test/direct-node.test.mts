@@ -134,7 +134,7 @@ async function waitFor<T>(probe: () => Promise<T | undefined>, timeoutMs = 5_000
   throw new Error('waitFor timed out');
 }
 
-test('a home with two coordinators is aggregated directly, and opens partially when one is down', { skip: polyfill === undefined, timeout: 30_000 }, async () => {
+test('a home with two coordinators is aggregated directly, and stays usable when one is down', { skip: polyfill === undefined, timeout: 90_000 }, async () => {
   (globalThis as Record<string, unknown>).RTCPeerConnection = polyfill!.RTCPeerConnection;
   const base = 20_000 + Math.floor(Math.random() * 20_000);
   const make = (name: string, port: number, dir: string, path: string, fn: string) => {
@@ -202,14 +202,40 @@ test('a home with two coordinators is aggregated directly, and opens partially w
   });
   await client.stop();
 
-  // The lamps coordinator is down (and there is no internet): the rest of the home still opens.
+  // The lamps coordinator is down (and there is no internet): the rest of the home opens, live and usable.
   await lamps.stop();
+  await new Promise((resolve) => setTimeout(resolve, 200));
   const partial = createBrowserClient(options);
   const partialReady = await partial.start();
   assert.equal(partial.transport, 'direct');
-  assert.deepEqual(partialReady.coordinators.map((entry) => entry.name), ['house']);
+  assert.deepEqual(partialReady.coordinators.map((entry) => [entry.name, entry.status]), [['house', 'connected'], ['lamps', 'grace']]);
+  assert.equal(partial.state.snapshot()?.stale, false);
   assert.deepEqual({ ...partial.state.snapshot()?.values }, { 'heating.on': true });
+  assert.deepEqual(await partial.calls.start({ function: 'heating.set', arguments: { on: false }, timeoutMs: 5_000 }).result, { by: 'house' });
+  // Known from the last time: the lamps' call fails as unavailable, not as unknown.
+  await assert.rejects(
+    partial.calls.start({ function: 'lamp.set', arguments: { on: true }, timeoutMs: 5_000 }).result,
+    (error: { code?: unknown }) => error.code === 1401,
+  );
   assert.deepEqual((saved as { expected: string[] }).expected, ['house', 'lamps']);
+
+  // The lamps come back: picked up without cutting the session.
+  const lampsAgain = make('lamps', base + 1, dirB, 'lamp.on', 'lamp.set');
+  await waitFor(async () => (partial.home.snapshot()?.coordinators.every((entry) => entry.status === 'connected') ? true : undefined), 20_000);
+  assert.equal(partial.status, 'ready');
+  assert.deepEqual(await partial.calls.start({ function: 'lamp.set', arguments: { on: true }, timeoutMs: 5_000 }).result, { by: 'lamps' });
+  await waitFor(async () => (partial.state.snapshot()?.values['lamp.on'] === true ? true : undefined));
+
+  // They go away again during the session: the rest stays usable, the last lamp value stays shown.
+  await lampsAgain.stop();
+  await waitFor(async () => (partial.home.snapshot()?.coordinators.some((entry) => entry.status === 'grace') ? true : undefined), 20_000);
+  assert.equal(partial.status, 'ready');
+  assert.equal(partial.state.snapshot()?.values['lamp.on'], true);
+  assert.deepEqual(await partial.calls.start({ function: 'heating.set', arguments: { on: true }, timeoutMs: 5_000 }).result, { by: 'house' });
+  await assert.rejects(
+    partial.calls.start({ function: 'lamp.set', arguments: { on: false }, timeoutMs: 5_000 }).result,
+    (error: { code?: unknown }) => error.code === 1401,
+  );
   await partial.stop();
   await house.stop();
 });

@@ -36,13 +36,23 @@ interface Sub {
 const ENCODER = new TextEncoder();
 
 /** Opens every coordinator; all of them, or after `partialAfterMs` whichever answered (at least one). */
+export interface DirectMuxOptions {
+  /** Function names each coordinator declared last time, so an absent one's calls fail as unavailable. */
+  readonly known?: Readonly<Record<string, readonly string[]>>;
+  /** A coordinator's functions, as learned from its dictionary. */
+  readonly learned?: (coordinator: string, functions: readonly string[]) => void;
+  /** How often an absent coordinator is tried again. */
+  readonly retryMs?: number;
+}
+
 export async function openDirectMux(
   targets: readonly DirectTarget[],
   signal: AbortSignal,
   timeoutMs: number,
   partialAfterMs: number,
+  options: DirectMuxOptions = {},
 ): Promise<DirectMux> {
-  const mux = new DirectMux();
+  const mux = new DirectMux(options, signal, timeoutMs);
   const opened: { target: DirectTarget; socket: ReturnType<typeof mux.bindFor> }[] = [];
   await new Promise<void>((resolve, reject) => {
     let settled = false;
@@ -52,7 +62,13 @@ export async function openDirectMux(
       if (settled) return;
       settled = true;
       clearTimeout(partial);
-      if (ok) resolve(); else reject(lastError ?? new Error('No coordinator answered directly'));
+      if (!ok) {
+        reject(lastError ?? new Error('No coordinator answered directly'));
+        return;
+      }
+      const present = new Set(opened.map((entry) => entry.target.coordinator));
+      for (const target of targets) if (!present.has(target.coordinator)) mux.markAbsent(target);
+      resolve();
     };
     const partial = setTimeout(() => finish(opened.length > 0), Math.min(partialAfterMs, timeoutMs));
     for (const target of targets) {
@@ -77,6 +93,13 @@ export async function openDirectMux(
 
 export class DirectMux implements ManagedSocket {
   readonly #subs = new Map<string, Sub>();
+  /** Coordinators of the home not reached (yet): shown in grace, their calls unavailable, retried. */
+  readonly #absent = new Map<string, DirectTarget>();
+  readonly #options: DirectMuxOptions;
+  readonly #signal: AbortSignal;
+  readonly #timeoutMs: number;
+  #retry: ReturnType<typeof setInterval> | undefined;
+  #helloContext: ProtocolValue = [];
   #handlers: SocketHandlers | undefined;
   #closed = false;
   #welcomed = false;
@@ -89,6 +112,64 @@ export class DirectMux implements ManagedSocket {
   readonly #owners = new Map<string, string>();
   readonly #calls = new Map<number, string>();
   readonly #reauths = new Map<number, { pending: Set<string>; expiresAtMs: number }>();
+
+  constructor(options: DirectMuxOptions = {}, signal: AbortSignal = new AbortController().signal, timeoutMs = 4_000) {
+    this.#options = options;
+    this.#signal = signal;
+    this.#timeoutMs = timeoutMs;
+  }
+
+  markAbsent(target: DirectTarget): void {
+    this.#absent.set(target.coordinator, target);
+    for (const name of this.#options.known?.[target.coordinator] ?? []) {
+      if (!this.#owners.has(`fn:${name}`)) this.#owners.set(`fn:${name}`, `absent:${target.coordinator}`);
+      if (!this.#functionIds.has(name)) this.#functionIds.set(name, this.#functionIds.size + 1);
+    }
+    this.#retry ??= setInterval(() => this.#retryAbsent(), this.#options.retryMs ?? 15_000);
+  }
+
+  get absent(): readonly string[] {
+    return [...this.#absent.keys()];
+  }
+
+  #retryAbsent(): void {
+    if (this.#closed || !this.#welcomed) return;
+    for (const target of this.#absent.values()) {
+      if (this.#subs.has(target.coordinator)) continue;
+      void openDirectSocket(target, this.#signal, this.#timeoutMs).then(async (socket) => {
+        if (this.#closed || !this.#absent.has(target.coordinator)) {
+          socket.close();
+          return;
+        }
+        const managed = this.bindFor(target, socket);
+        await managed.write(encodeFrame({
+          opcode: Opcode.Hello,
+          payload: [1, 0, 0, 1, this.#helloRequestTokens[target.coordinator] ?? target.ticket, this.#helloContext],
+        }));
+      }).catch(() => undefined);
+    }
+  }
+
+  /** A coordinator that came back has synchronized: it leaves grace. */
+  #joined(sub: Sub): void {
+    if (!this.#absent.delete(sub.name)) return;
+    if (this.#absent.size === 0 && this.#retry !== undefined) {
+      clearInterval(this.#retry);
+      this.#retry = undefined;
+    }
+    this.#emit({ opcode: Opcode.HomeStatus, payload: [this.#enrolled(), this.#coordinatorList()] });
+  }
+
+  #enrolled(): boolean {
+    return [...this.#subs.values()].some((sub) => sub.enrolled);
+  }
+
+  #coordinatorList(): ProtocolValue[] {
+    const entries: [string, number, number][] = [];
+    for (const sub of this.#subs.values()) if (sub.welcomed) entries.push([sub.name, 1, 1]);
+    for (const name of this.#absent.keys()) if (!entries.some((entry) => entry[0] === name)) entries.push([name, 1, 2]);
+    return entries.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  }
 
   bindFor(target: DirectTarget, socket: { bind(handlers: SocketHandlers): ManagedSocket }): ManagedSocket {
     const sub: Sub = {
@@ -107,12 +188,37 @@ export class DirectMux implements ManagedSocket {
     };
     const managed = socket.bind({
       message: (bytes) => this.#fromSub(sub, bytes),
-      close: (code, reason) => this.#fail(code, reason),
+      close: (code, reason) => this.#subClosed(sub, target, code, reason),
       error: (error) => this.#handlers?.error(error),
     });
     (sub as { socket: ManagedSocket }).socket = managed;
     this.#subs.set(sub.name, sub);
     return managed;
+  }
+
+  #subClosed(sub: Sub, target: DirectTarget, code: number, reason: string): void {
+    if (this.#closed || this.#subs.get(sub.name) !== sub) return;
+    if (!this.#welcomed) {
+      this.#fail(code, reason);
+      return;
+    }
+    // One coordinator went away: the rest of the home stays usable. Its values
+    // stay as last seen (like the relay's grace), its calls fail as unavailable.
+    this.#subs.delete(sub.name);
+    for (const name of sub.functions.values()) {
+      if (this.#owners.get(`fn:${name}`) === sub.name) this.#owners.set(`fn:${name}`, `absent:${sub.name}`);
+    }
+    for (const [callId, owner] of this.#calls) {
+      if (owner !== sub.name) continue;
+      this.#calls.delete(callId);
+      this.#emit({ opcode: Opcode.CallError, payload: [callId, 1404, false, 'The coordinator went away', null] });
+    }
+    this.markAbsent(target);
+    if (this.#subs.size === 0) {
+      this.#fail(code, reason);
+      return;
+    }
+    this.#emit({ opcode: Opcode.HomeStatus, payload: [this.#enrolled(), this.#coordinatorList()] });
   }
 
   bind(handlers: SocketHandlers): this {
@@ -139,6 +245,7 @@ export class DirectMux implements ManagedSocket {
       case Opcode.Hello: {
         const tokens = this.#tokens(frame.payload[4]);
         this.#helloRequestTokens = tokens;
+        this.#helloContext = frame.payload[5] as ProtocolValue;
         await Promise.all([...this.#subs.values()].map((sub) => {
           const ticket = tokens[sub.name];
           if (ticket === undefined) throw new Error(`No local ticket for ${sub.name}`);
@@ -166,6 +273,10 @@ export class DirectMux implements ManagedSocket {
         const [callId, , , functionId] = frame.payload as [number, number, ProtocolValue, number];
         const name = [...this.#functionIds].find(([, id]) => id === functionId)?.[0];
         const owner = name === undefined ? undefined : this.#owners.get(`fn:${name}`);
+        if (owner?.startsWith('absent:') === true) {
+          this.#emit({ opcode: Opcode.CallError, payload: [callId, 1401, true, 'The coordinator is not reachable', null] });
+          return;
+        }
         const sub = owner === undefined ? undefined : this.#subs.get(owner);
         const localId = sub === undefined || name === undefined
           ? undefined
@@ -252,6 +363,7 @@ export class DirectMux implements ManagedSocket {
         }
         sub.hasState = true;
         sub.resyncing = false;
+        if (sub.hasFunctions) this.#joined(sub);
         this.#maybeWelcome();
         if (this.#welcomed) this.#emitState();
         return;
@@ -286,8 +398,8 @@ export class DirectMux implements ManagedSocket {
       case Opcode.TopicDict:
         return;
       case Opcode.FunctionDict: {
-        for (const name of sub.functions.values()) {
-          if (this.#owners.get(`fn:${name}`) === sub.name) this.#owners.delete(`fn:${name}`);
+        for (const [key, owner] of [...this.#owners]) {
+          if (key.startsWith('fn:') && (owner === sub.name || owner === `absent:${sub.name}`)) this.#owners.delete(key);
         }
         sub.functions = new Map();
         for (const [id, name] of frame.payload[2] as [number, string][]) {
@@ -296,6 +408,8 @@ export class DirectMux implements ManagedSocket {
           if (!this.#functionIds.has(name)) this.#functionIds.set(name, this.#functionIds.size + 1);
         }
         sub.hasFunctions = true;
+        this.#options.learned?.(sub.name, [...sub.functions.values()]);
+        if (sub.hasState) this.#joined(sub);
         this.#maybeWelcome();
         if (this.#welcomed) this.#emitFunctions();
         return;
@@ -325,15 +439,15 @@ export class DirectMux implements ManagedSocket {
   #maybeWelcome(): void {
     if (this.#welcomed) return;
     const subs = [...this.#subs.values()];
-    if (!subs.every((sub) => sub.welcomed && sub.hasState && sub.hasFunctions)) return;
+    if (subs.length === 0 || !subs.every((sub) => sub.welcomed && sub.hasState && sub.hasFunctions)) return;
     this.#welcomed = true;
     const min = (index: number) => Math.min(...subs.map((sub) => sub.limits[index] as number));
     this.#emit({
       opcode: Opcode.Welcome,
       payload: [
         1, 0, (subs[0] as Sub).sessionId, this.#epoch,
-        subs.some((sub) => sub.enrolled),
-        subs.map((sub) => [sub.name, 1, 1]).sort((a, b) => ((a[0] as string) < (b[0] as string) ? -1 : 1)),
+        this.#enrolled(),
+        this.#coordinatorList(),
         [min(0), min(1), min(2), min(3)],
         Math.min(...subs.map((sub) => sub.expiresAtMs)),
       ],
@@ -362,7 +476,7 @@ export class DirectMux implements ManagedSocket {
   #emitFunctions(): void {
     const entries: [number, string][] = [];
     for (const [key, owner] of this.#owners) {
-      if (!key.startsWith('fn:') || !this.#subs.has(owner)) continue;
+      if (!key.startsWith('fn:') || (!this.#subs.has(owner) && !owner.startsWith('absent:'))) continue;
       const name = key.slice(3);
       entries.push([this.#functionIds.get(name) as number, name]);
     }
@@ -385,6 +499,7 @@ export class DirectMux implements ManagedSocket {
   #fail(code: number, reason: string): void {
     if (this.#closed) return;
     this.#closed = true;
+    if (this.#retry !== undefined) clearInterval(this.#retry);
     for (const sub of this.#subs.values()) sub.socket.close();
     this.#handlers?.close(code, reason);
   }
