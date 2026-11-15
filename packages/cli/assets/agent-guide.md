@@ -774,7 +774,7 @@ need them, or the platform repository, to build and publish a home.
 
 - `packages/cli/README.md` — every command and every tool, including what the
   pack writes and what it refuses to overwrite.
-- `docs/rfcs/0001` (Miakapp-V3) — wire protocol: ownership, collisions, `4409`.
+- `docs/rfcs/0001` (Miakapp/Miakapp) — wire protocol: ownership, collisions, `4409`.
 - `docs/rfcs/0002` — release pointer, capabilities and the staleness rule;
   `docs/specs/2026-10-03-house-app-abi.md` — the app frame and its bridge.
 - `docs/rfcs/0003` — the coordinator SDK surface.

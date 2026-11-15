@@ -352,7 +352,7 @@ instead of building against the retired page-callback protocol.
 
 ## Protocol and conformance
 
-The public TypeScript API and wire codec are pinned to the Miakapp-V3 coordinator
+The public TypeScript API and wire codec are pinned to the Miakapp (formerly Miakapp-V3) coordinator
 contract at an immutable commit in [`contracts/miakapp-v3.json`](contracts/miakapp-v3.json).
 The external conformance subject runs the real SDK against a deterministic relay
 and must pass every scenario in the `sdk` profile.
