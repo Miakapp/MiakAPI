@@ -131,7 +131,11 @@ class DirectManagedSocket implements ManagedSocket {
   #didClose(code: number, reason: string): void {
     if (this.#closed) return;
     this.#closed = true;
-    try { this.#pc.close(); } catch { /* already closed */ }
+    // Not from inside the connection's own event (native implementations abort on it).
+    const pc = this.#pc;
+    setTimeout(() => {
+      try { pc.close(); } catch { /* already closed */ }
+    }, 0);
     if (!this.#detached) this.#handlers?.close(code, reason);
   }
 
