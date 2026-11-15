@@ -20,10 +20,9 @@ import type {
 } from './browser-api.js';
 import {
   directTransportAvailable,
-  openDirectSocket,
   parseDirectCoordinates,
-  type DirectCoordinates,
 } from './internal/direct-socket.js';
+import { openDirectMux, ticketToken, type DirectTarget } from './internal/direct-mux.js';
 import { createBrowserRuntime } from './internal/browser-socket.js';
 import {
   BrowserClientError,
@@ -72,10 +71,11 @@ interface SessionEnd {
   readonly reconnectNow?: boolean;
 }
 
-interface DirectRecord extends DirectCoordinates {
-  readonly coordinator: string;
-  readonly ticket: string;
-  readonly expiresAtMs: number;
+/** What the store keeps: every coordinator of the home, and how to reach each one. */
+interface DirectStoreValue {
+  readonly v: 2;
+  readonly expected: readonly string[];
+  readonly records: Readonly<Record<string, unknown>>;
 }
 
 interface OpenedSession {
@@ -88,6 +88,8 @@ const DIRECT_FUNCTION_PREFIX = 'miakapp.direct.';
 const DIRECT_PROBE_INTERVAL_MS = 15_000;
 const DIRECT_PROBE_TIMEOUT_MS = 2_500;
 const DIRECT_OPEN_TIMEOUT_MS = 4_000;
+/** Without the relay, a home opens with the coordinators that answered by then. */
+const DIRECT_PARTIAL_AFTER_MS = 2_500;
 
 interface CredentialRequest {
   readonly controller: AbortController;
@@ -674,7 +676,7 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
 
   // ---- Direct transport ----
 
-  #directRecord(): DirectRecord | undefined {
+  #directStore(): DirectStoreValue | undefined {
     const store = this.#options.direct;
     if (store === undefined || !directTransportAvailable()) return undefined;
     let raw: unknown;
@@ -683,12 +685,40 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     } catch {
       return undefined;
     }
+    if (raw === null || typeof raw !== 'object') return undefined;
+    const value = raw as Record<string, unknown>;
+    // 4.1 kept one coordinator's record as is.
+    if (typeof value.coordinator === 'string') {
+      return { v: 2, expected: [value.coordinator], records: { [value.coordinator]: value } };
+    }
+    if (value.v !== 2 || !Array.isArray(value.expected) || value.records === null || typeof value.records !== 'object') return undefined;
+    return {
+      v: 2,
+      expected: value.expected.filter((name): name is string => typeof name === 'string'),
+      records: value.records as Record<string, unknown>,
+    };
+  }
+
+  #target(raw: unknown): DirectTarget | undefined {
     const coordinates = parseDirectCoordinates(raw);
     if (coordinates === undefined) return undefined;
     const { coordinator, ticket, expiresAtMs } = raw as Record<string, unknown>;
     if (typeof coordinator !== 'string' || typeof ticket !== 'string'
       || typeof expiresAtMs !== 'number' || expiresAtMs <= this.#runtime.now() + 60_000) return undefined;
     return Object.freeze({ ...coordinates, coordinator, ticket, expiresAtMs });
+  }
+
+  /** Every coordinator of the home, when each one can be reached directly. */
+  #directTargets(): DirectTarget[] | undefined {
+    const stored = this.#directStore();
+    if (stored === undefined || stored.expected.length === 0) return undefined;
+    const targets: DirectTarget[] = [];
+    for (const name of stored.expected) {
+      const target = this.#target(stored.records[name]);
+      if (target === undefined) return undefined;
+      targets.push(target);
+    }
+    return targets;
   }
 
   #saveDirect(value: unknown): void {
@@ -710,7 +740,7 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     callbacks: UserRelaySessionCallbacks,
   ): Promise<OpenedSession> {
     const signal = this.#loopController.signal;
-    const direct = handoff === undefined ? this.#directRecord() : undefined;
+    const direct = handoff === undefined ? this.#directTargets() : undefined;
     let winner: UserRelaySession | undefined;
     const gated = (current: () => UserRelaySession | undefined): UserRelaySessionCallbacks => ({
       frame: (frame) => { if (winner !== undefined && winner === current()) callbacks.frame(frame); },
@@ -770,7 +800,7 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     }
     const relay = relayCredential().then((credential) => attempt(this.#runtime, credential, 'relay'));
 
-    const record = direct;
+    const targets = direct;
     const directRuntime: BrowserRuntime = Object.freeze({
       ...this.#runtime,
       socketFactory: {
@@ -780,17 +810,17 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
           connectSignal: AbortSignal,
           onSocket?: (socket: ManagedSocket) => void,
         ) => {
-          const socket = await openDirectSocket(record, connectSignal, DIRECT_OPEN_TIMEOUT_MS);
-          const managed = socket.bind(handlers);
+          const mux = await openDirectMux(targets, connectSignal, DIRECT_OPEN_TIMEOUT_MS, DIRECT_PARTIAL_AFTER_MS);
+          const managed = mux.bind(handlers);
           onSocket?.(managed);
           return managed;
         },
       },
     });
     const directAttempt = attempt(directRuntime, {
-      relayUrl: `direct:${record.coordinator}`,
-      accessToken: record.ticket,
-      expiresAtMs: record.expiresAtMs,
+      relayUrl: `direct:${targets.map((target) => target.coordinator).join(',')}`,
+      accessToken: ticketToken(targets),
+      expiresAtMs: Math.min(...targets.map((target) => target.expiresAtMs)),
     }, 'direct');
     try {
       const opened = await new Promise<OpenedSession>((resolve, reject) => {
@@ -823,41 +853,55 @@ class BrowserClientImpl implements BrowserClient, UserStateHost, UserCallHost {
     }
   }
 
-  /** After a session is ready: refresh the direct coordinates, or watch for them. */
+  /** After a session is ready: refresh every coordinator's direct coordinates, or watch for them. */
   #afterReady(session: UserRelaySession): void {
     if (this.#options.direct === undefined || !directTransportAvailable()) return;
-    const coordinators = session.welcome.readySession.coordinators;
-    // A direct session reaches one coordinator: only single-coordinator homes use it.
-    if (coordinators.length !== 1) return;
-    const name = `${DIRECT_FUNCTION_PREFIX}${(coordinators[0] as { name: string }).name}`;
-    const call = this.calls.start({ function: name, arguments: null, timeoutMs: 5_000 });
-    void call.result.then((value) => {
+    const names = session.welcome.readySession.coordinators.map((entry) => entry.name);
+    if (names.length === 0) return;
+    const transport = this.#transport;
+    void Promise.all(names.map(async (name) => {
+      try {
+        const call = this.calls.start({ function: `${DIRECT_FUNCTION_PREFIX}${name}`, arguments: null, timeoutMs: 5_000 });
+        const value = await call.result;
+        return this.#target(value) === undefined ? undefined : [name, value] as const;
+      } catch {
+        return undefined;
+      }
+    })).then((results) => {
       if (this.#session !== session) return;
-      if (parseDirectCoordinates(value) === undefined) return;
-      this.#saveDirect(value);
-      if (this.#transport === 'relay') this.#scheduleDirectProbe(session, 0);
-    }, () => {
-      if (this.#session === session && this.#transport === 'relay') this.#scheduleDirectProbe(session, DIRECT_PROBE_INTERVAL_MS);
+      const previous = this.#directStore();
+      const records: Record<string, unknown> = { ...(previous?.records ?? {}) };
+      for (const result of results) if (result !== undefined) records[result[0]] = result[1];
+      // Through the relay the WELCOME lists every coordinator of the home; a
+      // direct session lists only those that answered, so it keeps the list.
+      const expected = transport === 'relay' ? names : previous?.expected ?? names;
+      for (const name of Object.keys(records)) if (!expected.includes(name)) delete records[name];
+      this.#saveDirect({ v: 2, expected, records } satisfies DirectStoreValue);
+      if (this.#transport === 'relay') {
+        this.#scheduleDirectProbe(session, this.#directTargets() === undefined ? DIRECT_PROBE_INTERVAL_MS : 0);
+      }
     });
   }
 
-  /** While on the relay, keep checking whether the home is reachable directly. */
+  /** While on the relay, keep checking whether the whole home is reachable directly. */
   #scheduleDirectProbe(session: UserRelaySession, delayMs: number): void {
     this.#directProbe?.cancel();
     this.#directProbe = this.#runtime.setTimer(() => {
       this.#directProbe = undefined;
       if (this.#session !== session || this.#transport !== 'relay' || this.#directProbing) return;
-      const record = this.#directRecord();
-      if (record === undefined) return;
+      const targets = this.#directTargets();
+      if (targets === undefined) return;
       this.#directProbing = true;
       const probe = childAbortController(this.#loopController.signal);
-      void openDirectSocket(record, probe.controller.signal, DIRECT_PROBE_TIMEOUT_MS).then((socket) => {
-        socket.close();
+      void openDirectMux(targets, probe.controller.signal, DIRECT_PROBE_TIMEOUT_MS, DIRECT_PROBE_TIMEOUT_MS + 1_000).then((mux) => {
+        const complete = mux.coordinators.length === targets.length;
+        mux.close();
+        if (!complete) throw new Error('Part of the home is not reachable directly');
         if (this.#session !== session || this.#transport !== 'relay') return;
         safeBrowserLog(this.#options.logger, { level: 'info', event: 'direct_reachable' });
         this.#sessionEnd?.resolve({ reconnectNow: true });
         session.close();
-      }, () => {
+      }).catch(() => {
         if (this.#session === session) this.#scheduleDirectProbe(session, DIRECT_PROBE_INTERVAL_MS);
       }).finally(() => {
         this.#directProbing = false;

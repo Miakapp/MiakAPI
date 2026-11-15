@@ -165,7 +165,9 @@ over the LAN, and it keeps working when the internet link is down.
 - Authorization is the coordinator's own declarations, with the relay's rules.
   Without the relay, `state.set` applies locally and is replayed to the relay on
   reconnection. Events are not served on the direct path.
-- Only homes with a single coordinator use it.
+- A home with several coordinators is aggregated in the browser, as the relay
+  does: direct when every coordinator answers, the relay otherwise. Without the
+  internet, the home opens with the coordinators that answer.
 
 ## State, events, and calls
 

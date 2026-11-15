@@ -107,6 +107,16 @@ function privateIPv4(): string[] {
   return found.sort((a, b) => Number(!a.startsWith('192.168.')) - Number(!b.startsWith('192.168.'))).slice(0, 8);
 }
 
+/**
+ * Native objects are never closed from inside one of their own callbacks:
+ * libdatachannel aborts the process when a callback thread tears itself down.
+ */
+function later(close: () => void): void {
+  setTimeout(() => {
+    try { close(); } catch { /* already closed */ }
+  }, 0);
+}
+
 function matches(pattern: string, path: string): boolean {
   return pattern.endsWith('.*') ? path.startsWith(pattern.slice(0, -1)) : pattern === path;
 }
@@ -337,14 +347,14 @@ export class DirectServer {
       clearTimeout(timer);
       if (this.#peers.get(key) !== pc) return;
       this.#peers.delete(key);
-      try { pc.close(); } catch { /* closed */ }
+      later(() => pc.close());
     };
     pc.onStateChange((state) => {
       if (state === 'failed' || state === 'closed' || state === 'disconnected') close();
     });
     pc.onDataChannel((channel) => {
       if (opened) {
-        channel.close();
+        later(() => channel.close());
         return;
       }
       opened = true;
@@ -369,11 +379,10 @@ export class DirectServer {
     this.#closed = true;
     clearInterval(this.#keepAlive);
     for (const session of this.#sessions) session.close();
-    for (const pc of this.#peers.values()) {
-      try { pc.close(); } catch { /* closed */ }
-    }
+    for (const pc of this.#peers.values()) later(() => pc.close());
     this.#peers.clear();
-    try { this.#listener.stop(); } catch { /* stopped */ }
+    const listener = this.#listener;
+    later(() => listener.stop());
   }
 }
 
@@ -650,7 +659,8 @@ class DirectSession {
       route.controller.abort(new Error('closed'));
     }
     this.#calls.clear();
-    try { this.#channel.close(); } catch { /* closed */ }
+    const channel = this.#channel;
+    later(() => channel.close());
     this.#onClose();
   }
 }

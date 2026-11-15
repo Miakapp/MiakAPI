@@ -678,8 +678,10 @@ cache). What is yours to get right:
 - **Do not wait for the relay.** Without the internet, `coordinator.start()`
   resolves only once the relay is back, while `state.set` and function calls
   already work locally. Do not `await start()` before wiring the devices.
-- One coordinator per home uses direct mode; events are not carried on it.
-  `direct: false` turns it off.
+- Every coordinator of the home must run `miakapi` 4.1 or later and be
+  reachable on the LAN: the phone goes direct only when all of them answer
+  (without the internet, it opens with those that do). Events are not carried
+  on it. `direct: false` turns it off.
 
 ## 9. Access: pairing and contexts
 
