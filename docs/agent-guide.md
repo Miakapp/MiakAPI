@@ -656,28 +656,30 @@ Reaches every device where someone opened the home and turned notifications on
 file. If it reports that no device is reached, ask the owner to turn
 notifications on; on iPhone they first add Miakapp to the Home Screen.
 
-### Working without the internet: the local mode
+### At home and without the internet: direct mode (on by default)
 
-When the home's internet link or the relay is down, the app can still run from
-the coordinator, on the local network:
+A coordinator built on `miakapi` 4.1 or later also listens for residents on the
+local network (UDP 4455, WebRTC). There is nothing to code: through the relay,
+each resident's browser learns how to reach the coordinator, then opens the home
+**directly** when it is on the same network (lower latency), and keeps working
+when the internet is down (the Miakapp page and the app open from the phone's
+cache). What is yours to get right:
 
-```ts
-import { serveLocal } from 'miakapi/local';
-
-const local = await serveLocal({
-  home: { id: 'my-home', name: 'Maison' },
-  artifact: 'dist/app.js',            // the same bundle you publish
-  state: { 'lamp.on': false },        // mirror what you give state.set
-  functions: { 'lamp.toggle': toggle }, // the same handlers
-});
-console.log(local.urls);              // http://192.168.1.20:8787/ ...
-local.set({ 'lamp.on': true });       // push changes to open pages
-```
-
-The page installs the same `window.miakapp` as the Miakapp shell, so the app
-needs no change. It is plain HTTP on the LAN: anyone on the network can use it
-unless you pass `token` (then open `/?key=<token>`). Give the owner the address
-to bookmark for when the cloud is unreachable.
+- **Network.** In Docker, run the coordinator with host networking
+  (`network_mode: host`). Otherwise publish `4455/udp` and pass
+  `direct: { hosts: ['<the machine's LAN address>'] }` to `createCoordinator`.
+- **A persistent identity.** The coordinator keeps its certificate, ICE
+  password and ticket key in `.miakapp/direct` (relative to its working
+  directory, or `direct.directory`). Keep it on a persistent volume: browsers
+  pin that certificate, and losing it means every phone must be online once more.
+- **A fixed address.** Ask the owner to reserve the coordinator machine's
+  address in the router (DHCP reservation): an offline phone can only reach the
+  address it last saw.
+- **Do not wait for the relay.** Without the internet, `coordinator.start()`
+  resolves only once the relay is back, while `state.set` and function calls
+  already work locally. Do not `await start()` before wiring the devices.
+- One coordinator per home uses direct mode; events are not carried on it.
+  `direct: false` turns it off.
 
 ## 9. Access: pairing and contexts
 
