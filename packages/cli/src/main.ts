@@ -18,7 +18,16 @@ import { homedir, hostname } from 'node:os';
 import { installPack } from './agent-pack.js';
 import { CLI_VERSION } from './version.js';
 import { prepareArtifact, type Artifact } from './artifact.js';
-import { exchangePublisherToken, fetchDiscovery, homeKeyId, homeUrl, sendNotification } from './control-plane.js';
+import {
+  exchangePublisherToken,
+  fetchDiscovery,
+  homeKeyId,
+  homeUrl,
+  openTestSession,
+  sendNotification,
+  type TestSession,
+} from './control-plane.js';
+import { runTaps, type TapReport } from './taps.js';
 import {
   configDirectory,
   contextNameError,
@@ -59,6 +68,7 @@ import { PROJECT_FILE, PROJECT_SCHEMA, findProjectFile, parseProject, type Proje
 import {
   activateRelease,
   publish,
+  stage,
   readPointer,
   readRelease,
   readUpload,
@@ -156,6 +166,9 @@ Commands
   check                   Validate the project and the artifact offline
   status                  Read the live generation and release of the home
   notify                  Notify the people you name (--to user IDs) on the devices where they turned notifications on
+  open                    Link that opens the live home at phone size as test:<role> (--as member)
+  preview                 Same, running the built artifact without activating it
+  taps                    Tap every control of the app (preview by default) and report dead ones
   publish                 Upload, finalize and activate the built artifact
   activate                Activate an already finalized digest at a new generation
   rollback                Alias of activate, for returning to a known-good digest
@@ -189,6 +202,20 @@ activate / rollback options
   --sha256 <digest>           Finalized artifact digest (required)
   --expected-generation <n>   Generation the pointer holds (default: read live)
   --generation <n>            Generation to publish (default: expected + 1)
+
+open / preview options
+  --as <role>                 Test identity test:<role> (default: member); your
+                              coordinator gives it that role's rights
+  --minutes <n>               Lifetime of the link, 1..60 (default: 30)
+
+taps options
+  --as <role>                 As above (default: member)
+  --send <fn,fn*>             Functions a tap may really call (default: none;
+                              every other call a tap makes is held, not sent)
+  --url <test link>           Check this link (from open) instead of a preview
+  --cdp <ws or http url>      Browser to drive (default: $MIAKAPP_CDP or
+                              $AGENT_BROWSER_BASIC_CDP)
+  --max <n>                   Stop after n taps (default: 120)
 
 discover options
   --flows <path>              Node-RED flows export to read (required)
@@ -244,6 +271,9 @@ export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   check: [],
   status: ['context'],
   notify: ['to', 'title', 'body', 'context'],
+  open: ['as', 'minutes', 'context'],
+  preview: ['as', 'minutes', 'release', 'context'],
+  taps: ['as', 'send', 'url', 'cdp', 'max', 'context'],
   publish: ['expected-generation', 'generation', 'release', 'context'],
   activate: ['sha256', 'expected-generation', 'generation', 'context'],
   rollback: ['sha256', 'expected-generation', 'generation', 'context'],
@@ -1168,6 +1198,168 @@ async function runNotify(host: CliHost, invocation: Invocation): Promise<Command
   };
 }
 
+/** The home and key a test session uses: the project's, else the context's. */
+async function homeAccess(
+  host: CliHost,
+  invocation: Invocation,
+): Promise<{ readonly issuer: string; readonly homeKey: string; readonly project: Project | undefined }> {
+  let project: Project | undefined;
+  try {
+    project = await loadProject(host, invocation);
+  } catch (error) {
+    if (!(error instanceof CliError) || error.kind !== 'project') throw error;
+  }
+  if (project !== undefined) {
+    const credential = await resolveCredential(host, invocation, project);
+    return { issuer: project.issuer, homeKey: credential.homeKey, project };
+  }
+  const directory = storeDirectory(host);
+  const name = explicitContext(host, invocation) ?? (await readContexts(directory)).current ?? undefined;
+  if (name === undefined) throw usageError('No context: run miakapp pair first, or pass --context <name>');
+  const { context, homeKey } = await readCredential(directory, name);
+  return { issuer: context.issuer, homeKey, project: undefined };
+}
+
+function testRole(invocation: Invocation): string {
+  const role = invocation.options.get('as') ?? 'member';
+  if (!/^[a-z][a-z0-9-]{0,31}$/.test(role)) {
+    throw usageError('--as takes a lowercase role: member, admin, guest…');
+  }
+  return role;
+}
+
+function testMinutes(invocation: Invocation): number | undefined {
+  const raw = invocation.options.get('minutes');
+  if (raw === undefined) return undefined;
+  const minutes = Number(raw);
+  if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) throw usageError('--minutes must be 1..60');
+  return minutes;
+}
+
+function testSessionResult(summary: string, session: TestSession): CommandResult {
+  return {
+    summary,
+    fields: [
+      ['url', session.url],
+      ['as', session.principalId],
+      ['release', session.release ?? 'live'],
+      ['expires_at', new Date(session.expiresAtMs).toISOString()],
+    ],
+    json: {
+      home_id: session.homeId,
+      url: session.url,
+      principal_id: session.principalId,
+      release: session.release,
+      expires_at_ms: session.expiresAtMs,
+    },
+  };
+}
+
+async function runOpen(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const { issuer, homeKey } = await homeAccess(host, invocation);
+  const options = host.fetch === undefined ? {} : { fetch: host.fetch };
+  const discovery = await fetchDiscovery({ issuer, ...options });
+  const minutes = testMinutes(invocation);
+  const session = await openTestSession(discovery, homeKey, {
+    role: testRole(invocation),
+    ...(minutes === undefined ? {} : { minutes }),
+  }, options);
+  return testSessionResult(
+    `Open this link in your browser: ${session.homeId} at phone size, as ${session.principalId} (live release)`,
+    session,
+  );
+}
+
+/** Uploads the built artifact without activating it, then opens it as a test member. */
+async function previewSession(host: CliHost, invocation: Invocation): Promise<TestSession> {
+  const project = await loadProject(host, invocation);
+  const release = invocation.options.get('release') ?? project.release;
+  if (!isRelease(release)) {
+    throw usageError('--release must be 1..64 UTF-8 bytes without control characters');
+  }
+  const artifact = await loadArtifact(host, project);
+  const { target, credential } = await publicationTarget(host, invocation, project);
+  await stage(target, artifact, { release, abi: project.abi, requires: project.requires });
+  const options = host.fetch === undefined ? {} : { fetch: host.fetch };
+  const discovery = await fetchDiscovery({ issuer: project.issuer, ...options });
+  const minutes = testMinutes(invocation);
+  return await openTestSession(discovery, credential.homeKey, {
+    role: testRole(invocation),
+    release: artifact.sha256,
+    ...(minutes === undefined ? {} : { minutes }),
+  }, options);
+}
+
+async function runPreview(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const session = await previewSession(host, invocation);
+  return testSessionResult(
+    `Open this link in your browser: your build of ${session.homeId}, not activated, at phone size, as ${session.principalId}`,
+    session,
+  );
+}
+
+async function runTapsCommand(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const cdp = invocation.options.get('cdp') ?? host.env('MIAKAPP_CDP') ?? host.env('AGENT_BROWSER_BASIC_CDP');
+  if (cdp === undefined || cdp === '') {
+    throw usageError(
+      'taps needs a browser to drive',
+      'Pass --cdp <ws://… or http://host:9222> (Chrome DevTools). On Molted it is $AGENT_BROWSER_BASIC_CDP. Never install a browser for this.',
+    );
+  }
+  const max = invocation.options.get('max');
+  if (max !== undefined && !/^[1-9][0-9]{0,3}$/.test(max)) throw usageError('--max must be 1..9999');
+  const url = invocation.options.get('url') ?? (await previewSession(host, invocation)).url;
+  const send = (invocation.options.get('send') ?? '').split(',').map((name) => name.trim()).filter((name) => name !== '');
+  const report = await runTaps({
+    url,
+    cdp,
+    send,
+    ...(max === undefined ? {} : { maxTaps: Number(max) }),
+    log: (line) => host.writeError(`${line}\n`),
+  });
+  return tapsResult(report, send);
+}
+
+function tapsResult(report: TapReport, send: readonly string[]): CommandResult {
+  const dead = report.taps.filter((tap) => tap.effect === 'nothing');
+  const failed = report.taps.flatMap((tap) => tap.calls
+    .filter((call) => call.outcome === 'error')
+    .map((call) => `${tap.page} › ${tap.element}: ${call.name} → ${call.error ?? 'failed'}`));
+  const held = report.taps.flatMap((tap) => tap.calls
+    .filter((call) => call.outcome === 'held')
+    .map((call) => `${tap.page} › ${tap.element}: ${call.name}`));
+  const startupProblems = report.startupCalls
+    .filter((call) => call.outcome === 'error' || (call.ms ?? 0) > 1_500)
+    .map((call) => `${call.name}: ${call.outcome === 'error' ? call.error ?? 'failed' : 'ok'} in ${call.ms ?? '?'} ms`);
+  const tapErrors = report.taps.flatMap((tap) => tap.errors.map((error) => `${tap.page} › ${tap.element}: ${error}`));
+  const problems = dead.length + failed.length + startupProblems.length + report.errors.length
+    + (report.width === 390 ? 0 : 1);
+  return {
+    summary: problems === 0
+      ? `No dead control: ${report.taps.length} taps on ${report.pages} pages`
+      : `${problems} problem${problems === 1 ? '' : 's'} in ${report.taps.length} taps on ${report.pages} pages`,
+    fields: [
+      ['width', report.width],
+      ['dead', dead.map((tap) => `${tap.page} › ${tap.element}`)],
+      ['call_errors', failed],
+      ['startup_calls', report.startupCalls.map((call) => `${call.name} ${call.outcome} ${call.ms ?? '?'} ms`)],
+      ['slow_or_failed_at_start', startupProblems],
+      ['app_errors', [...new Set([...report.errors, ...tapErrors])]],
+      ['held_not_sent', held],
+      ['sent', send.length === 0 ? 'none' : send],
+      ['screenshots', report.screenshots],
+    ],
+    json: {
+      width: report.width,
+      pages: report.pages,
+      taps: report.taps,
+      startup_calls: report.startupCalls,
+      app_errors: report.errors,
+      screenshots: report.screenshots,
+    },
+  };
+}
+
 function defaultLabel(host: CliHost): string {
   const machine = (host.hostname?.() ?? hostname()).replace(/[^A-Za-z0-9._-]/g, '-');
   return `miakapp-cli@${machine === '' ? 'unknown' : machine}`.slice(0, 64);
@@ -1465,6 +1657,12 @@ export async function dispatch(host: CliHost, invocation: Invocation): Promise<C
       return await runDiscover(host, invocation);
     case 'check':
       return await runCheck(host, invocation);
+    case 'open':
+      return await runOpen(host, invocation);
+    case 'preview':
+      return await runPreview(host, invocation);
+    case 'taps':
+      return await runTapsCommand(host, invocation);
     case 'publish':
       return await runPublish(host, invocation);
     case 'activate':

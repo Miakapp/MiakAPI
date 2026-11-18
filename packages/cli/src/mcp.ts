@@ -288,6 +288,62 @@ export const TOOLS: readonly ToolDefinition[] = [
     guarded: false,
   },
   {
+    name: 'miakapp_open',
+    title: 'Open the live home as a test member',
+    command: 'open',
+    description:
+      'Return a link (valid up to an hour) that opens the published home in a browser at phone '
+      + 'size (390 x 844) as the stand-in member test:<role>, with no account: the real shell, '
+      + 'sandbox, relay and coordinator. Your coordinator decides what test:<role> sees and does. '
+      + 'Open it in the browser you drive; give it to nobody.',
+    args: [
+      { name: 'as', type: 'string', required: false, description: 'Role of the test member (default member).' },
+      { name: 'minutes', type: 'integer', required: false, description: 'Lifetime of the link, 1..60 (default 30).' },
+      PROJECT_ARGUMENT,
+      CONTEXT_ARGUMENT,
+    ],
+    readOnly: true,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_preview',
+    title: 'Preview the built app on the real home',
+    command: 'preview',
+    description:
+      'Upload the built artifact without activating it, and return a test link that runs it '
+      + 'against the real home, as miakapp_open does. Residents keep the live release.',
+    args: [
+      { name: 'as', type: 'string', required: false, description: 'Role of the test member (default member).' },
+      { name: 'minutes', type: 'integer', required: false, description: 'Lifetime of the link, 1..60 (default 30).' },
+      { name: 'release', type: 'string', required: false, description: 'Release label (default app.release).' },
+      PROJECT_ARGUMENT,
+      CONTEXT_ARGUMENT,
+    ],
+    readOnly: false,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_taps',
+    title: 'Tap every control and report dead ones',
+    command: 'taps',
+    description:
+      'Preview the built app (or check url), tap every interactive element in a real browser at '
+      + 'phone size, and report the ones with no call, no navigation and no visible change, the '
+      + 'calls that failed, slow start-up calls and the errors the app threw. A call a tap makes '
+      + 'is held, never sent, unless its function is listed in send.',
+    args: [
+      { name: 'as', type: 'string', required: false, description: 'Role of the test member (default member).' },
+      { name: 'send', type: 'string', required: false, description: 'Functions a tap may really call, comma-separated, prefix* allowed. Default none.' },
+      { name: 'url', type: 'string', required: false, description: 'A test link from miakapp_open, instead of a preview.' },
+      { name: 'cdp', type: 'string', required: false, description: 'Chrome DevTools endpoint (default $MIAKAPP_CDP or $AGENT_BROWSER_BASIC_CDP).' },
+      { name: 'max', type: 'integer', required: false, description: 'Stop after this many taps (default 120).' },
+      PROJECT_ARGUMENT,
+      CONTEXT_ARGUMENT,
+    ],
+    readOnly: false,
+    guarded: false,
+  },
+  {
     name: 'miakapp_discover',
     title: 'Inventory an existing Node-RED house',
     command: 'discover',

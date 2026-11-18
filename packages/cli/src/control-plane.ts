@@ -255,3 +255,64 @@ export async function sendNotification(
   }
   return typeof document.delivered === 'number' ? document.delivered : 0;
 }
+
+export interface TestSession {
+  readonly homeId: string;
+  readonly role: string;
+  readonly principalId: string;
+  readonly release: string | null;
+  readonly expiresAtMs: number;
+  /** Opens the home at phone size (390 × 844), as `test:<role>`. */
+  readonly url: string;
+}
+
+/**
+ * Opens a test session: a link that opens the home as the stand-in member
+ * `test:<role>`, for at most an hour, with no account. `release` previews a
+ * finalized digest that is not live. Needs a key that may run the coordinator.
+ */
+export async function openTestSession(
+  discovery: Discovery,
+  homeKey: string,
+  request: { readonly role: string; readonly release?: string; readonly minutes?: number },
+  options: { readonly fetch?: FetchLike } = {},
+): Promise<TestSession> {
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const response = await fetcher(`${discovery.issuer}/v1/test-sessions`, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${homeKey}`,
+      'content-type': 'application/json',
+    },
+    body: requestBody(request),
+    credentials: 'omit',
+    redirect: 'error',
+    referrerPolicy: 'no-referrer',
+  });
+  const document = parseJson(await readBoundedBody(response, 16_384)) as Record<string, unknown> & {
+    readonly error?: { readonly code?: unknown };
+  };
+  if (response.status !== 201) {
+    const code = String(document.error?.code ?? response.status);
+    throw authorizationError(
+      `Test session refused: ${code}`,
+      code === 'invalid_request' && response.status === 404
+        ? 'This control plane has no test sessions yet.'
+        : 'The key must be active and able to run the coordinator; --as takes a lowercase role '
+          + '(member, admin, guest…), --minutes 1..60.',
+    );
+  }
+  if (document.schema !== 'miakapp.test-session/1' || typeof document.url !== 'string'
+    || typeof document.home_id !== 'string' || typeof document.expires_at_ms !== 'number') {
+    throw contractError('Test session response does not match miakapp.test-session/1');
+  }
+  return Object.freeze({
+    homeId: document.home_id,
+    role: String(document.role),
+    principalId: String(document.principal_id),
+    release: typeof document.release === 'string' ? document.release : null,
+    expiresAtMs: document.expires_at_ms,
+    url: document.url,
+  });
+}
