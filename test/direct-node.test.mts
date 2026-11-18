@@ -29,8 +29,9 @@ test('a resident uses the home through the direct transport without the internet
   });
   let lamp = false;
   coordinator.configure({
-    state: { 'lamp.on': false, 'secret.code': '1234' },
-    stateAccess: [{ userId: 'alice', patterns: ['lamp.*'] }],
+    state: { 'lamp.on': false, 'garden.on': true, 'secret.code': '1234' },
+    // garden.* is visible to alice only at home: never declared to the relay.
+    stateAccess: [{ userId: 'alice', patterns: ['lamp.*'], directPatterns: ['garden.*'] }],
     events: [],
     eventAccess: [],
     functions: {
@@ -39,7 +40,7 @@ test('a resident uses the home through the direct transport without the internet
         if (typeof on !== 'boolean') throw new ApplicationCallError(2001, 'on must be a boolean');
         lamp = on;
         await coordinator.state.set([{ path: 'lamp.on', value: on }]);
-        return { on, by: call.source.id };
+        return { on, by: call.source.id, transport: call.source.transport };
       },
     },
   });
@@ -60,7 +61,7 @@ test('a resident uses the home through the direct transport without the internet
   const openMs = performance.now() - started;
   assert.equal(client.transport, 'direct');
   assert.ok(openMs < 2_000);
-  assert.deepEqual({ ...client.state.snapshot()?.values }, { 'lamp.on': false });
+  assert.deepEqual({ ...client.state.snapshot()?.values }, { 'lamp.on': false, 'garden.on': true });
 
   const changed = new Promise<unknown>((resolve) => {
     const stop = client.state.subscribe((snapshot) => {
@@ -68,8 +69,8 @@ test('a resident uses the home through the direct transport without the internet
     });
   });
   const call = client.calls.start({ function: 'lamp.set', arguments: { on: true }, timeoutMs: 5_000 });
-  assert.deepEqual(await call.result, { on: true, by: 'alice' });
-  assert.deepEqual({ ...(await changed as object) }, { 'lamp.on': true });
+  assert.deepEqual(await call.result, { on: true, by: 'alice', transport: 'direct' });
+  assert.deepEqual({ ...(await changed as object) }, { 'lamp.on': true, 'garden.on': true });
   assert.equal(lamp, true);
 
   const refused = client.calls.start({ function: 'lamp.set', arguments: { on: 'yes' }, timeoutMs: 5_000 });

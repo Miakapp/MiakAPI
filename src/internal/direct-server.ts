@@ -53,7 +53,11 @@ export interface DirectDeclarations {
   /** Bumped by every explicit state declaration, which is authoritative. */
   readonly stateRevision: number;
   readonly state: Readonly<Record<string, ProtocolValue>>;
-  readonly stateAccess: readonly { readonly userId: string; readonly patterns: readonly string[] }[];
+  readonly stateAccess: readonly {
+    readonly userId: string;
+    readonly patterns: readonly string[];
+    readonly directPatterns?: readonly string[];
+  }[];
   readonly eventAccess: readonly { readonly userId: string }[];
   readonly functions: Readonly<Record<string, FunctionHandler>>;
 }
@@ -291,7 +295,9 @@ export class DirectServer {
 
   visible(userId: string, path: string): boolean {
     for (const entry of this.#declarations.stateAccess) {
-      if (entry.userId === userId && entry.patterns.some((pattern) => matches(pattern, path))) return true;
+      if (entry.userId !== userId) continue;
+      if (entry.patterns.some((pattern) => matches(pattern, path))) return true;
+      if (entry.directPatterns?.some((pattern) => matches(pattern, path)) === true) return true;
     }
     return false;
   }
@@ -607,6 +613,7 @@ class DirectSession {
       sessionId: this.#sessionId,
       coordinatorName: null,
       verifiedEmail: this.#email,
+      transport: 'direct',
     });
     const incoming: IncomingCall = Object.freeze({
       source,

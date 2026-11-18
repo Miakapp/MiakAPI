@@ -15,7 +15,7 @@ What Miakapp gives you:
 
 | Need | What exists |
 | --- | --- |
-| Who is calling | Every call and event carries a `principal`: `kind: 'user'`, `id` (stable account id), `verifiedEmail` (or null). |
+| Who is calling | Every call and event carries a `principal`: `kind: 'user'`, `id` (stable account id), `verifiedEmail` (or null), `transport` (`'direct'` = over the home network, `'relay'` = through Miakapp). |
 | Who is connected | `coordinator.presence` lists `{ sessionId, userId }`. |
 | What each person sees | `stateAccess` / `eventAccess` per `userId`, changed at runtime with `coordinator.access.declareState(...)`. |
 | Telling someone | `miakapp notify --to <id>[,<id>…]` (or `POST` to the push audience with `to`). Only the people you name receive it, on the devices where they turned notifications on. |
@@ -76,6 +76,23 @@ interface Member {
 6. **Roles that manage**: decide who may accept, invite and with which roles
    (an admin may not create an owner or remove an admin, for example). Check it
    in the coordinator, not only by hiding buttons.
+
+## Rights only at home (guests on the Wi-Fi)
+
+A call that arrives with `principal.transport === 'direct'` came over the home
+network (WebRTC straight to this coordinator, miakapi ≥ 4.4.0): the caller is
+on the home's Wi-Fi now. Use it for a role such as "guest: the gate from
+anywhere, the rest only while at home":
+
+- `stateAccess` entries take `directPatterns`: paths this person sees only on a
+  direct session. They are never declared to the relay, so the same person
+  opening the home from outside does not get them.
+  `{ userId, patterns: ['gate.*'], directPatterns: ['living.*', 'shutters.*'] }`
+- At the first line of each function outside the guest's everywhere-set, refuse
+  when `call.source.transport !== 'direct'` ("only on the home Wi-Fi").
+- Every coordinator of the home applies the same rule (the browser goes direct
+  only when it reaches them all), and each must enroll the guest (at least an
+  empty `patterns` entry) or the guest never gets a direct session.
 
 ## Notifications go to people you name
 

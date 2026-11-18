@@ -299,7 +299,7 @@ export function validateStateAccess(value: unknown): readonly UserStateAccess[] 
   const users = new Set<string>();
   const budget: ValueBudget = { values: 1, bytes: 5 };
   return Object.freeze(value.map((raw, index) => {
-    const entry = exactObject(raw, ['userId', 'patterns'], [], `stateAccess[${index}]`);
+    const entry = exactObject(raw, ['userId', 'patterns'], ['directPatterns'], `stateAccess[${index}]`);
     const userId = validateOpaqueId(entry.userId, `stateAccess[${index}].userId`);
     if (users.has(userId)) throw new TypeError('state access contains a duplicate user');
     users.add(userId);
@@ -312,6 +312,14 @@ export function validateStateAccess(value: unknown): readonly UserStateAccess[] 
         `stateAccess[${index}].patterns`,
         budget,
       ),
+      // Direct-only paths stay on this machine: they do not count against the relay's budget.
+      ...(entry.directPatterns === undefined ? {} : {
+        directPatterns: uniqueStrings(
+          entry.directPatterns,
+          validatePattern,
+          `stateAccess[${index}].directPatterns`,
+        ),
+      }),
     });
   }));
 }
