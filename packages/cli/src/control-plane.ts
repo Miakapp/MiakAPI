@@ -219,13 +219,14 @@ export async function exchangePublisherToken(
 }
 
 /**
- * Sends a notification to every device that turned notifications on for the
- * home (`POST /v1/push` without a grant ID). Returns how many were reached.
+ * Sends a notification to the named accounts (Firebase UIDs), on the devices
+ * where they turned the home's notifications on. Anyone not named gets
+ * nothing. Returns how many devices were reached (0 is not an error).
  */
 export async function sendNotification(
   discovery: Discovery,
   homeKey: string,
-  notification: { readonly title: string; readonly body: string },
+  notification: { readonly to: readonly string[]; readonly title: string; readonly body: string },
   options: { readonly fetch?: FetchLike } = {},
 ): Promise<number> {
   const token = await exchangePublisherToken(discovery, homeKey, options, 'push');
@@ -249,8 +250,8 @@ export async function sendNotification(
   if (response.status !== 202) {
     throw authorizationError(
       `Notification refused: ${String(document.error?.code ?? response.status)}`,
-      'Ask the owner to open the home, then Settings → turn on notifications on their device.',
+      'Check --to: account IDs (user IDs your coordinator receives with each call), at most 50.',
     );
   }
-  return typeof document.delivered === 'number' ? document.delivered : 1;
+  return typeof document.delivered === 'number' ? document.delivered : 0;
 }

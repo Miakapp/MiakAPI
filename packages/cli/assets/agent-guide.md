@@ -648,13 +648,18 @@ Three differences are worth knowing before you call anything:
 ### Notifying the people of the home
 
 ```sh
-miakapp notify --title "Front door" --body "Open for 10 minutes"
+miakapp notify --to <user-id>[,<user-id>…] --title "Front door" --body "Open for 10 minutes"
 ```
 
-Reaches every device where someone opened the home and turned notifications on
-(Settings → Notifications). It needs only the paired context, not a project
-file. If it reports that no device is reached, ask the owner to turn
-notifications on; on iPhone they first add Miakapp to the Home Screen.
+Reaches only the people you name, on the devices where they opened the home and
+turned notifications on (Settings → Notifications). Anyone can turn
+notifications on for any home, so the platform never notifies "the whole home":
+**you decide who is told**, from the members your coordinator knows. User IDs
+are the `id` of the `user` principal your coordinator receives with every call
+and event (`principal.kind === 'user'`). It needs
+only the paired context, not a project file. `delivered: 0` is not an error:
+the people named have not turned notifications on (on iPhone they first add
+Miakapp to the Home Screen).
 
 ### At home and without the internet: direct mode (on by default)
 
