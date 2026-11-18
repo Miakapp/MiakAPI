@@ -53,6 +53,10 @@ publish.
 
 ## Design
 
+`miakapp docs members` prints the members guide: Miakapp says who is calling,
+the coordinator decides who is a member, how people are invited and what each
+role sees.
+
 `miakapp docs design` prints a short design guide and the directory of the
 files it describes: `tokens.css` (four themes: Minuit, Lumière, Miel, Craie,
 and a hue per place), `components.css` (screen, entry tiles, orb, state,

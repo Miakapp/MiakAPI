@@ -144,6 +144,7 @@ Usage
 Commands
   docs start              Print the complete agent guide bundled with this CLI
   docs design             Print the design guide: tokens, themes, recipes, examples
+  docs members            Print the members guide: requests, invitations, roles, who is notified
   pair                    Redeem a one-time pairing code into a stored context
   context list            List stored contexts (never prints a key)
   context show [name]     Show one context, the current one by default
@@ -805,11 +806,26 @@ export async function designAssetDirectory(): Promise<string> {
  */
 async function runDocs(host: CliHost, invocation: Invocation): Promise<CommandResult> {
   const topic = invocation.positional.length === 1 ? invocation.positional[0] : undefined;
-  if (topic !== 'start' && topic !== 'design') {
+  if (topic !== 'start' && topic !== 'design' && topic !== 'members') {
     throw usageError(
-      'docs requires the topic start or design',
-      'Run miakapp docs start to print the complete agent guide, miakapp docs design for the design guide.',
+      'docs requires the topic start, design or members',
+      'Run miakapp docs start to print the complete agent guide, miakapp docs design for the design guide, miakapp docs members for members and invitations.',
     );
+  }
+
+  if (topic === 'members') {
+    const { fileURLToPath } = await import('node:url');
+    const path = fileURLToPath(new URL('../assets/members.md', import.meta.url));
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(await (await files(host)).read(path));
+    } catch {
+      throw projectError(
+        `The packaged guide is missing or unreadable at ${path}`,
+        'Reinstall @miakapp/cli: the guide is bundled with the package and opens no network connection.',
+      );
+    }
+    return { summary: 'Miakapp members guide', fields: [], json: { topic, guide: text }, text: text.endsWith('\n') ? text : `${text}\n` };
   }
 
   const directory = topic === 'design' ? await designAssetDirectory() : undefined;

@@ -73,8 +73,10 @@ A first session usually goes like this:
 3. Connect them, publish, check, then: *"I've just added your lamps! Do you want
    me to group them by room? Otherwise we can start adding people to the home:
    family members, guests or friends?"*
-4. Carry on the same way: rooms, people and their rights, automations, then the
-   devices that were not connected.
+4. Carry on the same way: rooms, **people and their rights** (who may join, how
+   they are invited, what each role sees and does: build it the way
+   `miakapp docs members` explains, early, before the owner shares the home),
+   automations, then the devices that were not connected.
 
 Rules for every checkpoint:
 
@@ -657,7 +659,8 @@ miakapp notify --to <user-id>[,<user-id>…] --title "Front door" --body "Open f
 Reaches only the people you name, on the devices where they opened the home and
 turned notifications on (Settings → Notifications). Anyone can turn
 notifications on for any home, so the platform never notifies "the whole home":
-**you decide who is told**, from the members your coordinator knows. User IDs
+**you decide who is told**, from the members your coordinator knows
+(`miakapp docs members`). User IDs
 are the `id` of the `user` principal your coordinator receives with every call
 and event (`principal.kind === 'user'`). It needs
 only the paired context, not a project file. `delivered: 0` is not an error:
@@ -784,6 +787,8 @@ Everything a home needs is above and in the CLI with its starter. The RFCs and
 platform paths below explain *why* the platform behaves as it does; you never
 need them, or the platform repository, to build and publish a home.
 
+- `miakapp docs members` — members, join requests, invitations, roles and who
+  is notified: the coordinator decides, Miakapp only says who is calling.
 - `packages/cli/README.md` — every command and every tool, including what the
   pack writes and what it refuses to overwrite.
 - `docs/rfcs/0001` (Miakapp/Miakapp) — wire protocol: ownership, collisions, `4409`.
