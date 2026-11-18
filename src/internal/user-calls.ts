@@ -220,7 +220,7 @@ export class UserCallManager implements BrowserCalls {
         : call.wasAccepted ? 'accepted' : 'not_dispatched';
       const failure = browserRelayFailure(code, retryable, outcome, {
         kind: 'call', localId: call.localId,
-      });
+      }, frame.payload[3]);
       this.#fail(call, failure);
       this.#host.emitFailure(failure);
       return true;
