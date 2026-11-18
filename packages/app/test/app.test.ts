@@ -132,3 +132,28 @@ describe('the Miakapp bar', () => {
     expect(typeof home.bar.onSelect(() => undefined)).toBe('function');
   });
 });
+
+describe('share and copy', () => {
+  test('asks the shell, synchronously, and returns its answer', async () => {
+    const { host } = fakeHost({});
+    const asked: unknown[] = [];
+    const home = connect({
+      miakapp: {
+        ...host,
+        share: (data: unknown) => { asked.push(data); return Promise.resolve('shared' as const); },
+        copy: (text: string) => { asked.push(text); return Promise.resolve('copied' as const); },
+      },
+    });
+    const shared = home.share({ title: 'Maison', url: 'https://www.miakapp.com/h/a?invite=x' });
+    // Called before any await, while the resident's tap is still fresh.
+    expect(asked).toEqual([{ title: 'Maison', url: 'https://www.miakapp.com/h/a?invite=x' }]);
+    expect(await shared).toBe('shared');
+    expect(await home.copy('abc')).toBe('copied');
+  });
+
+  test('answers unavailable on an older shell', async () => {
+    const home = connect({ miakapp: fakeHost({}).host });
+    expect(await home.share({ url: 'https://example.com' })).toBe('unavailable');
+    expect(await home.copy('abc')).toBe('unavailable');
+  });
+});

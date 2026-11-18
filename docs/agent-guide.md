@@ -398,6 +398,13 @@ redraw, but `home.bar.setButtons()` can add one or two of your own screens to it
 people, bell), each with an optional `badge` count (e.g. join requests waiting;
 0 shows none). Call it again whenever the count changes.
 
+Your frame cannot open the share sheet or write the clipboard. For a "Share" or
+"Copy" button, call `home.share({ title, text, url })` or `home.copy(text)`
+directly in the tap handler: Miakapp does it (share sheet, else copy), only on
+that fresh tap, url https only. It resolves `'shared'`, `'copied'`,
+`'cancelled'` or `'unavailable'`; tell the resident which, and on
+`'unavailable'` show the text in a read-only field.
+
 Declare every state path (exact or `prefix.*`) under `app.requires.state_read`
 and every function under `app.requires.call`. Events, media and `miakapp.*`
 functions are refused by `miakapp check`. Show `state.stale`, disable controls

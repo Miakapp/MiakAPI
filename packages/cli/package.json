@@ -1,6 +1,6 @@
 {
   "name": "@miakapp/cli",
-  "version": "4.5.2",
+  "version": "4.6.0",
   "description": "Agent-first Miakapp command line: check, build, publish, activate and roll back home interfaces",
   "type": "module",
   "engines": {
