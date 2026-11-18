@@ -387,7 +387,9 @@ export function validateFunctions(value: unknown): Readonly<Record<string, Funct
   const budget: ValueBudget = { values: 1, bytes: 5 };
   for (const name of names) {
     validateStructuredName(name, `function ${name}`);
-    if (name === 'miakapp.join') throw new TypeError('miakapp.join is reserved');
+    // `miakapp.join` is the one function a signed-in visitor who is not enrolled may call
+    // (RFC 0001): a coordinator declares it to let people ask to join or redeem an invitation.
+    // The relay lets one coordinator own it.
     const handler = value[name];
     if (!isFunctionHandler(handler)) throw new TypeError(`function ${name} has no handler`);
     accountDeclarationValue(budget, UTF8.encode(name).byteLength + 5, 'function declaration');

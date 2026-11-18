@@ -24,8 +24,15 @@ What Miakapp gives you:
 
 Anyone signed in can open any home's address and load its app (the bundle holds
 no household data: §5 of `docs start`). A person you have not admitted must get
-**nothing** from the coordinator: no state path, no event, every function
-refused except the few a visitor needs (asking to join, redeeming an invite).
+**nothing** from the coordinator: no state path, no event, no function.
+
+**A visitor can call one function only: `miakapp.join`.** The relay refuses
+every other call from an account that no `stateAccess`/`eventAccess` entry
+names (code 1201, the app only sees `failed`). So the visitor's door is a
+single function your coordinator declares (miakapi ≥ 4.6.0), taking an
+action: `miakapp.join({ action: 'me' | 'request' | 'redeem', … })`. Your app
+calls it for "who am I", "ask to join" and "redeem this invite", for members
+and visitors alike.
 
 ## What to build (the usual shape)
 
@@ -50,9 +57,9 @@ interface Member {
 2. **Apply rights the moment the list changes**: recompute `stateAccess` and
    `eventAccess` for everyone and `declareState(...)` again. A new member sees
    the home without reloading; a removed one loses it at once.
-3. **A visitor asks to join.** Your app calls e.g. `members.me`: a non-member
-   gets `{ member: false, requested: boolean }` and your app shows a "Request
-   to join" screen with the home's name. `members.request` records
+3. **A visitor asks to join.** Your app calls `miakapp.join({ action: 'me' })`:
+   a non-member gets `{ member: false, requested: boolean }` and your app shows a
+   "Request to join" screen with the home's name. `{ action: 'request' }` records
    `{ id, email, at }` (one pending request per account, refuse floods), then
    `miakapp notify --to` the owner and admins: "Diana wants to join".
 4. **A Members tab for those who manage.** Show the bar button only to owner and
@@ -75,7 +82,7 @@ interface Member {
    the clipboard; Miakapp does it, with a copy fallback). On `'unavailable'`,
    show the link in a read-only field so it can be copied by hand.
    The app reads `home.link.params.invite` on start and, if present, calls
-   `members.redeem({ code })`. Never trust the app: the coordinator checks
+   `miakapp.join({ action: 'redeem', code })`. Never trust the app: the coordinator checks
    everything.
 6. **Roles that manage**: decide who may accept, invite and with which roles
    (an admin may not create an owner or remove an admin, for example). Check it
