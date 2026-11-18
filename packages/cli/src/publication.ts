@@ -579,6 +579,31 @@ export async function publish(
 ): Promise<{ readonly release: ComponentRelease; readonly pointer: ComponentPointer }> {
   const requires = canonicalRequirements(request.requires);
   const abi = request.abi ?? COMPONENT_ABI;
+  const release = await stage(target, artifact, request);
+  const pointer = await activateRelease(target, {
+    sha256: artifact.sha256,
+    expectedGeneration: request.expectedGeneration,
+    generation: request.generation,
+  });
+  if (pointer.sha256 !== artifact.sha256
+    || pointer.abi !== abi
+    || !sameRequirements(pointer.requires, requires)) {
+    throw contractError('Activated pointer does not match the published release');
+  }
+  return { release, pointer };
+}
+
+/**
+ * Uploads and finalizes one artifact without activating it: what a preview
+ * runs. Residents keep the live release.
+ */
+export async function stage(
+  target: PublicationTarget,
+  artifact: Artifact,
+  request: UploadRequest,
+): Promise<ComponentRelease> {
+  const requires = canonicalRequirements(request.requires);
+  const abi = request.abi ?? COMPONENT_ABI;
   const capability = await requestUpload(target, artifact, { release: request.release, abi, requires });
   await deliverArtifact(target, capability, artifact);
   const state = await readUpload(target, capability.uploadId);
@@ -601,17 +626,7 @@ export async function publish(
   if (release.sha256 !== artifact.sha256 || release.size !== artifact.size || release.abi !== abi) {
     throw contractError('Finalized release does not match the delivered artifact');
   }
-  const pointer = await activateRelease(target, {
-    sha256: artifact.sha256,
-    expectedGeneration: request.expectedGeneration,
-    generation: request.generation,
-  });
-  if (pointer.sha256 !== artifact.sha256
-    || pointer.abi !== abi
-    || !sameRequirements(pointer.requires, requires)) {
-    throw contractError('Activated pointer does not match the published release');
-  }
-  return { release, pointer };
+  return release;
 }
 
 async function requireRelease(

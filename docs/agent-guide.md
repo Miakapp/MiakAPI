@@ -36,7 +36,7 @@ Concretely:
 - **Get it right the first time.** The owner should never have to ask you to
   remove something you added or to fix how it looks or feels. Before you
   publish, read `miakapp docs design` and follow it to the letter, check the
-  app on a phone (§5, "Check it on a phone"), and remove anything the guides
+  app for real (§5, "Check it for real"), and remove anything the guides
   tell you not to add (a connection banner, your own bottom bar, a value
   nobody asked for).
 - **You need nothing from the platform's source.** This guide and the published
@@ -450,85 +450,30 @@ world does not have a rollback. Surface it, let the next state snapshot settle
 it, and let the person decide. The same principle has a CLI counterpart: exit
 code 7.
 
-### Check it on a phone
+### Check it for real
 
-Residents use the app on a phone, installed on the home screen. Look at every
-page at phone size, with touch, before you tell the owner it is done: the home
-screen fits without scrolling, nothing overflows, held actions fill and fire,
-and a swipe from the left edge goes back.
+Never check against a bridge you wrote yourself: it hides what breaks on a
+phone (sandbox refusals, late answers, refused calls, rate limits). Run the app
+against the real home:
 
-Use the browser you already have; **never install one** (`playwright
-install`, Chromium, a headless shell): on Molted and on most agent machines it
-is forbidden, and it is never needed. `playwright-core` is the client alone and
-downloads no browser; on a Molted machine it drives the cloud browser through
-`$AGENT_BROWSER_BASIC_CDP`.
+```bash
+bun run build
+miakapp preview --as member     # your build, not activated: prints a link
+miakapp taps --as member        # taps every control there, reports what is wrong
+```
 
-**Do not trust viewport emulation.** A remote or shared browser often ignores
-it: on Molted's cloud browser, `newContext({ viewport, isMobile })`,
-`Emulation.setDeviceMetricsOverride` and `agent-browser set viewport` all leave
-the page at desktop width. Get the phone size from a frame instead, and measure
-`innerWidth` inside the app before you trust a screenshot.
+`preview` (your build) and `open` (the live release) print a link, valid up to
+an hour, that opens the home at phone size (390 × 844) as the test member
+`test:<role>`, with no account: the real Miakapp bar, sandbox, relay and
+coordinator. Your coordinator gives `test:<role>` the rights of that role, like
+any member (`miakapp docs members`); check once per role. Open the link in the
+browser you drive (never install one) and look at every page, with touch.
 
-1. Build, then serve a local preview next to `dist/`: `phone.html` holds the
-   app in a 390 × 844 frame, `frame.html` stands in for Miakapp's bridge with
-   the real values you read from the house.
-
-   ```html
-   <!-- phone.html -->
-   <body style="margin:0"><iframe src="frame.html" style="width:390px;height:844px;border:0"></iframe></body>
-
-   <!-- frame.html: a stand-in for window.miakapp, then the bundle you publish -->
-   <script>
-     const values = { /* the real state, read from the house */ };
-     const listeners = [];
-     window.miakapp = {
-       abi: 'miakapp.app/1', release: 'preview', home: { id: 'preview', name: 'Home' },
-       locale: 'en', theme: 'dark', onThemeChange: () => () => {},
-       state: { get: (p) => values[p], values: () => values, revision: 1, stale: false,
-                subscribe: (l) => { listeners.push(l); return () => {}; } },
-       can: { read: () => true, call: () => true },
-       call: async (name, args) => { console.log('call', name, args); return {}; },
-       ready: () => {}, bar: { setButtons: () => {}, onSelect: () => () => {} },
-     };
-   </script>
-   <style>html,body{overscroll-behavior:none;user-select:none}</style>
-   <script src="dist/app.js"></script>
-   ```
-
-   Serve it where the browser can reach it (on Molted: a port exposed with a
-   public URL). A preview call never reaches the house.
-
-2. Drive it with touch. Taps work with `page.touchscreen.tap`; a swipe is a
-   sequence of CDP touch events:
-
-   ```js
-   import { chromium } from 'playwright-core';   // npm i playwright-core, in a scratch directory
-
-   const browser = await chromium.connectOverCDP(process.env.AGENT_BROWSER_BASIC_CDP);
-   const context = await browser.newContext({ hasTouch: true });
-   const page = await context.newPage();
-   await page.goto(PREVIEW_URL + '/phone.html', { waitUntil: 'commit' });
-   const app = page.frameLocator('iframe');
-   await app.locator('.mk-entry').first().waitFor();
-   console.log(await page.frames()[1].evaluate(() => innerWidth));   // must print 390
-   await page.screenshot({ path: 'home.png', clip: { x: 0, y: 0, width: 390, height: 844 } });
-
-   const cdp = await context.newCDPSession(page);
-   const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent',
-     { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
-   await touch('touchStart', 6, 400);                                  // the left edge
-   for (let x = 46; x <= 286; x += 40) await touch('touchMove', x, 400);
-   await touch('touchEnd', 286, 400);                                  // should go back one page
-
-   await page.close();                                                 // your page only, never browser.close()
-   ```
-
-   Remote control adds latency between touch events, so a "flick" sent this
-   way arrives slowly; test speed with a long swipe, not a flick.
-
-3. Then open the published `home_url` if your browser is signed in as a
-   member, and say plainly what you could not check. A desktop-width
-   screenshot is never a phone check.
+`taps` reports every control with no call, no navigation and no visible change,
+failed calls, start-up calls that failed or took over 1.5 s, errors the app
+threw, and saves a screenshot of each page. A call a tap makes is held, never
+sent, unless you name its function with `--send` (reads only, never something
+that moves). Fix what it reports and run it again until it reports nothing.
 
 ## 6. The intersection rule
 
@@ -612,8 +557,7 @@ more than an incident you can explain.
 
 `miakapp status` after `publish` is the minimum verification: the live `sha256`
 must be the one you just built. It proves what the home runs, not that the
-interface is right — open its `home_url` as a member would before telling the
-owner it works.
+interface is right: `miakapp open` it and look before telling the owner it works.
 
 ### Driving the CLI as a program
 
@@ -763,9 +707,8 @@ prevent.
       the interface covers it or says why not.
 - [ ] Every value shows whether it is current, stale or unavailable; nothing is
       invented, and no technical vocabulary is on screen.
-- [ ] The interface is published, `miakapp status` shows your digest live, and
-      you opened it as a member would — or you say precisely what you could not
-      check.
+- [ ] The interface is published and `miakapp status` shows your digest live.
+- [ ] `miakapp taps` reports nothing, for each role you built.
 - [ ] The owner received a working link and the rollback digest, not a
       screenshot or a mockup.
 - [ ] Every physically consequential function authorizes its caller on its first
@@ -774,9 +717,8 @@ prevent.
       asserts the correspondence.
 - [ ] `home.state.stale` dims the values and disables the controls, with no
       banner of your own; `home.staging` is visible.
-- [ ] You looked at every page at 390 × 844 with a touch pointer (§5); pages
-      slide, the system back and the left-edge swipe go back, held actions fire
-      after 0.3 s.
+- [ ] You looked at every page of `miakapp preview` (§5): pages slide, the
+      left-edge swipe goes back, held actions fire after 0.3 s.
 - [ ] States use the four colours of `miakapp docs design` (green safe,
       orange to look at, gold on, red alarm only), always with a word.
 - [ ] The coordinator talks to the devices directly; any hub left is a
