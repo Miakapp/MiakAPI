@@ -35,6 +35,7 @@ export type Theme = 'system' | 'light' | 'dark';
 /** Icons a home may give its buttons in the Miakapp bar; Miakapp draws them. */
 export const BAR_ICONS = [
   'grid', 'bolt', 'light', 'thermometer', 'camera', 'lock', 'list', 'chart', 'leaf', 'star',
+  'people', 'bell',
 ] as const;
 export type BarIcon = (typeof BAR_ICONS)[number];
 
@@ -47,6 +48,8 @@ export interface BarButton {
   readonly icon: BarIcon;
   /** The screen shown now; at most one button. */
   readonly active?: boolean;
+  /** A count drawn on the button (requests waiting…): integer 0..999, 0 shows none. */
+  readonly badge?: number;
 }
 
 export interface HomeState {

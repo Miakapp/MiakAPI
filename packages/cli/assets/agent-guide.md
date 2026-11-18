@@ -391,7 +391,10 @@ tokens, four themes (Minuit, Lumière, Miel, Craie), CSS recipes, line icons, an
 embedded font and example screens. The starter's `app/theme.ts` already uses
 them. They are a starting point you may change
 entirely; the Miakapp bar at the bottom, outside your frame, is not yours to
-redraw, but `home.bar.setButtons()` can add one or two of your own screens to it.
+redraw, but `home.bar.setButtons()` can add one or two of your own screens to it
+(icons: grid, bolt, light, thermometer, camera, lock, list, chart, leaf, star,
+people, bell), each with an optional `badge` count (e.g. join requests waiting;
+0 shows none). Call it again whenever the count changes.
 
 Declare every state path (exact or `prefix.*`) under `app.requires.state_read`
 and every function under `app.requires.call`. Events, media and `miakapp.*`
