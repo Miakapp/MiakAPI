@@ -40,7 +40,7 @@ test('a resident uses the home through the direct transport without the internet
         if (typeof on !== 'boolean') throw new ApplicationCallError(2001, 'on must be a boolean');
         lamp = on;
         await coordinator.state.set([{ path: 'lamp.on', value: on }]);
-        return { on, by: call.source.id, transport: call.source.transport };
+        return { on, by: call.source.id, transport: call.source.transport, address: call.source.address ?? null };
       },
     },
   });
@@ -69,7 +69,7 @@ test('a resident uses the home through the direct transport without the internet
     });
   });
   const call = client.calls.start({ function: 'lamp.set', arguments: { on: true }, timeoutMs: 5_000 });
-  assert.deepEqual(await call.result, { on: true, by: 'alice', transport: 'direct' });
+  assert.deepEqual(await call.result, { on: true, by: 'alice', transport: 'direct', address: '127.0.0.1' });
   assert.deepEqual({ ...(await changed as object) }, { 'lamp.on': true, 'garden.on': true });
   assert.equal(lamp, true);
 
