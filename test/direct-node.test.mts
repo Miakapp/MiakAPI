@@ -74,7 +74,7 @@ test('a resident uses the home through the direct transport without the internet
   assert.equal(lamp, true);
 
   const refused = client.calls.start({ function: 'lamp.set', arguments: { on: 'yes' }, timeoutMs: 5_000 });
-  await assert.rejects(refused.result, (error: { code?: unknown }) => error.code === 2001);
+  await assert.rejects(refused.result, (error: { code?: unknown; message?: unknown }) => error.code === 2001 && error.message === 'on must be a boolean');
 
   // The ticket was renewed over the direct session itself.
   await waitFor(async () => (saved !== record ? saved : undefined));
