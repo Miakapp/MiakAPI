@@ -21,6 +21,7 @@ What Miakapp gives you:
 | Telling someone | `miakapp notify --to <id>[,<id>…]` (or `POST` to the push audience with `to`). Only the people you name receive it, on the devices where they turned notifications on. |
 | A tab with a count | `home.bar.setButtons([{ id: 'members', label: 'Members', icon: 'people', badge: 2 }])`. |
 | An invitation link | `www.miakapp.com/h/<home>?invite=<code>`: your app reads `home.link.params.invite` (kept through sign-in). |
+| Testing as each role | `miakapp open --as <role>` (also `preview`, `taps`) opens the home as `test:<role>`, with no e-mail: give that id the role's rights in your member list (never owner), and nothing else. |
 
 Anyone signed in can open any home's address and load its app (the bundle holds
 no household data: §5 of `docs start`). A person you have not admitted must get
