@@ -365,7 +365,7 @@ export class DirectServer {
       }
       opened = true;
       clearTimeout(timer);
-      const session = new DirectSession(this, channel, () => {
+      const session = new DirectSession(this, channel, request.host, () => {
         this.#sessions.delete(session);
         close();
       });
@@ -402,6 +402,7 @@ class DirectSession {
   readonly #server: DirectServer;
   readonly #channel: NdcDataChannel;
   readonly #onClose: () => void;
+  readonly #address: string;
   readonly #calls = new Map<number, InboundCall>();
   readonly #handshake: ReturnType<typeof setTimeout>;
   #userId: string | undefined;
@@ -412,8 +413,9 @@ class DirectSession {
   #lastRevision = 0;
   #closed = false;
 
-  constructor(server: DirectServer, channel: NdcDataChannel, onClose: () => void) {
+  constructor(server: DirectServer, channel: NdcDataChannel, address: string, onClose: () => void) {
     this.#server = server;
+    this.#address = address;
     this.#channel = channel;
     this.#onClose = onClose;
     this.#handshake = setTimeout(() => this.close(), HANDSHAKE_TIMEOUT_MS);
@@ -614,6 +616,7 @@ class DirectSession {
       coordinatorName: null,
       verifiedEmail: this.#email,
       transport: 'direct',
+      address: this.#address,
     });
     const incoming: IncomingCall = Object.freeze({
       source,

@@ -15,7 +15,7 @@ What Miakapp gives you:
 
 | Need | What exists |
 | --- | --- |
-| Who is calling | Every call and event carries a `principal`: `kind: 'user'`, `id` (stable account id), `verifiedEmail` (or null), `transport` (`'direct'` = over the home network, `'relay'` = through Miakapp). |
+| Who is calling | Every call and event carries a `principal`: `kind: 'user'`, `id` (stable account id), `verifiedEmail` (or null), `address` (direct calls: the phone's address on the home network), `transport` (`'direct'` = over the home network, `'relay'` = through Miakapp). |
 | Who is connected | `coordinator.presence` lists `{ sessionId, userId }`. |
 | What each person sees | `stateAccess` / `eventAccess` per `userId`, changed at runtime with `coordinator.access.declareState(...)`. |
 | Telling someone | `miakapp notify --to <id>[,<id>…]` (or `POST` to the push audience with `to`). Only the people you name receive it, on the devices where they turned notifications on. |

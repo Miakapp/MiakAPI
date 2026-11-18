@@ -291,6 +291,12 @@ export interface Principal {
    * caller is on the same local network as this coordinator.
    */
   transport: 'relay' | 'direct';
+  /**
+   * For a direct call: the caller's address on the home network (the source of
+   * its packets), e.g. to recognise their phone in the router's device list.
+   * Absent through the relay.
+   */
+  address?: string;
 }
 
 export interface IncomingCall {
