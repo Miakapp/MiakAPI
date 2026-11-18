@@ -305,6 +305,11 @@ export async function runTaps(options: TapOptions): Promise<TapReport> {
     await navigate(options.url);
     let app = await load();
     const width = await evaluate<number>(app.session, 'innerWidth', app.context);
+    // Let the start-up calls answer (or not) before reading them.
+    for (let waited = 0; waited < 5_000; waited += 250) {
+      if (!await shell("(window.miakappTest?.calls ?? []).some((call) => call.outcome === 'pending')")) break;
+      await sleep(250);
+    }
     const startupCalls = await shell('JSON.stringify(window.miakappTest?.calls ?? [])')
       .then((raw) => (JSON.parse(String(raw)) as CallRecord[]).map(({ name, outcome, error, ms }) => ({
         name, outcome, ...(error === undefined ? {} : { error }), ...(ms === undefined ? {} : { ms }),
