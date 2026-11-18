@@ -272,6 +272,7 @@ describe('incoming calls', () => {
       sessionId: 71,
       coordinatorName: null,
       verifiedEmail: 'user@example.test',
+      transport: 'relay',
     });
     expect(Object.isFrozen(observedCalls[0]?.source)).toBe(true);
     expect(observedCalls[0]?.idempotencyKey).toBe('intent-91');
