@@ -86,11 +86,14 @@ export function browserRelayFailure(
   retryable: boolean,
   outcome: DispatchOutcome,
   correlation?: FailureOptions['correlation'],
+  message?: unknown,
 ): BrowserClientError {
   const options: FailureOptions = correlation === undefined
     ? { code, retryable }
     : { code, retryable, correlation };
-  return new BrowserClientError(kindFromCode(code), outcome, 'Relay rejected the operation', options);
+  // A coordinator's own refusal (2000-2999) keeps its sentence: the app shows it to the resident.
+  const application = code >= 2_000 && code <= 2_999 && typeof message === 'string' && message.length > 0 && message.length <= 256;
+  return new BrowserClientError(kindFromCode(code), outcome, application ? message : 'Relay rejected the operation', options);
 }
 
 export function safeBrowserLog(

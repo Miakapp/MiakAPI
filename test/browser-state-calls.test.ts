@@ -230,6 +230,20 @@ describe('browser state and calls', () => {
     await harness.client.stop();
   });
 
+  test('keeps a coordinator\'s own refusal sentence, never the relay\'s', async () => {
+    const harness = createBrowserTestHarness();
+    const { connection } = await startBrowserReady(harness);
+    const refused = harness.client.calls.start({ function: 'home.echo', arguments: null, timeoutMs: 5_000 });
+    await connection.nextClientFrame(Opcode.Call);
+    connection.send({ opcode: Opcode.CallError, payload: [1, 2605, false, 'Ce lien n’est pas valable', null] });
+    expect(await refused.result.catch((error: unknown) => error)).toMatchObject({ code: 2605, message: 'Ce lien n’est pas valable' });
+    const relay = harness.client.calls.start({ function: 'home.echo', arguments: null, timeoutMs: 5_000 });
+    await connection.nextClientFrame(Opcode.Call);
+    connection.send({ opcode: Opcode.CallError, payload: [2, 1200, false, 'internal detail', null] });
+    expect(await relay.result.catch((error: unknown) => error)).toMatchObject({ code: 1200, message: 'Relay rejected the operation' });
+    await harness.client.stop();
+  });
+
   test('ignores a correlated terminal frame after a local deadline settles the call', async () => {
     const harness = createBrowserTestHarness();
     const failures: Array<{ kind: string }> = [];
