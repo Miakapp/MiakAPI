@@ -52,6 +52,16 @@ export interface BarButton {
   readonly badge?: number;
 }
 
+/** How a share or copy ended; on 'unavailable', show the link so it can be copied by hand. */
+export type ShareResult = 'shared' | 'copied' | 'cancelled' | 'unavailable';
+
+/** What `home.share()` hands to the share sheet; the url must be https. */
+export interface ShareData {
+  readonly title?: string;
+  readonly text?: string;
+  readonly url?: string;
+}
+
 export interface HomeState {
   readonly values: Readonly<Record<string, unknown>>;
   readonly revision: number;
@@ -79,6 +89,9 @@ export interface MiakappHost {
   readonly can: { read(path: string): boolean; call(name: string): boolean };
   call(name: string, args?: unknown, options?: { timeoutMs?: number }): Promise<unknown>;
   ready(): void;
+  /** Absent on shells older than 2026-11-18 (share and copy). */
+  share?(data: ShareData): Promise<ShareResult>;
+  copy?(text: string): Promise<'copied' | 'unavailable'>;
   /** Absent on shells older than the bottom bar. */
   readonly bar?: {
     setButtons(buttons: readonly BarButton[]): void;
@@ -131,6 +144,16 @@ export interface Home {
   call<T = unknown>(name: string, args?: unknown, options?: { timeoutMs?: number }): Promise<T>;
   /** Lifts the shell's loading screen before the script finishes, if you want. */
   ready(): void;
+  /**
+   * Opens the share sheet (or copies the link when there is none). Your frame
+   * cannot do it itself: Miakapp does, so call it straight from a tap handler
+   * (no await before it). Limits: title 200, text 2000, url 2048 and https only.
+   * Resolves 'unavailable' without a fresh tap or on an older Miakapp: then
+   * show the link in a field so it can be copied by hand.
+   */
+  share(data: ShareData): Promise<ShareResult>;
+  /** Copies text (≤ 4096) to the clipboard; same rules as `share`. */
+  copy(text: string): Promise<'copied' | 'unavailable'>;
   /**
    * The home's own buttons in the Miakapp bar, between the home tab and « Me ».
    * Miakapp keeps the last list for the next visit; set it on every start.
@@ -196,6 +219,12 @@ export function connect(scope: { readonly miakapp?: unknown } = globalThis as { 
       await host.call(name, args ?? null, options ?? {}) as T
     ),
     ready: () => host.ready(),
+    share: async (data: ShareData) => (
+      typeof host.share === 'function' ? await host.share(data) : 'unavailable' as const
+    ),
+    copy: async (text: string) => (
+      typeof host.copy === 'function' ? await host.copy(text) : 'unavailable' as const
+    ),
     bar: Object.freeze({
       setButtons: (buttons: readonly BarButton[]) => host.bar?.setButtons(buttons),
       onSelect: (listener: (id: string | null) => void) => host.bar?.onSelect(listener) ?? (() => undefined),
