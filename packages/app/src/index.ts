@@ -64,6 +64,8 @@ export interface MiakappHost {
   readonly abi: typeof APP_ABI;
   readonly release: string;
   readonly home: { readonly id: string; readonly name: string };
+  /** Absent on shells older than home links. */
+  readonly link?: HomeLink;
   readonly locale: string;
   readonly theme: string;
   onThemeChange(listener: (theme: string) => void): () => void;
@@ -91,10 +93,24 @@ export class MiakappUnavailableError extends Error {
   }
 }
 
+/** What the home's link carried: `/h/<id>?invite=abc#salon`. */
+export interface HomeLink {
+  /** First value of each query parameter (Miakapp's own left out). */
+  readonly params: Readonly<Record<string, string>>;
+  /** The fragment without `#`, or ''. */
+  readonly hash: string;
+}
+
 export interface Home {
   readonly id: string;
   readonly name: string;
   readonly release: string;
+  /**
+   * What the link that opened the home carried, e.g. `link.params.invite`.
+   * Miakapp only delivers it: your app decides what to do with it (send an
+   * invite to your coordinator, which checks it). Kept through sign-in.
+   */
+  readonly link: HomeLink;
   /** BCP 47 language of the resident, e.g. `fr`. */
   readonly locale: string;
   theme(): Theme;
@@ -160,6 +176,7 @@ export function connect(scope: { readonly miakapp?: unknown } = globalThis as { 
     id: host.home.id,
     name: host.home.name,
     release: host.release,
+    link: host.link ?? Object.freeze({ params: Object.freeze({}), hash: '' }),
     locale: host.locale,
     theme: () => theme(host.theme),
     onThemeChange: (listener: (value: Theme) => void) => host.onThemeChange((value) => listener(theme(value))),
