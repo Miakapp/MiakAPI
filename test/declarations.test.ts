@@ -179,6 +179,15 @@ describe('declaration transactions', () => {
     await harness.coordinator.stop();
   });
 
+  test('a coordinator may declare miakapp.join, the visitors\' door', async () => {
+    const harness = createTestHarness();
+    const { connection } = await startReady(harness);
+    const declared = harness.coordinator.functions.declare({ 'miakapp.join': () => ({ member: false }) });
+    const functions = await advanceThroughFunctionHandoff(connection);
+    expect(names(functions.payload[1], 'FUNCTION_SYNC.names')).toContain('miakapp.join');
+    void declared.catch(() => undefined);
+  });
+
   test('never sends direct-only state access to the relay', async () => {
     const harness = createTestHarness();
     const { connection } = await startReady(harness);
