@@ -1279,7 +1279,10 @@ async function previewSession(host: CliHost, invocation: Invocation): Promise<Te
   }
   const artifact = await loadArtifact(host, project);
   const { target, credential } = await publicationTarget(host, invocation, project);
-  await stage(target, artifact, { release, abi: project.abi, requires: project.requires });
+  // A build already finalized (published before, or previewed) is not uploaded again.
+  if (await readRelease(target, artifact.sha256) === undefined) {
+    await stage(target, artifact, { release, abi: project.abi, requires: project.requires });
+  }
   const options = host.fetch === undefined ? {} : { fetch: host.fetch };
   const discovery = await fetchDiscovery({ issuer: project.issuer, ...options });
   const minutes = testMinutes(invocation);
@@ -1329,8 +1332,10 @@ function tapsResult(report: TapReport, send: readonly string[]): CommandResult {
     .filter((call) => call.outcome === 'held')
     .map((call) => `${tap.page} › ${tap.element}: ${call.name}`));
   const startupProblems = report.startupCalls
-    .filter((call) => call.outcome === 'error' || (call.ms ?? 0) > 1_500)
-    .map((call) => `${call.name}: ${call.outcome === 'error' ? call.error ?? 'failed' : 'ok'} in ${call.ms ?? '?'} ms`);
+    .filter((call) => call.outcome !== 'ok' || (call.ms ?? 0) > 1_500)
+    .map((call) => (call.outcome === 'pending'
+      ? `${call.name}: no answer after 5 s`
+      : `${call.name}: ${call.outcome === 'error' ? call.error ?? 'failed' : 'ok'} in ${call.ms ?? '?'} ms`));
   const tapErrors = report.taps.flatMap((tap) => tap.errors.map((error) => `${tap.page} › ${tap.element}: ${error}`));
   const problems = dead.length + failed.length + startupProblems.length + report.errors.length
     + (report.width === 390 ? 0 : 1);
