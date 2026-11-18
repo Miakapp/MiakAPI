@@ -41,13 +41,17 @@ describe('app manifest', () => {
     expect(project.requires.call).toEqual(['lighting.set']);
   });
 
+  test('an app may call miakapp.join, the visitors\' door', () => {
+    expect(parseProject(PROJECT_ROOT, APP_YAML.replace('      - lighting.set', '      - lighting.set\n      - miakapp.join'))).toBeDefined();
+  });
+
   test('refuses both or neither section, and anything the shell would not broker', () => {
     const refused = [
       APP_YAML.replace('app:', 'component:\n  artifact: a.js\n  release: x\napp:'),
       APP_YAML.replace(/app:[\s\S]*/u, ''),
       APP_YAML.replace('    call:', '    event_subscribe:\n      - door.opened\n    call:'),
       APP_YAML.replace('    call:', '    presentation:\n      - media.camera\n    call:'),
-      APP_YAML.replace('      - lighting.set', '      - miakapp.join'),
+      APP_YAML.replace('      - lighting.set', '      - miakapp.direct.house'),
       APP_YAML.replace('      - lighting.set', '      - miakapp.*'),
       APP_YAML.replace('  release: 2026-10-03.1', '  release: 2026-10-03.1\n  url: https://x'),
     ];

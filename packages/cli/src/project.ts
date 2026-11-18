@@ -61,7 +61,7 @@ export function resolveProjectPath(root: string, declared: unknown, label: strin
 
 /**
  * The trusted shell brokers only state reads and calls to a whole-house
- * application, and never a protocol-reserved `miakapp.*` function. Declaring
+ * application, and never a protocol-reserved `miakapp.*` function but `miakapp.join`. Declaring
  * anything else would publish a manifest the shell silently narrows, so it is
  * refused here instead.
  */
@@ -74,7 +74,8 @@ function assertAppCeiling(requires: Requirements): void {
       );
     }
   }
-  const reserved = requires.call.find((name) => name === 'miakapp.*' || name.startsWith('miakapp.'));
+  // `miakapp.join` is the visitors' door (docs members): the one reserved function an app calls.
+  const reserved = requires.call.find((name) => name === 'miakapp.*' || (name.startsWith('miakapp.') && name !== 'miakapp.join'));
   if (reserved !== undefined) {
     throw projectError(`app.requires.call names the protocol-reserved function ${reserved}`);
   }
