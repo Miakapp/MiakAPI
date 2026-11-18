@@ -70,6 +70,10 @@ interface Member {
      `{ role, exp, nonce }`; the coordinator keeps the secret and a revocation
      list, checks signature, expiry and revocation, and admits once per
      account (optionally single use).
+   To hand the link over, call `home.share({ title, url })` straight from the
+   Invite/Share button's tap handler (the frame cannot reach the share sheet or
+   the clipboard; Miakapp does it, with a copy fallback). On `'unavailable'`,
+   show the link in a read-only field so it can be copied by hand.
    The app reads `home.link.params.invite` on start and, if present, calls
    `members.redeem({ code })`. Never trust the app: the coordinator checks
    everything.
