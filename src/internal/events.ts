@@ -59,6 +59,7 @@ function principal(value: ProtocolValue | undefined): Principal {
     sessionId: value[2],
     coordinatorName: value[3],
     verifiedEmail: value[4],
+    transport: 'relay',
   });
 }
 

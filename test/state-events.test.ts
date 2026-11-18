@@ -208,6 +208,7 @@ describe('events', () => {
       sessionId: 71,
       coordinatorName: null,
       verifiedEmail: 'user@example.test',
+      transport: 'relay',
     });
     expect(Object.isFrozen(received[0]?.source)).toBe(true);
     expect(Object.isFrozen(received[0]?.value)).toBe(true);

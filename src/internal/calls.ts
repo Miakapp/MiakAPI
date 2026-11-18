@@ -102,7 +102,7 @@ function principal(value: ProtocolValue | undefined): Principal {
     || (verifiedEmail !== null && typeof verifiedEmail !== 'string')) {
     throw new TypeError('CALL_DISPATCH source is invalid');
   }
-  return Object.freeze({ kind, id, sessionId, coordinatorName, verifiedEmail });
+  return Object.freeze({ kind, id, sessionId, coordinatorName, verifiedEmail, transport: 'relay' });
 }
 
 function functionForId(active: ActiveDeclarations, id: number): {

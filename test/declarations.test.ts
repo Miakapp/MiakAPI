@@ -179,6 +179,27 @@ describe('declaration transactions', () => {
     await harness.coordinator.stop();
   });
 
+  test('never sends direct-only state access to the relay', async () => {
+    const harness = createTestHarness();
+    const { connection } = await startReady(harness);
+    const declared = harness.coordinator.access.declareState([
+      { userId: 'guest-1', patterns: ['gate.*'], directPatterns: ['home.*'] },
+    ]);
+    const state = await connection.nextClientFrame(Opcode.StateSync);
+    connection.send({
+      opcode: Opcode.StateSyncOk,
+      payload: [integer(state.payload[0], 'STATE_SYNC.requestId'), connection.epoch, 2, [[101, 'home.temperature']]],
+    });
+    const stateAccess = await connection.nextClientFrame(Opcode.StateAclSync);
+    expect(stateAccess.payload[1]).toEqual([['guest-1', ['gate.*']]]);
+    connection.send({
+      opcode: Opcode.StateAclOk,
+      payload: [integer(stateAccess.payload[0], 'STATE_ACL_SYNC.requestId'), 2],
+    });
+    // The rest of the transaction (events, functions) is not under test here.
+    void declared.catch(() => undefined);
+  });
+
   test('rolls a rejected desired slice back before the next transaction', async () => {
     const harness = createTestHarness();
     const failures: CoordinatorFailure[] = [];

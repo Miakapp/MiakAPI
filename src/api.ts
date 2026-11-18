@@ -207,6 +207,11 @@ export interface CoordinatorState {
 export interface UserStateAccess {
   userId: string;
   patterns: readonly string[];
+  /**
+   * Extra paths this user sees only on a direct session (home network). They
+   * are never sent to the relay.
+   */
+  directPatterns?: readonly string[];
 }
 
 export interface UserEventAccess {
@@ -280,6 +285,12 @@ export interface Principal {
   sessionId: number;
   coordinatorName: string | null;
   verifiedEmail: string | null;
+  /**
+   * How the call reached this coordinator: `direct` over the home network
+   * (WebRTC, no internet), `relay` through Miakapp. A direct call proves the
+   * caller is on the same local network as this coordinator.
+   */
+  transport: 'relay' | 'direct';
 }
 
 export interface IncomingCall {
