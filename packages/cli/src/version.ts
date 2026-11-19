@@ -12,4 +12,4 @@
  */
 export const PACKAGE_NAME = '@miakapp/cli';
 
-export const CLI_VERSION = '4.7.1';
+export const CLI_VERSION = '4.7.2';

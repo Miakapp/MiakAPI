@@ -131,6 +131,29 @@ describe('app publication', () => {
     expect(host.json()['home_url']).toBeNull();
   });
 
+  test('activates a build already registered by preview or taps instead of uploading it again', async () => {
+    const plane = fakeControlPlane({ homeId: HOME_ID, generation: 0 });
+    const original = plane.fetch;
+    let uploads = 0;
+    // Like the real control plane: a digest already registered cannot be uploaded again.
+    const refusingDuplicates = async (input: string, init: RequestInit) => {
+      if (init.method === 'POST' && input.endsWith('/component-uploads')) {
+        uploads += 1;
+        const body = JSON.parse(String(init.body)) as { sha256: string };
+        if (plane.releases.has(body.sha256)) {
+          return new Response(JSON.stringify({ error: { code: 'invalid_artifact', message: 'Component artifact is invalid', retryable: false, request_id: 'r' } }), { status: 422, headers: { 'content-type': 'application/json' } });
+        }
+      }
+      return await original(input, init);
+    };
+    const first = testHost({ files: appProject(), fetch: refusingDuplicates, env: { [HOME_KEY_VARIABLE]: homeKey() } });
+    expect(await run(['publish'], first)).toBe(EXIT_CODE.success);
+    const again = testHost({ files: appProject(), fetch: refusingDuplicates, env: { [HOME_KEY_VARIABLE]: homeKey() } });
+    expect(await run(['publish', '--json'], again)).toBe(EXIT_CODE.success);
+    expect(uploads).toBe(1);
+    expect(plane.generation).toBe(2);
+  });
+
   test('refuses a control plane that echoes another ABI', async () => {
     const plane = fakeControlPlane({ homeId: HOME_ID, generation: 0 });
     const original = plane.fetch;

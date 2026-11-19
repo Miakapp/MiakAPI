@@ -239,7 +239,7 @@ describe('publication', () => {
     expect(plane.generation).toBe(1);
 
     const methods = plane.requests.map((request) => request.split(' ')[0]);
-    expect(methods).toEqual(['GET', 'POST', 'POST', 'PUT', 'GET', 'POST', 'POST']);
+    expect(methods).toEqual(['GET', 'POST', 'GET', 'POST', 'PUT', 'GET', 'POST', 'POST']);
   });
 
   test('publish without a Home Key is an authorization failure', async () => {
