@@ -430,7 +430,8 @@ describe('the generated starter builds, typechecks, checks and runs', () => {
 
 describe('the docs send a new agent through the starter', () => {
   test('the bundled guide and the CLI README name the starter and never an unpublished import', async () => {
-    const guide = await readFile(join(import.meta.dir, '../assets/agent-guide.md'), 'utf8');
+    const guide = await readFile(join(import.meta.dir, '../assets/agent-guide.md'), 'utf8')
+      + await readFile(join(import.meta.dir, '../assets/skills/miakapp-interface/SKILL.md'), 'utf8');
     const readme = await readFile(join(import.meta.dir, '../README.md'), 'utf8');
     for (const [name, text] of [['guide', guide], ['README', readme]] as const) {
       expect([name, text.includes('init --starter app')]).toEqual([name, true]);

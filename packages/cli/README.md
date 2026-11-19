@@ -112,7 +112,9 @@ duplicate keys — is rejected with the offending line rather than guessed at.
 | `pair` | Redeems a one-time pairing code into a new stored context. |
 | `context list\|show\|use\|remove` | Manages stored contexts. Never prints a key. |
 | `init` | Writes `miakapp.yaml`; with `--starter app`, also a buildable app. Never overwrites. |
-| `agent-pack` | Offline. Installs the guide and the MCP wiring into a repository. |
+| `agent-pack` | Offline. Installs the guide, the skills and the MCP wiring into a repository. |
+| `changes` | What each release after the repository's pin brings the home, and what to migrate. |
+| `update` | Moves a home repository to this CLI: pins, pack, generated bridge, check, migrations. |
 | `discover` | Offline. Inventories a Node-RED installation from its flows export. |
 | `check` | Offline. Parses the project, verifies the artifact, prints the digest. |
 | `status` | Reads the live generation, release and digest of the home. |
@@ -140,7 +142,7 @@ flows, the MQTT brokers with the topics their nodes actually reach, the v3
 MiakAPI surface as V4 state and function candidates, and every node type it does
 not model, so the reader knows what the inventory missed. It reports that a
 coordinator secret is present in the export; it never prints the secret itself.
-`docs/agent-guide.md` §3 explains what to do with each finding.
+The `miakapp-coordinator` skill explains what to do with each finding.
 
 ## The agent pack
 
@@ -151,17 +153,19 @@ agent to open it arrives already knowing the rules:
 miakapp agent-pack            # or --dir /path/to/the/repository
 ```
 
-It writes four files and reports what it did to each one:
+It writes these files and reports what it did to each one:
 
 | File | Why |
 | --- | --- |
-| `.miakapp/agent-guide.md` | The full guide, copied out of this package. No network, no stale bookmark. |
+| `.miakapp/agent-guide.md` | The short guide, copied out of this package. No network, no stale bookmark. |
+| `.claude/skills/miakapp-*/SKILL.md` | One skill per job, for Claude Code: coordinator, interface, test-real, publish, members, update. |
+| `.agents/skills/miakapp-*/SKILL.md` | The same skills, where Codex discovers repository skills. |
 | `AGENTS.md` | The instruction file Codex reads. |
 | `CLAUDE.md` | The instruction file Claude Code reads. |
 | `.mcp.json` | Project-scope MCP configuration, registering `miakapp mcp`. |
 
-The repository is yours, so the pack edits rather than replaces. The guide is a
-file it owns outright. The instruction files are touched only between
+The repository is yours, so the pack edits rather than replaces. The guide and
+the `miakapp-*` skill folders are files it owns outright. The instruction files are touched only between
 `<!-- miakapp:begin -->` and `<!-- miakapp:end -->`: prose above and below the
 markers is copied through byte for byte, and a second run rewrites the block in
 place instead of appending another copy. `.mcp.json` is merged as a structure —
@@ -174,6 +178,27 @@ on a global binary or this machine's directory layout.
 
 Run it again whenever the CLI is upgraded: an unchanged file is reported
 `unchanged`, and a guide that moved on is reported `updated`.
+
+## Updates
+
+Every command checks the npm registry for a newer release at most once a day
+(cached in `~/.miakapp/update-check.json`, silent offline, off under `CI` or
+with `MIAKAPP_UPDATE_CHECK=0`). A newer release is announced once a day on
+stderr; with `--json`, and in every MCP tool result, it is an
+`update_available` field instead.
+
+```
+npx -y @miakapp/cli@latest changes   # since the pin in .mcp.json, or --since 4.7.1
+npx -y @miakapp/cli@latest update    # then: bun install, bun run check, migrations
+```
+
+`changes` reads `assets/changelog.json` (each release: what it brings the home,
+and the agent's migration steps), and the newer release's own changelog from
+the CDN. `update` re-pins `.mcp.json` and the `@miakapp/cli` entry of
+`package.json`, rewrites the pack, refreshes `app/miakapp.ts` when it is still
+the generated bridge, runs `check`, and prints the migrations. It installs
+nothing and runs no shell. The `miakapp-update` skill tells the agent to ask the
+owner first.
 
 ## MCP
 
@@ -206,6 +231,8 @@ tools over newline-delimited JSON-RPC on stdio.
 | `miakapp_upload` | `upload` | read-only |
 | `miakapp_init` | `init` | writes `miakapp.yaml` (and the app starter with `starter: "app"`), never overwrites |
 | `miakapp_agent_pack` | `agent-pack` | offline, writes the pack into a repository |
+| `miakapp_changes` | `changes` | read-only; reads the npm registry |
+| `miakapp_update` | `update` | rewrites the pack and pins to this server's release |
 | `miakapp_publish` | `publish` | **moves the pointer — needs `confirm: true`** |
 | `miakapp_activate` | `activate` | **moves the pointer — needs `confirm: true`** |
 | `miakapp_rollback` | `rollback` | **moves the pointer — needs `confirm: true`** |

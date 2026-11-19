@@ -15,8 +15,32 @@
  * - `--json`, which prints exactly one closed object on stdout.
  */
 import { homedir, hostname } from 'node:os';
-import { installPack } from './agent-pack.js';
+import {
+  GUIDE_FILE,
+  MCP_FILE,
+  installPack,
+  mergePackageJson,
+  pinnedVersion,
+  put,
+  type PackSkill,
+  type PackedFile,
+} from './agent-pack.js';
 import { CLI_VERSION } from './version.js';
+import {
+  UPDATE_CHECK_VARIABLE,
+  changesBetween,
+  checkForUpdate,
+  compareVersions,
+  fetchChangelog,
+  fetchLatestVersion,
+  isVersion,
+  mergeChangelogs,
+  parseChangelog,
+  updateJson,
+  updateNotice,
+  type ChangelogEntry,
+  type UpdateInfo,
+} from './updates.js';
 import { prepareArtifact, type Artifact } from './artifact.js';
 import {
   exchangePublisherToken,
@@ -127,6 +151,8 @@ export interface CliHost {
    * protocol stream.
    */
   readSecret?(prompt: string): Promise<string>;
+  /** Milliseconds since the epoch. Injected by tests; defaults to `Date.now()`. */
+  now?(): number;
 }
 
 type Field = readonly [key: string, value: string | number | readonly string[]];
@@ -152,7 +178,7 @@ Usage
   miakapp <command> [options]
 
 Commands
-  docs start              Print the complete agent guide bundled with this CLI
+  docs start              Print the agent guide and every skill bundled with this CLI
   docs design             Print the design guide: tokens, themes, recipes, examples
   docs members            Print the members guide: requests, invitations, roles, who is notified
   pair                    Redeem a one-time pairing code into a stored context
@@ -161,7 +187,9 @@ Commands
   context use <name>      Make a context current
   context remove <name>   Delete a context and its stored key
   init                    Write ${PROJECT_FILE} (add --starter app for a buildable app)
-  agent-pack              Install the guide and the MCP wiring into a repository
+  agent-pack              Install the guide, the skills and the MCP wiring into a repository
+  changes                 What each newer release brings the home, and what to migrate
+  update                  Move a home repository to this CLI: pins, pack, bridge, checks
   discover                Inventory an existing Node-RED installation offline
   check                   Validate the project and the artifact offline
   status                  Read the live generation and release of the home
@@ -228,6 +256,15 @@ mcp options
 agent-pack options
   --dir <path>                Repository to install into (default: cwd)
 
+changes options
+  --since <version>           Start after this version (default: the version
+                              .mcp.json pins, else this CLI's)
+  --dir <path>                Repository whose pin to read (default: cwd)
+
+update options
+  --dir <path>                Repository to update (default: cwd). Run it with
+                              the release you want: npx -y @miakapp/cli@latest update
+
 init options
   --home <homeId>             Home ID (default: from the selected context)
   --control-plane <https url> Control-plane issuer (default: from the context)
@@ -251,6 +288,7 @@ Credentials, highest precedence first
 
 Environment
   MIAKAPP_CONFIG_DIR   Absolute directory replacing ~/.miakapp
+  ${UPDATE_CHECK_VARIABLE}=0  No daily check for a newer release (also off when CI is set)
 
 Exit codes
   0 success        1 usage        2 project      3 artifact
@@ -267,6 +305,8 @@ export const COMMAND_OPTIONS: Record<string, readonly string[]> = {
   context: [],
   init: ['home', 'control-plane', 'artifact', 'release', 'context', 'starter'],
   'agent-pack': ['dir'],
+  changes: ['since', 'dir'],
+  update: ['dir'],
   discover: ['flows'],
   check: [],
   status: ['context'],
@@ -823,6 +863,57 @@ export async function guideAssetPath(): Promise<string> {
   return fileURLToPath(new URL('../assets/agent-guide.md', import.meta.url));
 }
 
+/** The skills the pack installs, in the order the guide lists them. */
+export const SKILL_NAMES = [
+  'miakapp-coordinator',
+  'miakapp-interface',
+  'miakapp-test-real',
+  'miakapp-publish',
+  'miakapp-members',
+  'miakapp-update',
+] as const;
+
+export async function skillAssetPath(name: string): Promise<string> {
+  const { fileURLToPath } = await import('node:url');
+  return fileURLToPath(new URL(`../assets/skills/${name}/SKILL.md`, import.meta.url));
+}
+
+export async function changelogAssetPath(): Promise<string> {
+  const { fileURLToPath } = await import('node:url');
+  return fileURLToPath(new URL('../assets/changelog.json', import.meta.url));
+}
+
+export async function bridgeAssetPath(): Promise<string> {
+  const { fileURLToPath } = await import('node:url');
+  return fileURLToPath(new URL('../assets/starter/app/app/miakapp.ts', import.meta.url));
+}
+
+/** Reads one packaged text asset; a missing one means a broken install. */
+async function packagedText(host: CliHost, path: string): Promise<string> {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(await (await files(host)).read(path));
+  } catch {
+    throw projectError(
+      `A packaged file is missing or unreadable at ${path}`,
+      'Reinstall @miakapp/cli: its guides ship in the package and open no network connection.',
+    );
+  }
+}
+
+async function packagedSkills(host: CliHost): Promise<PackSkill[]> {
+  const skills: PackSkill[] = [];
+  for (const name of SKILL_NAMES) {
+    skills.push({ name, content: await packagedText(host, await skillAssetPath(name)) });
+  }
+  return skills;
+}
+
+/** Strips the YAML front matter a skill carries for its client. */
+function skillBody(content: string): string {
+  const match = /^---\n[\s\S]*?\n---\n+/.exec(content);
+  return match === null ? content : content.slice(match[0].length);
+}
+
 /** Directory of the design files (`tokens.css`, `gallery.html`…), resolved like the guide. */
 export async function designAssetDirectory(): Promise<string> {
   const { fileURLToPath } = await import('node:url');
@@ -873,6 +964,12 @@ async function runDocs(host: CliHost, invocation: Invocation): Promise<CommandRe
 
   if (!guide.endsWith('\n')) guide = `${guide}\n`;
   if (directory === undefined) {
+    // The guide is short; the skills carry the how-to. `docs start` stays the
+    // complete contract for an agent that has no pack installed yet.
+    for (const skill of await packagedSkills(host)) {
+      guide += `\n---\n\n<!-- skill: ${skill.name} -->\n${skillBody(skill.content)}`;
+      if (!guide.endsWith('\n')) guide += '\n';
+    }
     return { summary: 'Miakapp agent guide', fields: [], json: { topic, guide }, text: guide };
   }
   return {
@@ -897,18 +994,8 @@ async function runAgentPack(host: CliHost, invocation: Invocation): Promise<Comm
     );
   }
 
-  const guidePath = await guideAssetPath();
-  let guide: string;
-  try {
-    guide = new TextDecoder('utf-8', { fatal: true }).decode(await filesystem.read(guidePath));
-  } catch {
-    throw projectError(
-      `The packaged guide is missing or unreadable at ${guidePath}`,
-      'Reinstall @miakapp/cli: the pack copies the guide out of the package, never off the network.',
-    );
-  }
-
-  const result = await installPack(filesystem, root, guide);
+  const guide = await packagedText(host, await guideAssetPath());
+  const result = await installPack(filesystem, root, guide, await packagedSkills(host));
   const changed = result.files.filter((entry) => entry.action !== 'unchanged').length;
   return {
     summary: changed === 0
@@ -921,6 +1008,224 @@ async function runAgentPack(host: CliHost, invocation: Invocation): Promise<Comm
       files: result.files.map((entry) => ({ path: entry.path, action: entry.action })),
     },
   };
+}
+
+async function readTextIfPresent(host: CliHost, path: string): Promise<string | undefined> {
+  const filesystem = await files(host);
+  if (!await filesystem.exists(path)) return undefined;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(await filesystem.read(path));
+  } catch {
+    throw projectError(`${path} is not readable as UTF-8 text`);
+  }
+}
+
+async function packagedChangelog(host: CliHost): Promise<ChangelogEntry[]> {
+  return parseChangelog(await packagedText(host, await changelogAssetPath()), 'the packaged changelog');
+}
+
+function fetcherOf(host: CliHost): FetchLike {
+  return host.fetch ?? ((input, init) => globalThis.fetch(input, init));
+}
+
+function releaseJson(entry: ChangelogEntry): Record<string, unknown> {
+  return { version: entry.version, date: entry.date, home: entry.home, steps: entry.steps };
+}
+
+function releaseText(entry: ChangelogEntry): string {
+  const steps = entry.steps.map((step) => `    - ${step}`).join('\n');
+  return `${entry.version} (${entry.date})\n  For the home: ${entry.home}\n  To do:\n${steps}\n`;
+}
+
+/**
+ * Lists what each release after the repository's pin brings, newest first.
+ *
+ * The packaged changelog answers offline; when the registry knows a newer
+ * release, that release's own changelog is read from the CDN, because an old
+ * CLI cannot describe what was written after it shipped.
+ */
+async function runChanges(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const root = invocation.options.get('dir') ?? host.cwd();
+  const sinceOption = invocation.options.get('since');
+  if (sinceOption !== undefined && !isVersion(sinceOption)) {
+    throw usageError(`--since must be a version such as 4.7.1, received ${sinceOption}`);
+  }
+  const pinned = pinnedVersion(await readTextIfPresent(host, `${root}/${MCP_FILE}`));
+  const since = sinceOption ?? pinned ?? CLI_VERSION;
+
+  const fetcher = fetcherOf(host);
+  let entries = await packagedChangelog(host);
+  let latest: string | undefined;
+  try {
+    latest = await fetchLatestVersion(fetcher);
+  } catch {
+    latest = undefined;
+  }
+  let undescribed: string | undefined;
+  if (latest !== undefined && compareVersions(latest, CLI_VERSION) > 0) {
+    const remote = await fetchChangelog(fetcher, latest);
+    if (remote === undefined) undescribed = latest;
+    else entries = mergeChangelogs(remote, entries);
+  }
+  const until = latest !== undefined && compareVersions(latest, CLI_VERSION) > 0 ? latest : CLI_VERSION;
+  const releases = changesBetween(entries, since, until);
+  const upToDate = compareVersions(since, until) >= 0;
+
+  const header = upToDate
+    ? `Up to date: ${since} is the newest release${latest === undefined ? ' this CLI knows (registry unreachable)' : ''}`
+    : `${releases.length} release${releases.length === 1 ? '' : 's'} after ${since}, up to ${until}`;
+  const lines = [header, ''];
+  for (const entry of releases) lines.push(releaseText(entry));
+  if (undescribed !== undefined) {
+    lines.push(`${undescribed} exists, but its notes could not be fetched: run npx -y @miakapp/cli@${undescribed} changes.`, '');
+  }
+  if (!upToDate) {
+    lines.push('Next: tell the owner what it brings, ask, then run npx -y @miakapp/cli@latest update.');
+  }
+  return {
+    summary: header,
+    fields: [],
+    json: {
+      since,
+      pinned: pinned ?? null,
+      cli_version: CLI_VERSION,
+      latest: latest ?? null,
+      up_to_date: upToDate,
+      releases: releases.map(releaseJson),
+      ...(undescribed === undefined ? {} : { undescribed }),
+    },
+    text: `${lines.join('\n').trimEnd()}\n`,
+  };
+}
+
+/**
+ * The bridge `init --starter app` copies is generated: the guide forbids
+ * editing it, and a newer CLI is how it changes. It is refreshed only when it
+ * still opens with the canonical header, so a file someone rewrote is left alone.
+ */
+function isGeneratedBridge(existing: string, canonical: string): boolean {
+  const header = canonical.split('\n').slice(0, 3).join('\n');
+  return header.length > 0 && existing.startsWith(header);
+}
+
+/**
+ * Moves a home repository to the running CLI release.
+ *
+ * Every write is one this CLI owns: the pack (guide, skills, marked blocks,
+ * the `.mcp.json` entry), the CLI's own entry in `package.json`, and the
+ * generated bridge. It installs no dependency and runs no shell: `bun install`
+ * and the migrations are the agent's, printed at the end.
+ */
+async function runUpdate(host: CliHost, invocation: Invocation): Promise<CommandResult> {
+  const filesystem = await files(host);
+  const root = invocation.options.get('dir') ?? host.cwd();
+  if (!await filesystem.exists(root)) {
+    throw projectError(`No directory at ${root}`, 'Point --dir at the home repository.');
+  }
+  const previous = pinnedVersion(await readTextIfPresent(host, `${root}/${MCP_FILE}`));
+  if (previous !== undefined && compareVersions(previous, CLI_VERSION) > 0) {
+    throw usageError(
+      `This repository pins ${previous}, newer than this CLI (${CLI_VERSION})`,
+      `Run npx -y @miakapp/cli@${previous} update, or @latest. Nothing was written.`,
+    );
+  }
+
+  const guide = await packagedText(host, await guideAssetPath());
+  const pack = await installPack(filesystem, root, guide, await packagedSkills(host));
+  const written: PackedFile[] = [...pack.files];
+
+  const manifestPath = `${root}/package.json`;
+  const manifest = await readTextIfPresent(host, manifestPath);
+  const merged = manifest === undefined ? undefined : mergePackageJson(manifest, manifestPath);
+  if (merged !== undefined) written.push(await put(filesystem, manifestPath, merged));
+
+  const bridgePath = `${root}/app/miakapp.ts`;
+  const bridge = await readTextIfPresent(host, bridgePath);
+  let bridgeKept = false;
+  if (bridge !== undefined) {
+    const canonical = await packagedText(host, await bridgeAssetPath());
+    if (isGeneratedBridge(bridge, canonical)) written.push(await put(filesystem, bridgePath, canonical));
+    else bridgeKept = true;
+  }
+
+  let check: Record<string, unknown> = { ran: false };
+  if (await filesystem.exists(`${root}/${PROJECT_FILE}`)) {
+    try {
+      const options = new Map(invocation.options);
+      options.set('project', root);
+      const result = await runCheck(host, { ...invocation, command: 'check', options });
+      check = { ran: true, ok: true, summary: result.summary };
+    } catch (error) {
+      if (!(error instanceof CliError)) throw error;
+      check = { ran: true, ok: false, kind: error.kind, message: error.message };
+    }
+  }
+
+  const migrations = previous === undefined
+    ? []
+    : changesBetween(await packagedChangelog(host), previous, CLI_VERSION).reverse();
+  const changed = written.filter((entry) => entry.action !== 'unchanged');
+
+  const lines = [
+    previous === undefined || previous === CLI_VERSION
+      ? `Pack at ${CLI_VERSION} in ${root}`
+      : `Updated ${root} from ${previous} to ${CLI_VERSION}`,
+  ];
+  for (const entry of changed) lines.push(`  ${entry.action}: ${entry.path}`);
+  if (bridgeKept) lines.push(`  kept: ${bridgePath} (not the generated bridge; compare it with miakapp init --starter app in a scratch directory)`);
+  lines.push(check['ran'] === true
+    ? `  check: ${check['ok'] === true ? 'ok' : `${String(check['kind'])}: ${String(check['message'])}`}`
+    : `  check: no ${PROJECT_FILE} here, skipped`);
+  if (migrations.length > 0) {
+    lines.push('', 'Apply, oldest first:');
+    for (const entry of migrations) {
+      for (const step of entry.steps) lines.push(`  [${entry.version}] ${step}`);
+    }
+  }
+  lines.push('', 'Then: bun install, bun run check, check on the real home (miakapp taps), commit,'
+    + ' and restart the session so the miakapp MCP server runs the new pin.');
+
+  return {
+    summary: lines[0] as string,
+    fields: [],
+    json: {
+      root,
+      previous: previous ?? null,
+      version: CLI_VERSION,
+      changed: changed.length,
+      files: written.map((entry) => ({ path: entry.path, action: entry.action })),
+      ...(bridgeKept ? { bridge_kept: bridgePath } : {}),
+      check,
+      migrations: migrations.map(releaseJson),
+      guide: GUIDE_FILE,
+    },
+    text: `${lines.join('\n')}\n`,
+  };
+}
+
+/**
+ * The daily "newer release" check every command runs after succeeding.
+ * Off under CI and with MIAKAPP_UPDATE_CHECK=0; never fails a command.
+ */
+export async function automaticUpdateCheck(
+  host: CliHost,
+  command: string,
+): Promise<UpdateInfo | undefined> {
+  if (command === 'changes' || command === 'update') return undefined;
+  if (host.env(UPDATE_CHECK_VARIABLE) === '0' || nonEmpty(host.env('CI')) !== undefined) return undefined;
+  let directory: string;
+  try {
+    directory = storeDirectory(host);
+  } catch {
+    return undefined;
+  }
+  return await checkForUpdate({
+    directory,
+    files: await files(host),
+    fetch: fetcherOf(host),
+    now: host.now?.() ?? Date.now(),
+    current: CLI_VERSION,
+  });
 }
 
 /**
@@ -1658,6 +1963,10 @@ export async function dispatch(host: CliHost, invocation: Invocation): Promise<C
       return await runInit(host, invocation);
     case 'agent-pack':
       return await runAgentPack(host, invocation);
+    case 'changes':
+      return await runChanges(host, invocation);
+    case 'update':
+      return await runUpdate(host, invocation);
     case 'discover':
       return await runDiscover(host, invocation);
     case 'check':
@@ -1740,11 +2049,19 @@ export async function run(argv: readonly string[], host: CliHost): Promise<numbe
       return await serve(host, input);
     }
     const result = await dispatch(host, invocation);
+    const update = await automaticUpdateCheck(host, invocation.command);
     host.write(
       json
-        ? `${JSON.stringify({ ok: true, command: invocation.command, ...result.json })}\n`
+        ? `${JSON.stringify({
+          ok: true,
+          command: invocation.command,
+          ...result.json,
+          ...(update === undefined ? {} : { update_available: updateJson(update) }),
+        })}\n`
         : renderText(result),
     );
+    // On stderr, so a pipe reading stdout never sees it; once a day at most.
+    if (!json && update?.fresh === true) host.writeError(`${updateNotice(update)}\n`);
     return EXIT_CODE.success;
   } catch (error) {
     if (error instanceof CliError) {

@@ -1,748 +1,101 @@
 # Building a Miakapp home
 
-This guide is written for a coding agent — Claude Code, Codex, or any successor —
-that has been handed someone's house and asked to make it work. You are expected
-to read the existing installation, write a coordinator, write an interface, test
-both, and publish. The owner is not a home-automation developer and should not
-have to become one.
+For a coding agent handed someone's house: read what is there, write a
+coordinator and an app, check them on the real home, publish. The owner is not a
+home-automation developer and should not have to become one.
 
-Everything below is true of the code in this repository. Where a rule exists for
-a reason that is not obvious, the reason is given, because a rule whose purpose
-you cannot see is one you will optimize away.
+The how-to lives in short skills, one per job (listed at the end). This page is
+what holds across all of them.
 
-## 0. What "done" means
+## What "done" means
 
-The owner asked for a home they can use, not for a picture of one. You are done
-when the household can open the published interface, read real values from it
-and use every control the owner authorized — and you checked that yourself.
-Concretely:
+The household can open the published app, read real values in it and use every
+control the owner authorized — and you checked that yourself on the real home.
 
-- **Publish, then verify.** A build that only runs on your machine, a mockup, a
-  prototype kept offline or a screenshot is an intermediate result, never the
-  deliverable. Do not stop to show one and ask whether to continue: the owner
-  asked for the home, and publication is reversible in one command (§8). The
-  checkpoints below are not that: each one shows the real, published app.
-- **Hand over a link that works.** Give the owner the `home_url` that
-  `miakapp publish` and `miakapp status` print — the Miakapp address where the
-  home opens for its members — and say what you verified there. The
-  `artifact_url` (JSON `url`) is the raw bundle, not an interface: never send it
-  as "the link". If the control plane advertises no `home_url`, say so instead of
-  inventing one, and say what `miakapp status` proved.
-- **Ask once, at the start, and only for what you cannot find.** Access comes
-  from pairing (§9), the existing installation from inventory (§3), and the
-  right to wire physical controls from one question at the start of the
-  step-by-step journey (below). Repeated permission questions in the middle of
-  the work are a failure of the work.
-- **Get it right the first time.** The owner should never have to ask you to
-  remove something you added or to fix how it looks or feels. Before you
-  publish, read `miakapp docs design` and follow it to the letter, check the
-  app for real (§5, "Check it for real"), and remove anything the guides
-  tell you not to add (a connection banner, your own bottom bar, a value
-  nobody asked for).
-- **You need nothing from the platform's source.** This guide and the published
-  CLI — including the app starter `miakapp init --starter app` writes — are the
-  whole toolchain for the interface. Never edit or redeploy the Miakapp
-  platform to make one house work; if a capability is missing, report it to the
-  owner as missing instead of patching around it.
+- **Publish, then verify.** A mockup, a local build or a screenshot is never the
+  deliverable, and never something to stop and ask about: publication is
+  reversible in one command.
+- **Hand over the `home_url`** that `miakapp publish` and `miakapp status`
+  print, and say what you verified there. Never the artifact URL.
+- **Ask once, at the start, for what you cannot find.** Access comes from
+  pairing, the house from inventory, physical controls from one question.
+- **Right the first time.** The owner should never have to ask you to remove
+  or restyle something you added.
+- **Nothing from the platform's source.** The CLI, its starter and these skills
+  are the whole toolchain. If a capability is missing, tell the owner; never
+  patch or redeploy the platform for one house.
 
-### Build it with the owner, one visible step at a time
+## Build it with the owner, one visible step at a time
 
-The owner must never feel lost, and should feel they are building their home
-with you. Work in short steps. Each step ends with something the owner can see
-in the published app, a few plain sentences on what changed, and **one** clear
-question that opens the next step. Then wait for the answer.
+Each step ends with something the owner sees in the published app, a few plain
+sentences, and **one** question that opens the next step. A first session:
 
-A first session usually goes like this:
-
-1. Right after pairing, publish the empty app and send its `home_url`:
-   *"Here is your home's app. As you can see, it is empty for now. Do you
-   already have something precise in mind? Otherwise, tell me which connected
-   devices you have. Later we can also look at devices that are not connected
-   (gate, roller shutters, air conditioning, radiators…): I can very likely
-   find a way to control them from Miakapp."*
-2. The owner lists devices ("I have Hue lamps…"). Ask only for what you need
-   to reach them: the credentials of the brand's account, or whether there is a
-   Raspberry Pi or a small PC that can run 24/7 in the house. In the same
-   message, ask **once** for the green light on physical controls: *"As we go,
-   I'll add the buttons that act on the house (lights, shutters, gate,
-   heating…), each one reserved to the people you choose. OK for you?"* That
-   answer covers every control of the journey: do not ask again device by
-   device. You still never trigger something that opens, unlocks or heats on
-   the real hardware yourself: when such a control is ready, tell the owner it
+1. Right after pairing, publish the empty app and send its `home_url`: "Here is
+   your home's app, empty for now. Do you have something precise in mind?
+   Otherwise, which connected devices do you have?"
+2. Ask only what you need to reach the devices (account, a Pi or small PC that
+   runs 24/7), and **once** for the green light on physical controls, each
+   reserved to the people the owner chooses. That answer covers the journey;
+   still never trigger something that opens, unlocks or heats yourself — say it
    is ready to try.
-3. Connect them, publish, check, then: *"I've just added your lamps! Do you want
-   me to group them by room? Otherwise we can start adding people to the home:
-   family members, guests or friends?"*
-4. Carry on the same way: rooms, **people and their rights** (who may join, how
-   they are invited, what each role sees and does: build it the way
-   `miakapp docs members` explains, early, before the owner shares the home),
-   automations, then the devices that were not connected.
+3. Connect, publish, check, then propose the next step: rooms, **people and
+   their rights** (early, before the home is shared), automations, devices that
+   are not connected yet.
 
-Rules for every checkpoint:
-
-- what the owner looks at is the real published app, never a mockup;
-- one question at a time, with the likely answer suggested;
-- small steps, minutes rather than hours: add a few things, show them, move on;
-- the owner's words, no technical detail unless they ask;
-- if the owner says "carry on without me", chain the steps and report at the end.
-
-Two scopes must not be confused:
+The owner's words, no technical detail unless asked. "Carry on without me"
+means chain the steps and report at the end.
 
 | In scope by default | Needs the owner's explicit request |
 | --- | --- |
-| reading the existing installation (§3) | changing flows, automations or devices that already run the house |
-| giving the coordinator its own access to devices (its own broker user, token, GPIO) | removing or replacing the existing hub (the switch-over) |
-| writing and testing a coordinator and an app | physical controls, until the owner answered the one question above |
-| publishing, verifying and rolling back the V4 interface | anything on the owner's own machines beyond the coordinator you were asked to run |
+| reading the existing installation | changing flows, automations or devices that already run the house |
+| giving the coordinator its own access to devices | removing or replacing the existing hub |
+| writing, testing, publishing and rolling back | physical controls, until the one question is answered |
 
-Caution about the second column is not a reason to withhold the first. A new V4
-interface that only reads is still a useful, publishable V1; say plainly which
-controls are not offered and why.
+## What you are building
 
-## 1. What you are building
-
-Three artifacts, and no more:
-
-| Artifact | Where it runs | What it owns |
+| Artifact | Runs | Owns |
 | --- | --- | --- |
-| Coordinator | the owner's machine, under Bun | state, events, functions, **authorization** |
-| Interface | an isolated frame in the household's browser | what residents see and touch |
-| `miakapp.yaml` | neither; it is the contract | what the interface may ask for |
+| Coordinator | the owner's machine, under Bun (`miakapi`) | state, events, functions, **authorization** |
+| App | an isolated frame in each resident's browser | what residents see and touch |
+| `miakapp.yaml` | — the contract | what the app may ask for |
 
-The interface is a **whole-house application** (`app:` in `miakapp.yaml`, ABI
-`miakapp.app/1`): your own HTML, CSS, layout, navigation and libraries, bundled
-into one file. Miakapp draws nothing for you, and no longer draws the old
-semantic `component:` kind at all: a home published that way shows as having no
-interface. §5 covers the app.
+The coordinator is trusted, the app is not. The relay terminates TLS and stores
+plaintext state: self-hosting it is not end-to-end encryption; never say so.
 
-The coordinator is trusted. The interface is not. The relay between them is
-platform-untrusted but not blind: it terminates TLS, stores plaintext state and
-enforces routing, so self-hosting it does not give end-to-end confidentiality.
-Do not tell the owner otherwise.
+## Access
 
-Start the interface with the starter the CLI ships, in an empty directory:
+Never ask for a password, a login or a key. The owner opens
+https://miakapp.com/pair, picks the home, and sends you a one-time code
+(10 minutes, once):
 
 ```bash
-miakapp init --starter app        # home and issuer from the paired context
-bun run build && bun run check    # Bun >= 1.2.23 bundles; Node >= 22.9 runs the CLI
+printf '%s\n' "<code>" | miakapp pair      # --issuer <url> if the page shows one
+miakapp context list                      # homes this machine can publish to
 ```
 
-It writes `miakapp.yaml`, `app/main.ts` (the interface to edit),
-`app/miakapp.ts` (the bridge to the home, copied from this CLI release),
-`package.json`, `tsconfig.json` and `app/README.md`. It needs no source
-repository and no unpublished package, and it refuses — writing nothing — if
-any of those files already exists. As generated it shows only what the home
-shares, with an honest empty state; it is where your work starts, never what
-you publish. Without `--starter`, `init` writes `miakapp.yaml` alone.
+The key lands in `~/.miakapp` (or `MIAKAPP_HOME_KEY` for CI), never in the
+repository. The home's own coordinators may use the same key: give it to them
+through their environment, never ask for a second pairing. Keys and wiring are
+your business; tell the owner what works, not how.
 
-This guide covers the judgment no starter can.
+## Keep this repository readable by the next agent
 
-### Leave the repository readable by the next agent
+`miakapp agent-pack` (once) installs this guide, the skills below, a pointer in
+`AGENTS.md` and `CLAUDE.md`, and the `miakapp` MCP server pinned in `.mcp.json`.
+It only rewrites what it generated. `miakapp update` moves the repository to a
+newer CLI (see the `miakapp-update` skill).
 
-You are probably not the last agent to open this repository, and the next one
-will not have this conversation. Run the pack once, in the repository root:
+## Skills
 
-```bash
-miakapp agent-pack
-```
-
-It copies this guide to `.miakapp/agent-guide.md`, points `AGENTS.md` and
-`CLAUDE.md` at it, and registers `miakapp mcp` in `.mcp.json` so the tools are
-wired rather than described. It edits instead of replacing: prose outside the
-`<!-- miakapp:begin -->` markers is kept, other MCP servers are kept by name,
-and running it twice changes nothing.
-
-If you are reading this file *as* `.miakapp/agent-guide.md`, someone already
-ran it. Run it again after upgrading the CLI, and commit what changes — a guide
-that contradicts the CLI installed beside it is worse than no guide.
-
-## 2. The division of responsibility
-
-**The coordinator authorizes everything.** The relay proves *who* is calling and
-attaches non-spoofable caller metadata. Deciding whether that person *may* act is
-the coordinator's job and nobody else's. In a well-built coordinator that decision is the
-first line of the function body:
-
-```ts
-if (call.source.kind !== 'user' || call.source.id !== options.ownerUserId) {
-  throw new ApplicationCallError(2003, 'Only the owner may drive the lights');
-}
-```
-
-Removing that check does not produce an error anywhere. It produces a home that
-anyone enrolled can drive. There is no second layer that will catch it for you.
-
-**The app trusts nothing it was not given.** It has no network and no storage
-shared with anyone. It cannot reach the lamp except through a call the
-coordinator declared, and it cannot read a state path the coordinator did not
-grant. This is why it is safe to let an app be rewritten often and reviewed
-lightly, and why it is not safe to move a decision into it.
-
-**You own the UI; the coordinator owns the facts.** The coordinator exposes state
-and actions. What the household actually sees — the layout, the wording, the
-language, which controls are prominent — is yours to design (§5). Do not push
-presentation choices into the coordinator, and do not push authorization into
-the app.
-
-## 3. Before you write anything: characterize the house
-
-You are almost never starting from an empty building. Read what is already there
-before you design anything:
-
-- existing hubs and brokers — Node-RED, MQTT, Zigbee/Z-Wave coordinators, an
-  HTTP-speaking hub;
-- what each device actually reports, and how often;
-- which values are *measurements* (temperature, power) and which are
-  *commanded* (a lamp, a valve) — they have different failure modes;
-- which actions are physically consequential: anything that heats, locks,
-  unlocks, opens or closes.
-
-Write down what you found before you write the configuration. The state paths you
-choose become a disclosure boundary and a public interface at the same time, and
-renaming one after the household has used it is not free.
-
-### Talk to the devices, not to the old hub
-
-Read the existing hub to learn the house, never to depend on it. The
-coordinator talks **directly** to the devices: MQTT and Zigbee2MQTT topics, the
-Pi's GPIO for relays, the local HTTP or UDP API of a device, an RF or IR
-transmitter. Owners move to Miakapp to get rid of the old stack (Node-RED, Home
-Assistant, a vendor bridge), and a home that still needs it is not finished.
-
-- Give the coordinator its own access: its own MQTT user on the broker, its own
-  token. Do not reuse the hub's credentials, and do not call the hub's API
-  (Node-RED HTTP endpoints, its context files, a Home Assistant REST call) for
-  something the device itself can tell you or do.
-- When a direct path is not ready yet, the hub may serve as a **temporary
-  bridge** for that one datum or action: mark it `bridge: <hub>` in
-  `docs/inventory.md`, keep it behind one function you can swap, and tell the
-  owner what is left before the hub can be switched off.
-- Two masters on the same relay or device disagree about its state. While the
-  old hub still drives something, keep your direct driver ready but off, and
-  switch over in one step with the owner.
-
-### The inventory comes before the design
-
-Commit the inventory as `docs/inventory.md` in the home repository, one line per
-datum or action, before you design a single screen:
-
-| Field | Example |
+| Skill | Use it to |
 | --- | --- |
-| source | `zigbee2mqtt/salon_thermo` over the house broker |
-| what it is | temperature, °C, one decimal |
-| how fresh | reports every ~60 s; last seen 2 min ago |
-| who may read it | every member / owner only |
-| command | none — a measurement, not a control |
-| path | direct (MQTT) / bridge: Node-RED until the switch-over |
-
-Then design **from** it: the V1 shows every datum the household would care
-about and every action that is both technically possible and authorized,
-grouped the way people live in the house — by room or by use, not by device
-or protocol. Anything you leave out, leave out on purpose, and say why in the
-inventory. A V1 that shows three values when the house reports twenty is not a
-first version; it is an unfinished one.
-
-What the interface must never do:
-
-- **invent data.** A value with no source is shown as absent, never filled in
-  with a plausible number or a demo fixture;
-- **blur freshness.** Distinguish *current*, *stale* (with its age) and
-  *unavailable* for every value, in words a resident understands;
-- **spend space on plumbing.** No protocol or platform vocabulary
-  (`ACCEPTED`, "relay connected", ABI, schema names, IDs), no banner restating
-  that a view is read-only, no title repeating the home's name on every card.
-  Every line of text is either information or an action.
-
-### Reading a V3 house you inherited
-
-Most houses arriving at V4 already run Node-RED with the v3 MiakAPI nodes. Ask
-the owner for the `flows.json` Node-RED writes, or for an *Export > All flows*
-download, and read it before you read anything else:
-
-```
-miakapp discover --flows ~/node-red/flows.json
-miakapp discover --flows ~/node-red/flows.json --json
-```
-
-The command is offline and read-only: it opens no socket, contacts no broker and
-never writes back into the export. It reports the tabs, the MQTT brokers with the
-topics their nodes actually reach, the `initMiakapi` home bindings, every
-`commitVariables` path as a state candidate, every `onUserAction` id as a
-function candidate with the groups allowed to invoke it, and every node type it
-does not model — so you know what the inventory missed rather than assuming it
-missed nothing.
-
-Four of its findings decide work you would otherwise discover late:
-
-- **`secret_in_export`.** The v3 `initMiakapi` node declares `coordSecret` in its
-  `defaults`, not in its `credentials`, so Node-RED stores that secret in
-  cleartext in `flows.json` rather than in the encrypted `flows_cred.json`. If
-  the export has one, treat it as leaked: rotate it, and keep the file out of
-  Git. §9 is the V4 rule that replaces it.
-- **`unrestricted_action`.** The v3 handler allows an action outright when its
-  node lists no group, so an empty `allowedGroups` is a grant to every signed-in
-  user, not a deny. Each one needs a deliberate V4 rule before you port it.
-- **`name_needs_rename`.** A v3 variable path or action id that is not a legal V4
-  dotted name has to be renamed now, while nobody depends on it.
-- **`wildcard_subscription`.** A topic holding `#` or `+` is a subscription
-  pattern, not one device. Enumerate what it actually matches.
-
-The command deliberately does not tell you which actions are physically
-consequential. It lists every action it found; deciding which of them heats,
-locks, unlocks, opens or closes is a judgement you make with the owner, and no
-keyword list should make it for you.
-
-### When the owner needs a new device
-
-Recommend open protocols that work locally: **Zigbee** (through a Zigbee
-coordinator and Zigbee2MQTT), **MQTT**, devices that run **Tasmota** or
-ESPHome, and anything else that does not need the vendor's cloud. Avoid, when
-there is a choice:
-
-- **Bluetooth**: its range is too short for a house;
-- **Wi-Fi**: hard to extend, the router caps the number of devices, and
-  everything depends on the internet box.
-
-Say why in one sentence, name one or two concrete models and a price range.
-For a device that cannot be connected at all (proprietary RF or IR remote, a
-gate or shutter with only a wired switch), look for a bridge: an RF or IR
-transmitter, or a Zigbee relay module wired to the existing switch.
-
-## 4. The coordinator
-
-Keep the coordinator in the same shape: the configuration is a
-**pure function of its options**, so it can be tested without a relay, a control
-plane or a network. `coordinator/main.ts` is the only file that touches the
-outside world. Keep that split. It is what makes `test/home.test.ts` possible,
-and the authorization rules are exactly the thing you want under test.
-
-Four declarations:
-
-```ts
-{
-  state:        { 'zone.living_room.light.on': false },   // paths and initial values
-  stateAccess:  [{ userId, patterns: ['zone.living_room.*'] }],
-  events:       [{ topic, directions: EventDirection.publishToUsers }],
-  eventAccess:  [{ userId, publish: [], subscribe: [topic] }],
-  functions:    { async 'lighting.set'(call) { /* authorize, act, return */ } },
-}
-```
-
-`stateAccess[].patterns` is the disclosure boundary. A user sees exactly those
-paths and nothing else. Widen it deliberately, one path at a time, and never with
-a wildcard that happens to be convenient.
-
-Three ordering and failure rules that are easy to get wrong:
-
-**State first, event second.** Write the state, *then* publish the event:
-
-```ts
-await coordinator.state.set([{ path: STATE.lightOn, value: on }]);
-await coordinator.events.publish(EVENT_LIGHT_CHANGED, { on });
-```
-
-A subscriber that reacts to the event and immediately reads the state must never
-see the old value. The reverse order is a race that will reproduce once a month
-and waste a day.
-
-**Reject bad arguments with a typed application error.** `ApplicationCallError`
-carries a numeric code the app can branch on. Do not throw a bare `Error`
-for a caller mistake; the distinction between "you asked wrongly" and "something
-broke" is the one the interface needs most.
-
-**A home has several coordinators.** Names are namespace sharding by convention.
-The relay keeps ownership tables for topics, state paths and functions, detects
-collisions and rejects with `4409`. If you claim `lighting.set` for the whole
-house, you have taken a name another integration may need; scope what you own.
-
-## 5. The interface
-
-### A whole-house application (default)
-
-`miakapp init --starter app` writes an `app:` section and a buildable app to
-edit. You own the document: build any DOM, ship your own CSS, use React,
-Svelte, Vue, charts or WebAssembly — anything a bundler can inline. Navigate
-with the starter's `createNav()`, which gives every page a history entry and a
-swipe back. The deliverable is **one classic-script IIFE** of at most 2 MiB,
-with no `import()` and no source map; the starter's `bun run build` is:
-
-```bash
-bun build app/main.ts --format=iife --minify --outfile dist/app.js
-```
-
-Miakapp runs it in an isolated, opaque-origin frame below a permanent Miakapp
-bar, after the resident agreed to open the home. The frame has no network, no
-cookies or storage, no popups and no fullscreen; assets go in the bundle as
-`data:`/`blob:` URLs. Its only way to the home is `window.miakapp`, through the
-bridge the starter writes as `app/miakapp.ts` — the source of the `@miakapp/app`
-SDK, which is not on npm yet, so import the local file:
-
-```ts
-import { callErrorCode, connect } from './miakapp.js';
-
-const home = connect();
-home.subscribe((state) => render(state));        // also called once immediately
-await home.call('lighting.set', { on: true });   // rejects with a closed code
-```
-
-Do not edit the bridge; a newer CLI's starter carries any change to it.
-
-**Make it beautiful from the first build.** Run `miakapp docs design` before you
-draw anything, and follow its "Make it beautiful" recipe: Miakapp ships design
-tokens, four themes (Minuit, Lumière, Miel, Craie), CSS recipes, line icons, an
-embedded font and example screens. The starter's `app/theme.ts` already uses
-them. They are a starting point you may change
-entirely; the Miakapp bar at the bottom, outside your frame, is not yours to
-redraw, but `home.bar.setButtons()` can add one or two of your own screens to it
-(icons: grid, bolt, light, thermometer, camera, lock, list, chart, leaf, star,
-people, bell), each with an optional `badge` count (e.g. join requests waiting;
-0 shows none). Call it again whenever the count changes.
-
-Your frame cannot open the share sheet or write the clipboard. For a "Share" or
-"Copy" button, call `home.share({ title, text, url })` or `home.copy(text)`
-directly in the tap handler: Miakapp does it (share sheet, else copy), only on
-that fresh tap, url https only. It resolves `'shared'`, `'copied'`,
-`'cancelled'` or `'unavailable'`; tell the resident which, and on
-`'unavailable'` show the text in a read-only field.
-
-Declare every state path (exact or `prefix.*`) under `app.requires.state_read`
-and every function under `app.requires.call`. Events, media and `miakapp.*`
-functions are refused by `miakapp check`. Show `state.stale`, disable controls
-while it is true, and handle `outcome_unknown` exactly as below.
-
-**The bundle is not private.** Any signed-in user who learns its digest can
-fetch it. Put no household data in it — no names, rooms, devices or accounts —
-and read everything from state, which the coordinator filters per resident.
-
-### Two states the interface must never hide
-
-**Staleness.** `home.state.stale` means the snapshot may no longer reflect the
-house. Show it. Per RFC 0002 §12.2 it is exposed, never hidden — a thermostat
-reading that is silently forty minutes old is worse than one labelled uncertain.
-Showing it is the Miakapp bar's job and yours together: the bar says
-"Connecting…" or "Reconnecting…", and your app **dims** the values that may be
-old (`.is-stale` on `.mk-app`) and disables the controls. Never add a banner,
-toast or strip of your own for it ("The home is not answering"): it repeats the
-bar, and every resident sees it each time the app opens.
-
-**Staging.** `home.staging` is true while a release is staged: rendering works,
-calls and events do not. Disable the controls and say why.
-An interface that looks live and silently does nothing is the worst outcome
-available.
-
-### An unknown outcome is never retried
-
-This is the rule that will most tempt you to break it, so it is stated plainly:
-
-```ts
-try {
-  await home.call('lighting.set', { on }, { deadlineMs: 10_000 });
-} catch (error) {
-  // Deliberately not retried. The call may already have reached the lamp,
-  // and the next state snapshot settles the question.
-  failure = error instanceof Error ? error.message : 'The command failed';
-}
-```
-
-A failed call is not a call that did not happen. `CallOutcomeUnknownError` exists
-precisely to name the case where the effect is undetermined, and the physical
-world does not have a rollback. Surface it, let the next state snapshot settle
-it, and let the person decide. The same principle has a CLI counterpart: exit
-code 7.
-
-### Check it for real
-
-Never check against a bridge you wrote yourself: it hides what breaks on a
-phone (sandbox refusals, late answers, refused calls, rate limits). Run the app
-against the real home:
-
-```bash
-bun run build
-miakapp preview --as member     # your build, not activated: prints a link
-miakapp taps --as member        # taps every control there, reports what is wrong
-```
-
-`preview` (your build) and `open` (the live release) print a link, valid up to
-an hour, that opens the home at phone size (390 × 844) as the test member
-`test:<role>`, with no account: the real Miakapp bar, sandbox, relay and
-coordinator. Your coordinator gives `test:<role>` the rights of that role, like
-any member (`miakapp docs members`); check once per role. Open the link in the
-browser you drive (never install one) and look at every page, with touch.
-
-`taps` reports every control with no call, no navigation and no visible change,
-failed calls, start-up calls that failed or took over 1.5 s, errors the app
-threw, and saves a screenshot of each page. A call a tap makes is held, never
-sent, unless you name its function with `--send` (reads only, never something
-that moves). Fix what it reports and run it again until it reports nothing.
-
-## 6. The intersection rule
-
-Every name an app may touch appears in **two** places, and the effective
-grant is the intersection:
-
-| `miakapp.yaml` → `requires` | `coordinator/home.ts` |
-| --- | --- |
-| `state_read` | `stateAccess[].patterns` |
-| `event_subscribe` | `eventAccess[].subscribe` |
-| `event_publish` | `eventAccess[].publish` |
-| `call` | `functions` |
-
-Asking for more than the coordinator grants **does not fail loudly at
-publication**. The app simply never receives that path, and the interface
-renders a hole — an empty card, a control that does nothing, a temperature that
-is permanently unavailable. This is the single most common way a Miakapp home
-breaks, and it breaks quietly.
-
-So: assert the correspondence in a test, so a mismatch fails in CI rather than
-in someone's living room. When you add a path, change four things in one commit —
-the state declaration, the access pattern, the `requires` entry, and the test.
-
-## 7. The loop
-
-```bash
-bun run check     # typecheck → bundle → test → validate the artifact offline
-```
-
-Run it before every publication and in CI. It costs nothing and catches the
-artifact rules the runtime would reject anyway.
-
-Do not treat a check that exists as a check that runs. On 2026-09-14 this
-repository had two example packages that were both verified locally and built
-by nobody, because the workflow called `bun run check` and not
-`check:packages`; when CI finally exercised them they failed three times in a
-row on defects that had been sitting there invisibly. If you add a package, add
-it to the job that runs in CI, then watch one run go green before believing it.
-
-Reproduce CI with the toolchain version it pins, not the one you have. Bun 1.4
-self-references the root package and resolves `bunx` from `node_modules`; the
-pinned 1.2.23 does neither, so a green local run proves nothing about the runner.
-Install the pinned version alongside yours:
-
-```bash
-BUN_INSTALL=/tmp/bun1223 curl -fsSL https://bun.sh/install | bash -s bun-v1.2.23
-```
-
-Note also that `bun test foo/` is a **substring filter**, not a directory scope.
-
-## 8. Publishing
-
-The CLI builds, validates, publishes and rolls back. **It never owns Git.** It
-writes no history, rewrites no source it did not generate, and invents no
-control-plane endpoint. The repository is the owner's.
-
-```bash
-miakapp docs start                             # this guide, from the installed CLI
-miakapp pair                                   # once per home and machine (§9)
-miakapp agent-pack                             # once, per repository
-miakapp init --starter app                     # manifest + buildable app; plain init writes the manifest only
-miakapp check
-miakapp status                                 # what is live now: generation, release, digest
-miakapp publish                                # upload, finalize, activate
-miakapp status                                 # verify the new digest is what is live
-miakapp activate --sha256 <digest>             # promote an already finalized digest
-miakapp rollback --sha256 <digest>             # alias of activate
-miakapp release <sha256>      # read one finalized release
-miakapp upload  <uploadId>    # reconcile a lost request
-```
-
-Activation is a compare-and-set on the home's component pointer. Without
-`--expected-generation` the CLI reads the live generation first and activates
-the next one; the read takes no lock, so another publication landing in between
-still fails with `conflict` instead of being overwritten. Pass
-`--expected-generation <n>` when you want to assert the state you reviewed.
-
-Rollback is `activate` pointed at a digest you already trust. Keep the digest of
-every release you shipped; a rollback you can perform in one command is worth
-more than an incident you can explain.
-
-`miakapp status` after `publish` is the minimum verification: the live `sha256`
-must be the one you just built. It proves what the home runs, not that the
-interface is right: `miakapp open` it and look before telling the owner it works.
-
-### Driving the CLI as a program
-
-Every failure maps to exactly one stable exit code and one stable
-machine-readable kind. New kinds may be added; existing codes never change
-meaning. Pass `--json` and you get exactly one closed object on stdout.
-
-| Code | Kind | Meaning |
-| --- | --- | --- |
-| 0 | `success` | |
-| 1 | `usage` | the invocation was wrong |
-| 2 | `project` | `miakapp.yaml` is missing or invalid |
-| 3 | `artifact` | the built bytes violate an artifact rule |
-| 4 | `authorization` | the Home Key is missing, wrong or unscoped |
-| 5 | `contract` | the control plane rejected the request |
-| 6 | `conflict` | `--expected-generation` did not match; re-read, do not retry |
-| 7 | `unknown_outcome` | **effect undetermined — reconcile with a read** |
-
-Branch on the code, not on the prose. On 7, call `miakapp upload <uploadId>` or
-`miakapp release <sha256>` and reconcile before acting again. Never retry a 7
-with a fresh capability.
-
-### If you speak MCP instead of shell
-
-`miakapp mcp` serves the same commands as tools over JSON-RPC on stdio. It is the
-same code: a tool call becomes the argv a person would have typed and runs the
-same dispatch, so everything above still holds — the same defaults, the same
-validation, the same `kind` on every failure.
-
-Three differences are worth knowing before you call anything:
-
-- `miakapp_publish`, `miakapp_activate` and `miakapp_rollback` refuse to run
-  without `confirm: true`. Set it when the owner asked for that publication, and
-  not to get past an error;
-- a failure arrives as a tool result with `isError: true`, carrying the same
-  closed object, not as a JSON-RPC error. A JSON-RPC error means your call never
-  happened; `isError` means it ran and failed, and `kind` says what to do next;
-- a tool argument is the option name with `_` instead of `-`. An argument the
-  tool does not declare is refused, never ignored.
-
-`packages/cli/README.md` lists the tools. The exit codes above are the
-`exit_code` field in every result, so branch on the same table either way.
-
-### Notifying the people of the home
-
-```sh
-miakapp notify --to <user-id>[,<user-id>…] --title "Front door" --body "Open for 10 minutes"
-```
-
-Reaches only the people you name, on the devices where they opened the home and
-turned notifications on (Settings → Notifications). Anyone can turn
-notifications on for any home, so the platform never notifies "the whole home":
-**you decide who is told**, from the members your coordinator knows
-(`miakapp docs members`). User IDs
-are the `id` of the `user` principal your coordinator receives with every call
-and event (`principal.kind === 'user'`). It needs
-only the paired context, not a project file. `delivered: 0` is not an error:
-the people named have not turned notifications on (on iPhone they first add
-Miakapp to the Home Screen).
-
-### At home and without the internet: direct mode (on by default)
-
-A coordinator built on `miakapi` 4.1 or later also listens for residents on the
-local network (UDP 4455, WebRTC). There is nothing to code: through the relay,
-each resident's browser learns how to reach the coordinator, then opens the home
-**directly** when it is on the same network (lower latency), and keeps working
-when the internet is down (the Miakapp page and the app open from the phone's
-cache). What is yours to get right:
-
-- **Network.** In Docker, run the coordinator with host networking
-  (`network_mode: host`). Otherwise publish `4455/udp` and pass
-  `direct: { hosts: ['<the machine's LAN address>'] }` to `createCoordinator`.
-- **A persistent identity.** The coordinator keeps its certificate, ICE
-  password and ticket key in `.miakapp/direct` (relative to its working
-  directory, or `direct.directory`). Keep it on a persistent volume: browsers
-  pin that certificate, and losing it means every phone must be online once more.
-- **A fixed address.** Ask the owner to reserve the coordinator machine's
-  address in the router (DHCP reservation): an offline phone can only reach the
-  address it last saw.
-- **Do not wait for the relay.** Without the internet, `coordinator.start()`
-  resolves only once the relay is back, while `state.set` and function calls
-  already work locally. Do not `await start()` before wiring the devices.
-- Every coordinator of the home must run `miakapi` 4.1 or later and be
-  reachable on the LAN: the phone goes direct only when all of them answer
-  (without the internet, it opens with those that do). Events are not carried
-  on it. `direct: false` turns it off.
-
-## 9. Access: pairing and contexts
-
-You never sign in as the owner and never ask for a password, a Google login or
-an existing key. The owner grants access to one home, in their own browser:
-
-1. Ask the owner to open **https://miakapp.com/pair**, sign in to their own
-   account, choose the home (or create it), confirm the access it grants, and
-   send you the one-time code it shows. A code works once, for ten minutes.
-2. Redeem it. The code is read from stdin and never echoed:
-
-   ```bash
-   printf '%s\n' "<code>" | miakapp pair            # add --issuer <url> if the page shows one
-   ```
-
-   Over MCP, call `miakapp_pair` with `code`. Never repeat the code back in a
-   message, and never retry a refused code — ask for a new one.
-3. `pair` stores a **new, separately revocable** Home Key for this machine as a
-   context in `~/.miakapp`, keeps every other context, makes the new one
-   current, and proves the key can publish. It prints the key ID and label,
-   never the key.
-
-```bash
-miakapp context list          # every home this machine can publish to
-miakapp context show [name]   # one context; the key is never printed
-miakapp context use <name>    # make a context current
-miakapp context remove <name> # delete it locally (the owner revokes it server-side)
-```
-
-`~/.miakapp/config.json` holds names, homes, issuers and key IDs;
-`credentials.json` holds the keys. Both are mode 0600 in a 0700 directory and
-are replaced atomically; the CLI refuses a credentials file other accounts can
-read. `MIAKAPP_CONFIG_DIR` relocates the directory.
-
-Which key a command uses, highest precedence first:
-
-1. `--context <name>`, then `MIAKAPP_CONTEXT=<name>`;
-2. `MIAKAPP_HOME_KEY`, a raw key for CI and compatibility;
-3. the stored context paired with the home and issuer in `miakapp.yaml` — the
-   current context breaks a tie between two keys for that same home.
-
-A context, or a known key, for a different home than `miakapp.yaml` names is
-refused before any request: a key can never publish into the wrong house.
-
-One pairing is enough. The coordinators you run for this home (on a Raspberry
-Pi, a small PC…) may use the same Home Key as you: hand it to them yourself,
-through their environment, from `~/.miakapp/credentials.json`. Never ask the
-owner for another pairing code just to give a machine its own key.
-
-Keys, tokens, contexts and pairing internals are your business, not the
-owner's. Tell them what works ("the Pi is connected, your lamps answer"),
-never how it is wired, unless they ask.
-
-If you are about to write a secret into `miakapp.yaml` or any file in the
-repository so something works, stop: that is the failure this design exists to
-prevent.
-
-## 10. Before you tell the owner you are done
-
-- [ ] `docs/inventory.md` lists every source, datum and action you found, and
-      the interface covers it or says why not.
-- [ ] Every value shows whether it is current, stale or unavailable; nothing is
-      invented, and no technical vocabulary is on screen.
-- [ ] The interface is published and `miakapp status` shows your digest live.
-- [ ] `miakapp taps` reports nothing, for each role you built.
-- [ ] The owner received a working link and the rollback digest, not a
-      screenshot or a mockup.
-- [ ] Every physically consequential function authorizes its caller on its first
-      line, and a test proves an unauthorized caller is refused.
-- [ ] Every name in `miakapp.yaml` is covered by the coordinator, and a test
-      asserts the correspondence.
-- [ ] `home.state.stale` dims the values and disables the controls, with no
-      banner of your own; `home.staging` is visible.
-- [ ] You looked at every page of `miakapp preview` (§5): pages slide, the
-      left-edge swipe goes back, held actions fire after 0.3 s.
-- [ ] States use the four colours of `miakapp docs design` (green safe,
-      orange to look at, gold on, red alarm only), always with a word.
-- [ ] The coordinator talks to the devices directly; any hub left is a
-      `bridge:` line in the inventory with what remains to switch it off.
-- [ ] No call path retries an unknown outcome.
-- [ ] State is written before its event is published.
-- [ ] `bun run check` is green, and CI ran it — not just you.
-- [ ] The Home Key exists only in `~/.miakapp` or the environment, never in the
-      repository.
-- [ ] You recorded the digest of what you published, so rollback is one command.
-
-## Where to read further
-
-Everything a home needs is above and in the CLI with its starter. The RFCs and
-platform paths below explain *why* the platform behaves as it does; you never
-need them, or the platform repository, to build and publish a home.
-
-- `miakapp docs members` — members, join requests, invitations, roles and who
-  is notified: the coordinator decides, Miakapp only says who is calling.
-- `packages/cli/README.md` — every command and every tool, including what the
-  pack writes and what it refuses to overwrite.
-- `docs/rfcs/0001` (Miakapp/Miakapp) — wire protocol: ownership, collisions, `4409`.
-- `docs/rfcs/0002` — release pointer, capabilities and the staleness rule;
-  `docs/specs/2026-10-03-house-app-abi.md` — the app frame and its bridge.
-- `docs/rfcs/0003` — the coordinator SDK surface.
-- `docs/rfcs/0004` — Home Key bootstrap, scopes, publication.
-- `docs/rfcs/0005` — the trusted browser client.
+| `miakapp-coordinator` | inventory the house, talk to devices, write and test the coordinator |
+| `miakapp-interface` | build the app: starter, design, state, calls |
+| `miakapp-test-real` | check the app on the real home with `open`, `preview`, `taps` |
+| `miakapp-publish` | publish, verify, roll back; exit codes; MCP |
+| `miakapp-members` | members, join requests, invitations, roles, notifications |
+| `miakapp-update` | a newer Miakapp exists: tell the owner, update, migrate |
+
+They live in `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex).
+`miakapp docs start` prints this page and every skill; `miakapp docs design`
+and `miakapp docs members` print the design and members guides.
