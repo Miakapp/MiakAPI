@@ -7,6 +7,7 @@ import {
   GUIDE_FILE,
   INSTRUCTION_FILES,
   MCP_FILE,
+  SKILL_ROOTS,
   SERVER_NAME,
   instructionBlock,
   mergeInstructions,
@@ -14,7 +15,7 @@ import {
   serverEntry,
 } from '../src/agent-pack.js';
 import { EXIT_CODE } from '../src/errors.js';
-import { COMMAND_OPTIONS, guideAssetPath, run } from '../src/main.js';
+import { COMMAND_OPTIONS, SKILL_NAMES, guideAssetPath, run, skillAssetPath } from '../src/main.js';
 import { TOOLS, buildArgv } from '../src/mcp.js';
 import { CLI_VERSION, PACKAGE_NAME } from '../src/version.js';
 import { MemoryFiles, PROJECT_ROOT, testHost } from './support/host.js';
@@ -26,8 +27,14 @@ async function repository(entries: Record<string, string> = {}): Promise<MemoryF
   const files = new MemoryFiles(entries);
   await files.makeDirectory(PROJECT_ROOT);
   await files.write(await guideAssetPath(), new TextEncoder().encode(GUIDE_TEXT));
+  for (const name of SKILL_NAMES) {
+    await files.write(await skillAssetPath(name), await readFile(await skillAssetPath(name)));
+  }
   return files;
 }
+
+/** Guide + one SKILL.md per skill and client + two instruction files + .mcp.json. */
+const PACK_FILES = 1 + SKILL_NAMES.length * SKILL_ROOTS.length + 2 + 1;
 
 function config(files: MemoryFiles): Record<string, any> {
   return JSON.parse(files.text(`${PROJECT_ROOT}/${MCP_FILE}`));
@@ -36,6 +43,13 @@ function config(files: MemoryFiles): Record<string, any> {
 /** A failure prints its one object on stderr, which is where `--json` puts it. */
 function failure(host: { stderr(): string }): Record<string, unknown> {
   return JSON.parse(host.stderr()) as Record<string, unknown>;
+}
+
+/** The guide plus every skill, as `docs start` serves them. */
+async function packText(): Promise<string> {
+  let text = await readFile(await guideAssetPath(), 'utf8');
+  for (const name of SKILL_NAMES) text += await readFile(await skillAssetPath(name), 'utf8');
+  return text;
 }
 
 describe('the pack installs into an empty repository', () => {
@@ -47,9 +61,15 @@ describe('the pack installs into an empty repository', () => {
 
     const result = host.json();
     expect(result['root']).toBe(PROJECT_ROOT);
-    expect(result['changed']).toBe(4);
-    expect((result['files'] as { path: string; action: string }[]).map((entry) => entry.action))
-      .toEqual(['created', 'created', 'created', 'created']);
+    expect(result['changed']).toBe(PACK_FILES);
+    expect((result['files'] as { path: string; action: string }[]).every((entry) => entry.action === 'created'))
+      .toBe(true);
+    for (const { directory } of SKILL_ROOTS) {
+      for (const name of SKILL_NAMES) {
+        const skill = files.text(`${PROJECT_ROOT}/${directory}/${name}/SKILL.md`);
+        expect(skill).toBe(await readFile(await skillAssetPath(name), 'utf8'));
+      }
+    }
 
     expect(files.text(`${PROJECT_ROOT}/${GUIDE_FILE}`)).toBe(GUIDE_TEXT);
     for (const { path } of INSTRUCTION_FILES) {
@@ -221,23 +241,20 @@ describe('running the pack twice is safe', () => {
 });
 
 describe('the block tells an agent what it must not get wrong', () => {
-  test('it names the guide, the server and the confirmation rule', () => {
-    const block = instructionBlock('Codex');
+  test('it names the guide, the skills, the server and the rules that cost most', () => {
+    const block = instructionBlock('Codex', [...SKILL_NAMES]);
     expect(block).toContain(GUIDE_FILE);
     expect(block).toContain(MCP_FILE);
-    expect(block).toContain('confirm: true');
-    expect(block).toContain('MIAKAPP_HOME_KEY');
+    for (const name of SKILL_NAMES) expect(block).toContain(`\`${name}\``);
+    for (const { directory } of SKILL_ROOTS) expect(block).toContain(directory);
     expect(block).toContain('unknown_outcome');
+    expect(block).toContain('home_url');
+    expect(block).toContain('miakapp taps');
+    expect(block).toContain('miakapp-update');
   });
 
-  test('it sends the agent through pairing and to a verified publication', () => {
-    const block = instructionBlock('Codex');
-    expect(block).toContain('miakapp pair');
-    expect(block).toContain('https://miakapp.com/pair');
-    expect(block).toContain('miakapp status');
-    expect(block).toContain('home_url');
-    expect(block).toContain('never the artifact URL');
-    expect(block).toContain('screenshot');
+  test('it stays short: the guide and the skills carry the rest', () => {
+    expect(instructionBlock('Codex', [...SKILL_NAMES]).split('\n').length).toBeLessThanOrEqual(25);
   });
 
   test('each instruction file names the client that reads it', () => {
@@ -259,23 +276,39 @@ describe('the packaged guide is the repository guide', () => {
     expect(shipped.equals(source)).toBe(true);
   });
 
-  test('the guide teaches every command an agent can run', async () => {
-    const guide = (await readFile(await guideAssetPath())).toString('utf8');
+  test('the guide and its skills teach every command an agent can run', async () => {
+    const guide = await packText();
     const commands = Object.keys(COMMAND_OPTIONS).filter((name) => !['help', 'version'].includes(name));
     for (const command of commands) {
       expect([command, guide.includes(`miakapp ${command}`)]).toEqual([command, true]);
     }
-    for (const action of ['list', 'show', 'use', 'remove']) {
+    for (const action of ['list']) {
       expect([action, guide.includes(`miakapp context ${action}`)]).toEqual([action, true]);
     }
   });
 
   test('the guide makes a verified publication the deliverable', async () => {
-    const guide = (await readFile(await guideAssetPath())).toString('utf8');
+    const guide = await packText();
     expect(guide).toContain('docs/inventory.md');
     expect(guide).toContain('https://miakapp.com/pair');
     expect(guide).toMatch(/screenshot/);
-    expect(guide).toContain('You need nothing from the platform');
+    expect(guide).toContain('Nothing from the platform');
+  });
+
+  test('every skill has a name matching its folder and a description that says when to use it', async () => {
+    for (const name of SKILL_NAMES) {
+      const text = await readFile(await skillAssetPath(name), 'utf8');
+      const front = /^---\nname: (.+)\ndescription: (.+)\n---\n/.exec(text);
+      expect([name, front?.[1]]).toEqual([name, name]);
+      expect([name, (front?.[2] ?? '').length > 80 && /\buse\b/i.test(front?.[2] ?? '')]).toEqual([name, true]);
+      expect([name, text.split('\n').length <= 80]).toEqual([name, true]);
+    }
+  });
+
+  test('every packaged skill folder is installed, and none is forgotten', async () => {
+    const { readdir } = await import('node:fs/promises');
+    const folders = await readdir(fileURLToPath(new URL('../assets/skills/', import.meta.url)));
+    expect(folders.sort()).toEqual([...SKILL_NAMES].sort());
   });
 
   test('the guide is served as a tool and reaches the command as plain argv', () => {

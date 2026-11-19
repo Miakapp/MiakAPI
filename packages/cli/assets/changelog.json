@@ -1,0 +1,100 @@
+{
+  "schema": "miakapp.changelog/1",
+  "package": "@miakapp/cli",
+  "releases": [
+    {
+      "version": "4.8.0",
+      "date": "2026-11-19",
+      "home": "The agent looking after the home now has short skills for each job and hears about Miakapp updates, so it can tell you what a new version brings before applying it.",
+      "steps": [
+        "Commit the skills `miakapp update` wrote in .claude/skills/ and .agents/skills/ with the shorter guide and instruction blocks.",
+        "From now on, when a command reports a newer Miakapp, follow the `miakapp-update` skill: tell the owner what it brings and ask before updating."
+      ]
+    },
+    {
+      "version": "4.7.2",
+      "date": "2026-11-19",
+      "home": "Publishing right after a preview works the first time.",
+      "steps": [
+        "Nothing to change. `miakapp publish` activates a build that `preview` or `taps` already registered instead of failing."
+      ]
+    },
+    {
+      "version": "4.7.1",
+      "date": "2026-11-18",
+      "home": "Checking the app before publishing is faster and more reliable.",
+      "steps": [
+        "Nothing to change. `miakapp preview` reuses an already finalized build; `miakapp taps` waits for start-up answers before tapping."
+      ]
+    },
+    {
+      "version": "4.7.0",
+      "date": "2026-11-18",
+      "home": "Every button is now tested on the real home, at phone size, before you see it: fewer buttons that do nothing.",
+      "steps": [
+        "Stop testing against a hand-written fake bridge: delete any phone.html / frame.html test harness.",
+        "Check the app with `miakapp preview --as <role>` then `miakapp taps --as <role>` for each role, and fix what taps reports.",
+        "Give `test:<role>` that role's rights in the coordinator's member list (never owner), so test links see what that role sees."
+      ]
+    },
+    {
+      "version": "4.6.1",
+      "date": "2026-11-17",
+      "home": "Visitors can ask to join the home or use an invitation from its page.",
+      "steps": [
+        "An app may now call `miakapp.join`: declare it under `app.requires.call` if the app offers 'ask to join' or 'redeem an invitation'.",
+        "Read `miakapp docs members` again for the join flow."
+      ]
+    },
+    {
+      "version": "4.6.0",
+      "date": "2026-11-17",
+      "home": "Invitation links can be shared straight from the app (share sheet or copy).",
+      "steps": [
+        "Refresh the bridge app/miakapp.ts (`miakapp update` does it) to get `home.share()` and `home.copy()`.",
+        "Coordinator: bump `miakapi` to 4.6.0 or later to declare `miakapp.join`, the visitors' door, and restart it."
+      ]
+    },
+    {
+      "version": "4.5.1",
+      "date": "2026-11-17",
+      "home": "Guests can be given access to the rest of the house only while they are on its Wi-Fi.",
+      "steps": [
+        "Coordinator: `miakapi` 4.4.0+ adds `call.source.transport` (direct or relay) and `stateAccess[].directPatterns`; 4.5.0+ adds `address`, the phone's home-network address on direct calls; 4.5.1+ passes the coordinator's error sentence to the app. Bump and restart if the home uses them."
+      ]
+    },
+    {
+      "version": "4.5.0",
+      "date": "2026-11-17",
+      "home": "The home can have members with roles, join requests and invitations, decided by the home itself.",
+      "steps": [
+        "Read `miakapp docs members` and build the member list in the coordinator before the home is shared.",
+        "Refresh the bridge app/miakapp.ts to get `home.link` (an invitation code carried by the home's link)."
+      ]
+    },
+    {
+      "version": "4.4.1",
+      "date": "2026-11-17",
+      "home": "Bar buttons can show a count, for example join requests waiting.",
+      "steps": [
+        "Refresh the bridge app/miakapp.ts to pass `badge` in `home.bar.setButtons()` and use the `people` and `bell` icons."
+      ]
+    },
+    {
+      "version": "4.4.0",
+      "date": "2026-11-17",
+      "home": "Notifications reach only the people the home chooses, never everyone who opened it.",
+      "steps": [
+        "`miakapp notify` now requires `--to <user-id>[,…]`: update every script or coordinator that calls it without recipients."
+      ]
+    },
+    {
+      "version": "4.3.1",
+      "date": "2026-11-14",
+      "home": "The home's link has its new address.",
+      "steps": [
+        "Older CLIs refuse to publish: pin 4.3.1 or later."
+      ]
+    }
+  ]
+}

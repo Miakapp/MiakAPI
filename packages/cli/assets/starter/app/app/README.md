@@ -51,7 +51,7 @@ shared. `app.requires` in `miakapp.yaml` starts empty, so the first build
 shows only that empty state. It invents no value and offers no control. That
 is a starting point, not a deliverable:
 
-1. **Inventory the house first** (`miakapp docs start`, §3): every source, what
+1. **Inventory the house first** (skill `miakapp-coordinator`, or `miakapp docs start`): every source, what
    each value means, how fresh it is, who may see it, which actions exist.
 2. **Declare what the app needs** under `app.requires.state_read` (exact paths
    or `prefix.*`) and `app.requires.call`. The coordinator still decides per

@@ -29,11 +29,13 @@ import { CliError, EXIT_CODE, usageError } from './errors.js';
 import {
   CLI_VERSION,
   HOME_KEY_VARIABLE,
+  automaticUpdateCheck,
   dispatch,
   parseArguments,
   type CliHost,
   type CommandResult,
 } from './main.js';
+import { updateJson } from './updates.js';
 
 /** Revision of the MCP specification this server implements. */
 export const MCP_PROTOCOL_VERSION = '2025-06-18';
@@ -368,8 +370,9 @@ export const TOOLS: readonly ToolDefinition[] = [
     title: 'Install the pack into a repository',
     command: 'agent-pack',
     description:
-      'Install the Miakapp agent pack into a repository: the full guide as a file under '
-      + '.miakapp/, a pointer to it in AGENTS.md and CLAUDE.md, and this MCP server in .mcp.json. '
+      'Install the Miakapp agent pack into a repository: the guide under .miakapp/, one skill '
+      + 'per job in .claude/skills/ and .agents/skills/, a pointer in AGENTS.md and CLAUDE.md, '
+      + 'and this MCP server in .mcp.json. '
       + 'Run it once in a home repository that does not have it, so the next agent opening that '
       + 'repository finds the rules and the tools already wired. It edits rather than replaces: '
       + 'prose outside the miakapp markers is kept, and every other server in .mcp.json is kept '
@@ -379,6 +382,52 @@ export const TOOLS: readonly ToolDefinition[] = [
       type: 'string',
       required: false,
       description: 'Repository to install into. Defaults to the working directory.',
+    }],
+    readOnly: false,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_changes',
+    title: 'What newer Miakapp releases bring',
+    command: 'changes',
+    description:
+      'List the CLI releases after the version this repository pins (or since), newest first: '
+      + 'what each brings the home, in plain words for the owner, and the migration steps for '
+      + 'the agent. Use it when a result carries update_available, then tell the owner and ask '
+      + 'before updating (skill miakapp-update). Reads the npm registry; works offline from the '
+      + 'packaged changelog.',
+    args: [
+      {
+        name: 'since',
+        type: 'string',
+        required: false,
+        description: 'Version to start after, such as 4.7.1. Defaults to the pin in .mcp.json.',
+      },
+      {
+        name: 'dir',
+        type: 'string',
+        required: false,
+        description: 'Repository whose .mcp.json pin to read. Defaults to the working directory.',
+      },
+    ],
+    readOnly: true,
+    guarded: false,
+  },
+  {
+    name: 'miakapp_update',
+    title: 'Move the repository to this CLI release',
+    command: 'update',
+    description:
+      'Pin this server\'s CLI release in .mcp.json and package.json, rewrite the pack (guide, '
+      + 'skills, instruction blocks), refresh the generated app/miakapp.ts bridge, check the '
+      + 'project, and return the migrations to apply. It updates to the release this server runs: '
+      + 'to reach a newer one, run npx -y @miakapp/cli@latest update on the command line instead. '
+      + 'Ask the owner first.',
+    args: [{
+      name: 'dir',
+      type: 'string',
+      required: false,
+      description: 'Repository to update. Defaults to the working directory.',
     }],
     readOnly: false,
     guarded: false,
@@ -733,8 +782,15 @@ export async function callTool(
       true,
     );
   }
+  const update = await automaticUpdateCheck(host, tool.command);
   return toolResult(
-    { ok: true, command: tool.command, summary: result.summary, ...result.json },
+    {
+      ok: true,
+      command: tool.command,
+      summary: result.summary,
+      ...result.json,
+      ...(update === undefined ? {} : { update_available: updateJson(update) }),
+    },
     false,
   );
 }
@@ -779,7 +835,8 @@ const INSTRUCTIONS =
   + 'find out what happened before acting. Every result is a closed JSON object with a stable '
   + '"kind"; branch on that, never on the prose. Publishing uses the paired context for the home '
   + `in miakapp.yaml, or ${HOME_KEY_VARIABLE} in this server's environment; a key is never an `
-  + 'argument and never printed.';
+  + 'argument and never printed. When a result carries update_available, a newer Miakapp '
+  + 'exists: call miakapp_changes and ask the owner before updating.';
 
 /**
  * Handles one decoded message.

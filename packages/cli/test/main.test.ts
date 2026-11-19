@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { EXIT_CODE } from '../src/errors.js';
-import { COMMAND_OPTIONS, HOME_KEY_VARIABLE, designAssetDirectory, guideAssetPath, parseArguments, run } from '../src/main.js';
+import { COMMAND_OPTIONS, HOME_KEY_VARIABLE, SKILL_NAMES, designAssetDirectory, guideAssetPath, parseArguments, run, skillAssetPath } from '../src/main.js';
 import { CLI_VERSION } from '../src/version.js';
 import { digestOf, fakeControlPlane, homeKey } from './support/control-plane.js';
 import {
@@ -81,14 +81,25 @@ describe('offline commands', () => {
     expect(host.stdout().trim()).toBe(CLI_VERSION);
   });
 
-  test('docs start prints the complete bundled guide without a project or network', async () => {
+  test('docs start prints the bundled guide and every skill without a project or network', async () => {
     const files = new MemoryFiles({
       [await guideAssetPath()]: '# Miakapp agent guide\n\nStart here.\n',
     });
+    for (const name of SKILL_NAMES) {
+      await files.write(
+        await skillAssetPath(name),
+        new TextEncoder().encode(`---\nname: ${name}\ndescription: d\n---\n\n# ${name}\n`),
+      );
+    }
     const host = testHost({ files, fetch: async () => { throw new Error('network used'); } });
 
     expect(await run(['docs', 'start'], host)).toBe(EXIT_CODE.success);
-    expect(host.stdout()).toBe('# Miakapp agent guide\n\nStart here.\n');
+    const text = host.stdout();
+    expect(text.startsWith('# Miakapp agent guide\n\nStart here.\n')).toBe(true);
+    for (const name of SKILL_NAMES) {
+      expect(text).toContain(`<!-- skill: ${name} -->\n# ${name}\n`);
+      expect(text).not.toContain(`name: ${name}`);
+    }
     expect(host.stderr()).toBe('');
   });
 

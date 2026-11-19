@@ -34,6 +34,10 @@ describe('the published package', () => {
     const results = JSON.parse(packed.stdout.toString()) as PackResult[];
     const files = results[0]?.files.map(({ path }) => path).sort() ?? [];
     expect(files).toContain('assets/agent-guide.md');
+    expect(files).toContain('assets/changelog.json');
+    for (const skill of ['coordinator', 'interface', 'test-real', 'publish', 'members', 'update']) {
+      expect(files).toContain(`assets/skills/miakapp-${skill}/SKILL.md`);
+    }
     for (const asset of ['guide.md', 'tokens.css', 'components.css', 'fonts.css', 'gallery.html', 'OFL-Manrope.txt']) {
       expect(files).toContain(`assets/design/${asset}`);
     }

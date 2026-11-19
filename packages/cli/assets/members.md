@@ -24,7 +24,7 @@ What Miakapp gives you:
 | Testing as each role | `miakapp open --as <role>` (also `preview`, `taps`) opens the home as `test:<role>`, with no e-mail: give that id the role's rights in your member list (never owner), and nothing else. |
 
 Anyone signed in can open any home's address and load its app (the bundle holds
-no household data: §5 of `docs start`). A person you have not admitted must get
+no household data: see the `miakapp-interface` skill). A person you have not admitted must get
 **nothing** from the coordinator: no state path, no event, no function.
 
 **A visitor can call one function only: `miakapp.join`.** The relay refuses

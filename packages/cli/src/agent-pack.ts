@@ -5,14 +5,15 @@
  * home is built. It arrives in the owner's repository, with whatever files are
  * already there. This command puts three things in that repository:
  *
- * - the guide, as a file, so the knowledge survives without a network;
+ * - the guide and the skills (one per job, for Claude Code and Codex), as
+ *   files, so the knowledge survives without a network;
  * - a pointer to it in the instruction file each client actually reads —
  *   `AGENTS.md` for Codex, `CLAUDE.md` for Claude Code;
  * - the MCP server entry, so the tools are wired rather than described.
  *
  * The repository belongs to the owner, and the CLI's rule that it never
  * rewrites what it did not generate holds here too. That rule is what shapes
- * every merge below: the guide is a file this command owns outright, the
+ * every merge below: the guide and the skills are files this command owns outright, the
  * instruction files are edited only between markers this command wrote, and
  * `.mcp.json` is edited as a structure — one key, by name — never as text.
  * Bytes outside those regions are copied through untouched.
@@ -41,6 +42,21 @@ export const INSTRUCTION_FILES: readonly { readonly path: string; readonly clien
   { path: 'AGENTS.md', client: 'Codex' },
   { path: 'CLAUDE.md', client: 'Claude Code' },
 ];
+
+/**
+ * Where each client discovers repository skills. Both are written, like the
+ * instruction files: the owner may hand the repository to either agent.
+ */
+export const SKILL_ROOTS: readonly { readonly directory: string; readonly client: string }[] = [
+  { directory: '.claude/skills', client: 'Claude Code' },
+  { directory: '.agents/skills', client: 'Codex' },
+];
+
+/** One skill the pack owns: `<root>/<name>/SKILL.md`, rewritten on every run. */
+export interface PackSkill {
+  readonly name: string;
+  readonly content: string;
+}
 
 export const BEGIN_MARKER = '<!-- miakapp:begin -->';
 export const END_MARKER = '<!-- miakapp:end -->';
@@ -80,7 +96,7 @@ function decode(bytes: Uint8Array, path: string): string {
  * Returns `unchanged` when the bytes already on disk are identical, so a second
  * run of the pack reports honestly instead of claiming work it did not do.
  */
-async function put(
+export async function put(
   files: FileStore,
   path: string,
   content: string,
@@ -98,46 +114,32 @@ async function put(
 /**
  * The block written into each instruction file.
  *
- * It is short on purpose. Everything an agent needs to know is in the guide,
- * and a summary that drifts from the guide is worse than no summary: the agent
- * would believe the stale copy it read first.
+ * Short on purpose: the guide and the skills carry the knowledge, and a summary
+ * that drifts from them is worse than none. The skills are listed here because
+ * a client that does not discover repository skills still reads this file.
  */
-export function instructionBlock(client: string): string {
+export function instructionBlock(client: string, skills: readonly string[] = []): string {
+  const skillLines = skills.length === 0
+    ? ''
+    : `\nSkills, one per job — read the one that matches the task:
+${skills.map((name) => `\`${name}\``).join(', ')}.
+They are in \`${SKILL_ROOTS.map((entry) => entry.directory).join('/` and `')}/\`.\n`;
   return `${BEGIN_MARKER}
 ## Miakapp
 
-This repository is a Miakapp home: a coordinator that runs on the owner's
-machine and owns state, events and authorization, and an interface — by default
-a whole-house application bundled as one IIFE — that runs isolated in the
-household's browser and owns nothing but what residents see.
+This repository is a Miakapp home: a coordinator on the owner's machine owns
+state, events and authorization; an app, published as one bundle, owns only
+what residents see.
 
-**Read \`${GUIDE_FILE}\` before writing or publishing anything here.** It is the
-full guide, copied into this repository so it is readable offline, and it is the
-source of truth for the rules below.
+**Read \`${GUIDE_FILE}\` before changing or publishing anything here.**
+${skillLines}
+The \`${SERVER_NAME}\` MCP server in \`${MCP_FILE}\` gives ${client} the same commands as the
+\`${SERVER_NAME}\` CLI. Done means published and checked on the real home
+(\`${SERVER_NAME} taps\`), with the owner holding the \`home_url\`. Never retry an
+\`unknown_outcome\`; never put a key in this repository. When a command says a
+newer Miakapp is available, follow the \`miakapp-update\` skill.
 
-The \`${SERVER_NAME}\` MCP server in \`${MCP_FILE}\` exposes the toolchain to ${client}:
-inventory an existing installation, validate the project, publish, and roll back.
-The same commands exist as \`${SERVER_NAME}\` on the command line; they are one
-implementation, so neither surface can drift from the other.
-
-Four rules the guide explains and this file repeats because getting them wrong
-is expensive:
-
-- Done means published and verified: inventory the house first, publish a V1
-  that covers the real data, check \`${SERVER_NAME} status\`, open it as a member
-  would, and hand the owner the printed \`home_url\` — never the artifact URL, a
-  screenshot or a mockup.
-- \`publish\`, \`activate\` and \`rollback\` change what every device in the home
-  runs. Over MCP they refuse to act without \`confirm: true\`. Set it when the
-  owner asked for that publication, never to get past an error.
-- Every failure carries a stable \`kind\`. Branch on it, not on the message.
-  \`conflict\` means re-read the pointer; \`unknown_outcome\` means the effect is
-  undetermined — reconcile with \`${SERVER_NAME} release\` or \`${SERVER_NAME} upload\`
-  before acting again, and never retry it.
-- Access comes from \`${SERVER_NAME} pair\`: the owner confirms the home at
-  https://miakapp.com/pair and sends a one-time code; never ask for a login or
-  a key. Keys live in \`~/.miakapp\` (or \`MIAKAPP_HOME_KEY\` for CI), never in
-  this repository and never in a command argument.
+Generated by \`${SERVER_NAME} agent-pack\` / \`${SERVER_NAME} update\`: edit outside the markers.
 ${END_MARKER}`;
 }
 
@@ -251,16 +253,28 @@ export async function installPack(
   files: FileStore,
   root: string,
   guide: string,
+  skills: readonly PackSkill[] = [],
 ): Promise<PackResult> {
   const written: PackedFile[] = [];
 
   await files.makeDirectory(`${root}/${PACK_DIRECTORY}`);
   written.push(await put(files, `${root}/${GUIDE_FILE}`, guide));
 
+  // Skills are owned outright, like the guide: the directory names carry the
+  // `miakapp-` prefix so they never collide with the owner's own skills.
+  for (const { directory } of SKILL_ROOTS) {
+    for (const skill of skills) {
+      const folder = `${root}/${directory}/${skill.name}`;
+      await files.makeDirectory(folder);
+      written.push(await put(files, `${folder}/SKILL.md`, skill.content));
+    }
+  }
+
+  const names = skills.map((skill) => skill.name);
   for (const { path, client } of INSTRUCTION_FILES) {
     const full = `${root}/${path}`;
     const existing = await files.exists(full) ? decode(await files.read(full), full) : undefined;
-    written.push(await put(files, full, mergeInstructions(existing, instructionBlock(client))));
+    written.push(await put(files, full, mergeInstructions(existing, instructionBlock(client, names))));
   }
 
   const mcpPath = `${root}/${MCP_FILE}`;
@@ -268,4 +282,58 @@ export async function installPack(
   written.push(await put(files, mcpPath, mergeMcpConfig(config)));
 
   return { root, files: written };
+}
+
+/**
+ * The CLI version a repository's `.mcp.json` pins, if the pack wrote one.
+ * Read, never trusted for anything but choosing where a changelog starts.
+ */
+export function pinnedVersion(mcpConfig: string | undefined): string | undefined {
+  if (mcpConfig === undefined) return undefined;
+  try {
+    const entry = (JSON.parse(mcpConfig) as { mcpServers?: Record<string, { args?: unknown }> })
+      .mcpServers?.[SERVER_NAME];
+    const args = Array.isArray(entry?.args) ? entry.args : [];
+    for (const argument of args) {
+      if (typeof argument === 'string' && argument.startsWith(`${PACKAGE_NAME}@`)) {
+        const version = argument.slice(PACKAGE_NAME.length + 1);
+        return /^\d+\.\d+\.\d+/.test(version) ? version : undefined;
+      }
+    }
+  } catch {
+    // A broken file pins nothing; installPack reports it properly.
+  }
+  return undefined;
+}
+
+/**
+ * Re-pins this package in a `package.json` that already depends on it.
+ *
+ * Returns `undefined` when there is nothing to do — no dependency on the CLI —
+ * because adding one is the owner's decision, not the update's. Only that one
+ * key changes; every other key keeps its order and value.
+ */
+export function mergePackageJson(existing: string, path = 'package.json'): string | undefined {
+  let document: unknown;
+  try {
+    document = JSON.parse(existing);
+  } catch (error) {
+    throw projectError(
+      `${path} is not valid JSON: ${error instanceof Error ? error.message : 'parse failed'}`,
+      'Fix the JSON, then run the update again.',
+    );
+  }
+  if (!isPlainObject(document)) return undefined;
+  let touched = false;
+  const updated: Record<string, unknown> = { ...document };
+  for (const key of ['dependencies', 'devDependencies']) {
+    const section = document[key];
+    if (isPlainObject(section) && typeof section[PACKAGE_NAME] === 'string') {
+      updated[key] = { ...section, [PACKAGE_NAME]: CLI_VERSION };
+      touched = true;
+    }
+  }
+  if (!touched) return undefined;
+  const indent = /^\{\s*\n(\s+)"/.exec(existing)?.[1] ?? '  ';
+  return `${JSON.stringify(updated, null, indent)}\n`;
 }

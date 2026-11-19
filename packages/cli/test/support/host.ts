@@ -86,7 +86,9 @@ export function testHost(options: {
 } = {}): TestHost {
   const out: string[] = [];
   const err: string[] = [];
-  const environment = options.env ?? {};
+  // The daily update check is tested on its own; elsewhere it would add a
+  // registry request and a cache file to every test that uses a real store.
+  const environment: Record<string, string> = { MIAKAPP_UPDATE_CHECK: '0', ...options.env };
   return {
     out,
     err,
