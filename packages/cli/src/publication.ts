@@ -579,7 +579,19 @@ export async function publish(
 ): Promise<{ readonly release: ComponentRelease; readonly pointer: ComponentPointer }> {
   const requires = canonicalRequirements(request.requires);
   const abi = request.abi ?? COMPONENT_ABI;
-  const release = await stage(target, artifact, request);
+  // A build already finalized (by preview, taps or an earlier publish) is
+  // activated as it is: the control plane refuses to finalize it twice.
+  const existing = await readRelease(target, artifact.sha256);
+  if (existing !== undefined
+    && (existing.size !== artifact.size
+      || existing.abi !== abi
+      || !sameRequirements(existing.requires, requires))) {
+    throw contractError(
+      'This build is already registered with a different ABI or requirements; '
+      + 'change miakapp.yaml back, or rebuild so the digest changes',
+    );
+  }
+  const release = existing ?? await stage(target, artifact, request);
   const pointer = await activateRelease(target, {
     sha256: artifact.sha256,
     expectedGeneration: request.expectedGeneration,
